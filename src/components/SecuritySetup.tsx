@@ -251,13 +251,11 @@ const SecuritySetup = ({ onComplete }: SecuritySetupProps) => {
                         <div
                           className={cn(
                             "p-1.5 rounded transition-colors",
-                            isDone
-                              ? "bg-green-500/20"
-                              : "bg-secondary"
+                            isDone ? "bg-accent/20" : "bg-secondary"
                           )}
                         >
                           {isDone ? (
-                            <Check className="h-4 w-4 text-green-400" />
+                            <Check className="h-4 w-4 text-accent" />
                           ) : (
                             <Icon className="h-4 w-4 text-primary" />
                           )}
@@ -279,7 +277,7 @@ const SecuritySetup = ({ onComplete }: SecuritySetupProps) => {
                             </p>
                           )}
                           {isDone && (
-                            <p className="text-xs text-green-400">
+                            <p className="text-xs text-accent">
                               Registered ✓
                             </p>
                           )}
