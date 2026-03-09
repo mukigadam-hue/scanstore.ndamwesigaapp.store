@@ -217,7 +217,7 @@ const SecuritySetup = ({ onComplete }: SecuritySetupProps) => {
                   </span>
                 )}
                 {canFinish && (
-                  <span className="text-green-400">Ready to secure!</span>
+                  <span className="text-accent">Ready to secure!</span>
                 )}
               </div>
               <div className="h-2 bg-secondary rounded-full overflow-hidden">
