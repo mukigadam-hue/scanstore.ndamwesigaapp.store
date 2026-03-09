@@ -79,9 +79,41 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
 
     setUploading(true);
     let runningTotal = storageUsed;
+    const isFreeUser = storageLimit === 50 * 1024 * 1024;
+
     try {
       for (const file of Array.from(files)) {
-        if (runningTotal + file.size > storageLimit) {
+        let fileToUpload: File | Blob = file;
+        let finalSize = file.size;
+
+        // Auto-compress for free users
+        if (isFreeUser) {
+          try {
+            const formData = new FormData();
+            formData.append("file", file);
+
+            const { data: compressData, error: compressError } = await supabase.functions.invoke(
+              "compress-document",
+              {
+                body: formData,
+              }
+            );
+
+            if (!compressError && compressData) {
+              const compressedBlob = new Blob([compressData]);
+              fileToUpload = compressedBlob;
+              finalSize = compressedBlob.size;
+              const savings = ((1 - finalSize / file.size) * 100).toFixed(0);
+              if (finalSize < file.size) {
+                toast.success(`${file.name} compressed by ${savings}%`);
+              }
+            }
+          } catch (e) {
+            console.warn("Compression failed, using original:", e);
+          }
+        }
+
+        if (runningTotal + finalSize > storageLimit) {
           toast.error(
             `Not enough storage for ${file.name}. Upgrade your plan.`
           );
@@ -91,7 +123,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage
           .from("documents")
-          .upload(filePath, file);
+          .upload(filePath, fileToUpload);
 
         if (uploadError) {
           toast.error(
@@ -104,7 +136,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           user_id: user.id,
           name: file.name,
           file_path: filePath,
-          file_size: file.size,
+          file_size: finalSize,
           file_type: file.type,
           drawer_name: drawerName,
         });
@@ -113,7 +145,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           toast.error(`Failed to save ${file.name}: ${dbError.message}`);
         } else {
           toast.success(`${file.name} stored safely!`);
-          runningTotal += file.size;
+          runningTotal += finalSize;
         }
       }
       refreshDocs();
