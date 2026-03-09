@@ -58,14 +58,14 @@ const Locker = () => {
   useEffect(() => {
     if (user?.id) {
       const verified =
-        sessionStorage.getItem(`locker_verified_${user.id}`) === "true";
+        localStorage.getItem(`locker_verified_${user.id}`) === "true";
       if (verified) setSessionVerified(true);
     }
   }, [user?.id]);
 
   const markVerified = () => {
     if (user?.id)
-      sessionStorage.setItem(`locker_verified_${user.id}`, "true");
+      localStorage.setItem(`locker_verified_${user.id}`, "true");
     setSessionVerified(true);
   };
 
