@@ -1,12 +1,23 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Upload, Download, Trash2, FileText, File, Image, FileSpreadsheet } from "lucide-react";
+import {
+  ArrowLeft,
+  Upload,
+  Download,
+  Trash2,
+  FileText,
+  File,
+  Image,
+  FileSpreadsheet,
+  Lock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface Document {
   id: string;
@@ -24,9 +35,12 @@ interface DrawerViewProps {
 }
 
 const getFileIcon = (type: string) => {
-  if (type.startsWith("image/")) return <Image className="h-5 w-5 text-primary" />;
-  if (type.includes("spreadsheet") || type.includes("excel")) return <FileSpreadsheet className="h-5 w-5 text-primary" />;
-  if (type.includes("pdf")) return <FileText className="h-5 w-5 text-destructive" />;
+  if (type.startsWith("image/"))
+    return <Image className="h-5 w-5 text-primary" />;
+  if (type.includes("spreadsheet") || type.includes("excel"))
+    return <FileSpreadsheet className="h-5 w-5 text-primary" />;
+  if (type.includes("pdf"))
+    return <FileText className="h-5 w-5 text-destructive" />;
   return <File className="h-5 w-5 text-muted-foreground" />;
 };
 
@@ -41,6 +55,11 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { canUpload, isFrozen, isRetrievalActive, storageUsed, storageLimit, storagePercent } =
+    useSubscription();
+
+  const canAccess = !isFrozen || isRetrievalActive;
+  const isNearLimit = storagePercent >= 90;
 
   const refreshDocs = () =>
     queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
@@ -49,17 +68,35 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     const files = e.target.files;
     if (!files || !user) return;
 
+    if (!canUpload) {
+      toast.error(
+        isFrozen
+          ? "Your vault is frozen. Please unlock access first."
+          : "Storage limit reached. Please upgrade your plan."
+      );
+      return;
+    }
+
     setUploading(true);
+    let runningTotal = storageUsed;
     try {
       for (const file of Array.from(files)) {
-        const filePath = `${user.id}/${Date.now()}_${file.name}`;
+        if (runningTotal + file.size > storageLimit) {
+          toast.error(
+            `Not enough storage for ${file.name}. Upgrade your plan.`
+          );
+          continue;
+        }
 
+        const filePath = `${user.id}/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage
           .from("documents")
           .upload(filePath, file);
 
         if (uploadError) {
-          toast.error(`Failed to upload ${file.name}: ${uploadError.message}`);
+          toast.error(
+            `Failed to upload ${file.name}: ${uploadError.message}`
+          );
           continue;
         }
 
@@ -76,6 +113,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           toast.error(`Failed to save ${file.name}: ${dbError.message}`);
         } else {
           toast.success(`${file.name} stored safely!`);
+          runningTotal += file.size;
         }
       }
       refreshDocs();
@@ -86,6 +124,11 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   };
 
   const handleDownload = async (doc: Document) => {
+    if (!canAccess) {
+      toast.error("Documents are frozen. Please unlock access first.");
+      return;
+    }
+
     const { data, error } = await supabase.storage
       .from("documents")
       .download(doc.file_path);
@@ -105,7 +148,11 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   };
 
   const handleDelete = async (doc: Document) => {
-    // Optimistically remove from cache immediately
+    if (!canAccess) {
+      toast.error("Documents are frozen. Please unlock access first.");
+      return;
+    }
+
     queryClient.setQueryData(
       ["documents", user?.id],
       (old: Document[] = []) => old.filter((d) => d.id !== doc.id)
@@ -117,7 +164,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
 
     if (storageError) {
       toast.error("Failed to delete file: " + storageError.message);
-      refreshDocs(); // rollback
+      refreshDocs();
       return;
     }
 
@@ -128,7 +175,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
 
     if (dbError) {
       toast.error("Failed to delete record: " + dbError.message);
-      refreshDocs(); // rollback
+      refreshDocs();
     } else {
       toast.success("Document removed");
     }
@@ -152,10 +199,17 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h2 className="font-display text-2xl font-bold brass-text">{drawerName}</h2>
+          <h2 className="font-display text-2xl font-bold brass-text">
+            {drawerName}
+          </h2>
         </div>
 
-        <div>
+        <div className="flex items-center gap-2">
+          {isNearLimit && canAccess && (
+            <span className="text-xs text-yellow-500 hidden sm:inline">
+              Storage {Math.round(storagePercent)}% full
+            </span>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -165,11 +219,17 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           />
           <Button
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="brass-gradient text-primary-foreground hover:opacity-90"
+            disabled={uploading || !canUpload}
+            className="brass-gradient text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             <Upload className="h-4 w-4 mr-2" />
-            {uploading ? "Uploading..." : "Store Document"}
+            {uploading
+              ? "Uploading..."
+              : !canUpload
+                ? isFrozen
+                  ? "Frozen"
+                  : "Full"
+                : "Store Document"}
           </Button>
         </div>
       </div>
@@ -182,7 +242,9 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           className="text-center py-16"
         >
           <FileText className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-          <p className="text-muted-foreground font-display text-lg">This drawer is empty</p>
+          <p className="text-muted-foreground font-display text-lg">
+            This drawer is empty
+          </p>
           <p className="text-muted-foreground/60 text-sm mt-1">
             Upload documents to store them safely
           </p>
@@ -196,36 +258,47 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ delay: i * 0.04 }}
-              className="wood-panel rounded-lg border border-border p-4 flex items-center justify-between gap-4 group hover:border-brass/30 transition-colors"
+              className={`wood-panel rounded-lg border border-border p-4 flex items-center justify-between gap-4 group transition-colors ${
+                canAccess
+                  ? "hover:border-brass/30"
+                  : "opacity-60"
+              }`}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 {getFileIcon(doc.file_type)}
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{doc.name}</p>
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {doc.name}
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                    {formatSize(doc.file_size)} · {format(new Date(doc.created_at), "MMM d, yyyy")}
+                    {formatSize(doc.file_size)} ·{" "}
+                    {format(new Date(doc.created_at), "MMM d, yyyy")}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDownload(doc)}
-                  className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(doc)}
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-secondary"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+              {canAccess ? (
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDownload(doc)}
+                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDelete(doc)}
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-secondary"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Lock className="h-4 w-4 text-destructive/50 shrink-0" />
+              )}
             </motion.div>
           ))}
         </div>
