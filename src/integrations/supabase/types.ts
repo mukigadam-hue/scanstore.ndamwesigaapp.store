@@ -77,6 +77,51 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_requests: {
+        Row: {
+          amount: number
+          created_at: string
+          duration_years: number | null
+          id: string
+          notes: string | null
+          payment_method: string
+          payment_reference: string | null
+          status: string
+          tier: string | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          duration_years?: number | null
+          id?: string
+          notes?: string | null
+          payment_method: string
+          payment_reference?: string | null
+          status?: string
+          tier?: string | null
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          duration_years?: number | null
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          payment_reference?: string | null
+          status?: string
+          tier?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       security_settings: {
         Row: {
           created_at: string
@@ -124,6 +169,7 @@ export type Database = {
           created_at: string
           expires_at: string | null
           id: string
+          retrieval_expires_at: string | null
           status: string
           storage_limit_bytes: number
           tier: string
@@ -134,6 +180,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          retrieval_expires_at?: string | null
           status?: string
           storage_limit_bytes?: number
           tier?: string
@@ -144,6 +191,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          retrieval_expires_at?: string | null
           status?: string
           storage_limit_bytes?: number
           tier?: string
