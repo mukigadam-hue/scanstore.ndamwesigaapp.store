@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import DrawerCard from "@/components/DrawerCard";
 import DrawerView from "@/components/DrawerView";
+import SecuritySetup from "@/components/SecuritySetup";
+import SecurityVerify from "@/components/SecurityVerify";
 import woodTexture from "@/assets/wood-texture.jpg";
 
 interface Drawer {
@@ -27,6 +29,16 @@ interface Document {
   created_at: string;
 }
 
+interface SecuritySettings {
+  pin_code: string | null;
+  fingerprint_enabled: boolean | null;
+  face_image_path: string | null;
+  last_school: string | null;
+  family_face_path: string | null;
+  id_document_path: string | null;
+  setup_completed: boolean | null;
+}
+
 const DEFAULT_DRAWERS = [
   { name: "Personal IDs", icon: "🪪" },
   { name: "Financial", icon: "💰" },
@@ -44,6 +56,8 @@ const Locker = () => {
   const [showNewDrawer, setShowNewDrawer] = useState(false);
   const [newDrawerName, setNewDrawerName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [securitySettings, setSecuritySettings] = useState<SecuritySettings | null>(null);
+  const [sessionVerified, setSessionVerified] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -55,13 +69,21 @@ const Locker = () => {
     if (!user) return;
     setLoading(true);
 
+    // Load security settings
+    const { data: secData } = await supabase
+      .from("security_settings")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    setSecuritySettings(secData as SecuritySettings | null);
+
     // Load drawers
     const { data: drawerData } = await supabase
       .from("drawers")
       .select("*")
       .eq("user_id", user.id);
 
-    // If no drawers, create defaults
     if (!drawerData || drawerData.length === 0) {
       const defaults = DEFAULT_DRAWERS.map((d) => ({
         user_id: user.id,
@@ -110,6 +132,7 @@ const Locker = () => {
   const getDrawerDocs = (drawerName: string) =>
     documents.filter((d) => d.drawer_name === drawerName);
 
+  // Loading state
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -123,6 +146,29 @@ const Locker = () => {
     );
   }
 
+  // Security setup — first time
+  if (!securitySettings?.setup_completed) {
+    return (
+      <SecuritySetup
+        onComplete={async () => {
+          await loadData();
+          setSessionVerified(true);
+        }}
+      />
+    );
+  }
+
+  // Security verify — each session
+  if (!sessionVerified) {
+    return (
+      <SecurityVerify
+        settings={securitySettings}
+        onVerified={() => setSessionVerified(true)}
+      />
+    );
+  }
+
+  // Main locker UI
   return (
     <div className="min-h-screen bg-background relative">
       {/* Wood texture background */}
