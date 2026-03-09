@@ -65,7 +65,7 @@ const Locker = () => {
 
   const markVerified = () => {
     if (user?.id)
-      sessionStorage.setItem(`locker_verified_${user.id}`, "true");
+      localStorage.setItem(`locker_verified_${user.id}`, "true");
     setSessionVerified(true);
   };
 
