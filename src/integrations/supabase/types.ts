@@ -77,6 +77,48 @@ export type Database = {
         }
         Relationships: []
       }
+      security_settings: {
+        Row: {
+          created_at: string
+          face_image_path: string | null
+          family_face_path: string | null
+          fingerprint_enabled: boolean | null
+          id: string
+          id_document_path: string | null
+          last_school: string | null
+          pin_code: string | null
+          setup_completed: boolean | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          face_image_path?: string | null
+          family_face_path?: string | null
+          fingerprint_enabled?: boolean | null
+          id?: string
+          id_document_path?: string | null
+          last_school?: string | null
+          pin_code?: string | null
+          setup_completed?: boolean | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          face_image_path?: string | null
+          family_face_path?: string | null
+          fingerprint_enabled?: boolean | null
+          id?: string
+          id_document_path?: string | null
+          last_school?: string | null
+          pin_code?: string | null
+          setup_completed?: boolean | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
