@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Plus, KeyRound, X } from "lucide-react";
+import { LogOut, Plus, KeyRound, X, Crown } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,10 @@ import DrawerCard from "@/components/DrawerCard";
 import DrawerView from "@/components/DrawerView";
 import SecuritySetup from "@/components/SecuritySetup";
 import SecurityVerify from "@/components/SecurityVerify";
+import StorageBar from "@/components/StorageBar";
+import SubscriptionAlert from "@/components/SubscriptionAlert";
+import PricingDialog from "@/components/PricingDialog";
+import { useSubscription } from "@/hooks/useSubscription";
 import woodTexture from "@/assets/wood-texture.jpg";
 
 interface Drawer {
@@ -46,21 +50,25 @@ const Locker = () => {
   const [showNewDrawer, setShowNewDrawer] = useState(false);
   const [newDrawerName, setNewDrawerName] = useState("");
   const [sessionVerified, setSessionVerified] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
 
-  // Restore verification state from sessionStorage so page reloads don't log out
+  const { currentPlan, isFrozen, isRetrievalActive } = useSubscription();
+  const canAccessDrawers = !isFrozen || isRetrievalActive;
+
   useEffect(() => {
     if (user?.id) {
-      const verified = sessionStorage.getItem(`locker_verified_${user.id}`) === "true";
+      const verified =
+        sessionStorage.getItem(`locker_verified_${user.id}`) === "true";
       if (verified) setSessionVerified(true);
     }
   }, [user?.id]);
 
   const markVerified = () => {
-    if (user?.id) sessionStorage.setItem(`locker_verified_${user.id}`, "true");
+    if (user?.id)
+      sessionStorage.setItem(`locker_verified_${user.id}`, "true");
     setSessionVerified(true);
   };
 
-  // ─── Security settings (cached 10 min) ───────────────────────────────────
   const { data: securitySettings, isLoading: secLoading } = useQuery({
     queryKey: ["security_settings", user?.id],
     queryFn: async () => {
@@ -75,7 +83,6 @@ const Locker = () => {
     staleTime: 10 * 60 * 1000,
   });
 
-  // ─── Drawers (cached 5 min, auto-create defaults if empty) ───────────────
   const { data: drawers = [], isLoading: drawersLoading } = useQuery({
     queryKey: ["drawers", user?.id],
     queryFn: async () => {
@@ -103,7 +110,6 @@ const Locker = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // ─── Documents (cached 2 min) ─────────────────────────────────────────────
   const { data: documents = [] } = useQuery({
     queryKey: ["documents", user?.id],
     queryFn: async () => {
@@ -142,7 +148,16 @@ const Locker = () => {
   const getDrawerDocs = (drawerName: string) =>
     documents.filter((d) => d.drawer_name === drawerName);
 
-  // ─── Loading ──────────────────────────────────────────────────────────────
+  const handleDrawerClick = (drawerName: string) => {
+    if (!canAccessDrawers) {
+      toast.error(
+        "Your vault is frozen. Pay the retrieval fee to access documents."
+      );
+      return;
+    }
+    setSelectedDrawer(drawerName);
+  };
+
   if (secLoading || drawersLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -156,7 +171,6 @@ const Locker = () => {
     );
   }
 
-  // ─── Security setup (first time) ─────────────────────────────────────────
   if (!securitySettings?.setup_completed) {
     return (
       <SecuritySetup
@@ -170,7 +184,6 @@ const Locker = () => {
     );
   }
 
-  // ─── Verify session (each browser session) ───────────────────────────────
   if (!sessionVerified) {
     return (
       <SecurityVerify
@@ -180,35 +193,56 @@ const Locker = () => {
     );
   }
 
-  // ─── Main locker UI ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background relative">
       <div
         className="fixed inset-0 opacity-5"
-        style={{ backgroundImage: `url(${woodTexture})`, backgroundSize: "300px" }}
+        style={{
+          backgroundImage: `url(${woodTexture})`,
+          backgroundSize: "300px",
+        }}
       />
 
       <div className="relative z-10">
         {/* Header */}
         <header className="wood-panel border-b border-border sticky top-0 z-20">
-          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="brass-gradient rounded-lg p-2">
                 <KeyRound className="h-5 w-5 text-primary-foreground" />
               </div>
-              <div>
-                <h1 className="font-display text-xl font-bold brass-text">DocLocker</h1>
-                <p className="text-xs text-muted-foreground">Your secure document vault</p>
+              <div className="hidden sm:block">
+                <h1 className="font-display text-xl font-bold brass-text">
+                  DocLocker
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Your secure document vault
+                </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              onClick={signOut}
-              className="text-muted-foreground hover:text-foreground hover:bg-secondary"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Lock & Leave
-            </Button>
+
+            <div className="flex items-center gap-3 flex-1 justify-end">
+              <StorageBar />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowPricing(true)}
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+              >
+                <Crown className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">
+                  {currentPlan.name === "Free" ? "Upgrade" : currentPlan.name}
+                </span>
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={signOut}
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+              >
+                <LogOut className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Lock & Leave</span>
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -229,6 +263,9 @@ const Locker = () => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
+                {/* Subscription alerts */}
+                <SubscriptionAlert />
+
                 <div className="mb-8">
                   <h2 className="font-display text-3xl font-bold brass-text mb-2">
                     Your Locker
@@ -245,7 +282,7 @@ const Locker = () => {
                       name={drawer.name}
                       icon={drawer.icon}
                       documentCount={getDocCount(drawer.name)}
-                      onClick={() => setSelectedDrawer(drawer.name)}
+                      onClick={() => handleDrawerClick(drawer.name)}
                       index={i}
                     />
                   ))}
@@ -303,6 +340,11 @@ const Locker = () => {
           </AnimatePresence>
         </main>
       </div>
+
+      <PricingDialog
+        open={showPricing}
+        onClose={() => setShowPricing(false)}
+      />
     </div>
   );
 };
