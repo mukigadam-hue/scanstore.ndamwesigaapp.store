@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Plus, KeyRound, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -29,16 +30,6 @@ interface Document {
   created_at: string;
 }
 
-interface SecuritySettings {
-  pin_code: string | null;
-  fingerprint_enabled: boolean | null;
-  face_image_path: string | null;
-  last_school: string | null;
-  family_face_path: string | null;
-  id_document_path: string | null;
-  setup_completed: boolean | null;
-}
-
 const DEFAULT_DRAWERS = [
   { name: "Personal IDs", icon: "🪪" },
   { name: "Financial", icon: "💰" },
@@ -50,63 +41,82 @@ const DEFAULT_DRAWERS = [
 
 const Locker = () => {
   const { user, signOut } = useAuth();
-  const [drawers, setDrawers] = useState<Drawer[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const queryClient = useQueryClient();
   const [selectedDrawer, setSelectedDrawer] = useState<string | null>(null);
   const [showNewDrawer, setShowNewDrawer] = useState(false);
   const [newDrawerName, setNewDrawerName] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [securitySettings, setSecuritySettings] = useState<SecuritySettings | null>(null);
   const [sessionVerified, setSessionVerified] = useState(false);
 
+  // Restore verification state from sessionStorage so page reloads don't log out
   useEffect(() => {
-    if (user) {
-      loadData();
+    if (user?.id) {
+      const verified = sessionStorage.getItem(`locker_verified_${user.id}`) === "true";
+      if (verified) setSessionVerified(true);
     }
-  }, [user]);
+  }, [user?.id]);
 
-  const loadData = async () => {
-    if (!user) return;
-    setLoading(true);
-
-    // Load security settings
-    const { data: secData } = await supabase
-      .from("security_settings")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    setSecuritySettings(secData as SecuritySettings | null);
-
-    // Load drawers
-    const { data: drawerData } = await supabase
-      .from("drawers")
-      .select("*")
-      .eq("user_id", user.id);
-
-    if (!drawerData || drawerData.length === 0) {
-      const defaults = DEFAULT_DRAWERS.map((d) => ({
-        user_id: user.id,
-        name: d.name,
-        icon: d.icon,
-        color: "brass",
-      }));
-      const { data: created } = await supabase.from("drawers").insert(defaults).select();
-      setDrawers(created || []);
-    } else {
-      setDrawers(drawerData);
-    }
-
-    // Load documents
-    const { data: docData } = await supabase
-      .from("documents")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    setDocuments(docData || []);
-    setLoading(false);
+  const markVerified = () => {
+    if (user?.id) sessionStorage.setItem(`locker_verified_${user.id}`, "true");
+    setSessionVerified(true);
   };
+
+  // ─── Security settings (cached 10 min) ───────────────────────────────────
+  const { data: securitySettings, isLoading: secLoading } = useQuery({
+    queryKey: ["security_settings", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("security_settings")
+        .select("*")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // ─── Drawers (cached 5 min, auto-create defaults if empty) ───────────────
+  const { data: drawers = [], isLoading: drawersLoading } = useQuery({
+    queryKey: ["drawers", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("drawers")
+        .select("*")
+        .eq("user_id", user!.id);
+
+      if (!data || data.length === 0) {
+        const defaults = DEFAULT_DRAWERS.map((d) => ({
+          user_id: user!.id,
+          name: d.name,
+          icon: d.icon,
+          color: "brass",
+        }));
+        const { data: created } = await supabase
+          .from("drawers")
+          .insert(defaults)
+          .select();
+        return (created || []) as Drawer[];
+      }
+      return data as Drawer[];
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // ─── Documents (cached 2 min) ─────────────────────────────────────────────
+  const { data: documents = [] } = useQuery({
+    queryKey: ["documents", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("documents")
+        .select("*")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+      return (data || []) as Document[];
+    },
+    enabled: !!user,
+    staleTime: 2 * 60 * 1000,
+  });
 
   const addDrawer = async () => {
     if (!newDrawerName.trim() || !user) return;
@@ -122,7 +132,7 @@ const Locker = () => {
       toast.success("New drawer added!");
       setNewDrawerName("");
       setShowNewDrawer(false);
-      loadData();
+      queryClient.invalidateQueries({ queryKey: ["drawers", user.id] });
     }
   };
 
@@ -132,8 +142,8 @@ const Locker = () => {
   const getDrawerDocs = (drawerName: string) =>
     documents.filter((d) => d.drawer_name === drawerName);
 
-  // Loading state
-  if (loading) {
+  // ─── Loading ──────────────────────────────────────────────────────────────
+  if (secLoading || drawersLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <motion.div
@@ -146,32 +156,33 @@ const Locker = () => {
     );
   }
 
-  // Security setup — first time
+  // ─── Security setup (first time) ─────────────────────────────────────────
   if (!securitySettings?.setup_completed) {
     return (
       <SecuritySetup
         onComplete={async () => {
-          await loadData();
-          setSessionVerified(true);
+          await queryClient.invalidateQueries({
+            queryKey: ["security_settings", user?.id],
+          });
+          markVerified();
         }}
       />
     );
   }
 
-  // Security verify — each session
+  // ─── Verify session (each browser session) ───────────────────────────────
   if (!sessionVerified) {
     return (
       <SecurityVerify
         settings={securitySettings}
-        onVerified={() => setSessionVerified(true)}
+        onVerified={markVerified}
       />
     );
   }
 
-  // Main locker UI
+  // ─── Main locker UI ───────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Wood texture background */}
       <div
         className="fixed inset-0 opacity-5"
         style={{ backgroundImage: `url(${woodTexture})`, backgroundSize: "300px" }}
@@ -210,7 +221,6 @@ const Locker = () => {
                 drawerName={selectedDrawer}
                 documents={getDrawerDocs(selectedDrawer)}
                 onBack={() => setSelectedDrawer(null)}
-                onRefresh={loadData}
               />
             ) : (
               <motion.div
@@ -219,7 +229,6 @@ const Locker = () => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                {/* Welcome */}
                 <div className="mb-8">
                   <h2 className="font-display text-3xl font-bold brass-text mb-2">
                     Your Locker
@@ -229,7 +238,6 @@ const Locker = () => {
                   </p>
                 </div>
 
-                {/* Drawer grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {drawers.map((drawer, i) => (
                     <DrawerCard
@@ -246,7 +254,7 @@ const Locker = () => {
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: drawers.length * 0.1 }}
+                    transition={{ delay: drawers.length * 0.05 }}
                   >
                     {showNewDrawer ? (
                       <div className="wood-panel rounded-lg border border-border p-5">

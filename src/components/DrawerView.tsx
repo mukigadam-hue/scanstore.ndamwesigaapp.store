@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Upload, Download, Trash2, FileText, File, Image, FileSpreadsheet, X } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowLeft, Upload, Download, Trash2, FileText, File, Image, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -20,7 +21,6 @@ interface DrawerViewProps {
   drawerName: string;
   documents: Document[];
   onBack: () => void;
-  onRefresh: () => void;
 }
 
 const getFileIcon = (type: string) => {
@@ -36,10 +36,14 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 };
 
-const DrawerView = ({ drawerName, documents, onBack, onRefresh }: DrawerViewProps) => {
+const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshDocs = () =>
+    queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -49,7 +53,7 @@ const DrawerView = ({ drawerName, documents, onBack, onRefresh }: DrawerViewProp
     try {
       for (const file of Array.from(files)) {
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
-        
+
         const { error: uploadError } = await supabase.storage
           .from("documents")
           .upload(filePath, file);
@@ -74,7 +78,7 @@ const DrawerView = ({ drawerName, documents, onBack, onRefresh }: DrawerViewProp
           toast.success(`${file.name} stored safely!`);
         }
       }
-      onRefresh();
+      refreshDocs();
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -101,21 +105,32 @@ const DrawerView = ({ drawerName, documents, onBack, onRefresh }: DrawerViewProp
   };
 
   const handleDelete = async (doc: Document) => {
+    // Optimistically remove from cache immediately
+    queryClient.setQueryData(
+      ["documents", user?.id],
+      (old: Document[] = []) => old.filter((d) => d.id !== doc.id)
+    );
+
     const { error: storageError } = await supabase.storage
       .from("documents")
       .remove([doc.file_path]);
 
     if (storageError) {
       toast.error("Failed to delete file: " + storageError.message);
+      refreshDocs(); // rollback
       return;
     }
 
-    const { error: dbError } = await supabase.from("documents").delete().eq("id", doc.id);
+    const { error: dbError } = await supabase
+      .from("documents")
+      .delete()
+      .eq("id", doc.id);
+
     if (dbError) {
       toast.error("Failed to delete record: " + dbError.message);
+      refreshDocs(); // rollback
     } else {
       toast.success("Document removed");
-      onRefresh();
     }
   };
 
@@ -168,7 +183,9 @@ const DrawerView = ({ drawerName, documents, onBack, onRefresh }: DrawerViewProp
         >
           <FileText className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
           <p className="text-muted-foreground font-display text-lg">This drawer is empty</p>
-          <p className="text-muted-foreground/60 text-sm mt-1">Upload documents to store them safely</p>
+          <p className="text-muted-foreground/60 text-sm mt-1">
+            Upload documents to store them safely
+          </p>
         </motion.div>
       ) : (
         <div className="space-y-2">
@@ -177,7 +194,8 @@ const DrawerView = ({ drawerName, documents, onBack, onRefresh }: DrawerViewProp
               key={doc.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ delay: i * 0.04 }}
               className="wood-panel rounded-lg border border-border p-4 flex items-center justify-between gap-4 group hover:border-brass/30 transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
