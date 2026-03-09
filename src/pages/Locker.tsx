@@ -174,10 +174,12 @@ const Locker = () => {
   if (!securitySettings?.setup_completed) {
     return (
       <SecuritySetup
-        onComplete={async () => {
-          await queryClient.invalidateQueries({
-            queryKey: ["security_settings", user?.id],
-          });
+        onComplete={() => {
+          // Immediately update cached data so the component transitions without waiting for refetch
+          queryClient.setQueryData(
+            ["security_settings", user?.id],
+            (old: any) => ({ ...(old ?? {}), setup_completed: true })
+          );
           markVerified();
         }}
       />
