@@ -10,6 +10,10 @@ import {
   Image,
   FileSpreadsheet,
   Lock,
+  Camera,
+  Eye,
+  Video,
+  Music,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +22,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useSubscription } from "@/hooks/useSubscription";
+import FilePreviewDialog from "@/components/FilePreviewDialog";
+import SecureDeleteDialog from "@/components/SecureDeleteDialog";
+import CameraCapture from "@/components/CameraCapture";
+import CompressionChoiceDialog from "@/components/CompressionChoiceDialog";
+import DownloadQualityDialog from "@/components/DownloadQualityDialog";
 
 interface Document {
   id: string;
@@ -37,6 +46,10 @@ interface DrawerViewProps {
 const getFileIcon = (type: string) => {
   if (type.startsWith("image/"))
     return <Image className="h-5 w-5 text-primary" />;
+  if (type.startsWith("video/"))
+    return <Video className="h-5 w-5 text-primary" />;
+  if (type.startsWith("audio/"))
+    return <Music className="h-5 w-5 text-primary" />;
   if (type.includes("spreadsheet") || type.includes("excel"))
     return <FileSpreadsheet className="h-5 w-5 text-primary" />;
   if (type.includes("pdf"))
@@ -55,14 +68,107 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { canUpload, isFrozen, isRetrievalActive, storageUsed, storageLimit, storagePercent } =
+  const { canUpload, isFrozen, isRetrievalActive, storageUsed, storageLimit, storagePercent, currentPlan } =
     useSubscription();
 
   const canAccess = !isFrozen || isRetrievalActive;
   const isNearLimit = storagePercent >= 90;
+  const isFreeUser = currentPlan.id === "free";
+
+  // Preview
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  // Secure delete
+  const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  // Camera
+  const [showCamera, setShowCamera] = useState(false);
+  // Compression choice (premium only)
+  const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
+  // Download quality
+  const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
 
   const refreshDocs = () =>
     queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
+
+  const compressFile = async (file: File): Promise<{ blob: Blob; size: number }> => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const { data, error } = await supabase.functions.invoke("compress-document", {
+        body: formData,
+      });
+
+      if (!error && data) {
+        const compressedBlob = new Blob([data]);
+        if (compressedBlob.size < file.size) {
+          const savings = ((1 - compressedBlob.size / file.size) * 100).toFixed(0);
+          toast.success(`${file.name} compressed by ${savings}%`);
+          return { blob: compressedBlob, size: compressedBlob.size };
+        }
+      }
+    } catch (e) {
+      console.warn("Compression failed, using original:", e);
+    }
+    return { blob: file, size: file.size };
+  };
+
+  const askPremiumCompression = (file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setCompressionFile({ file, resolve });
+    });
+  };
+
+  const uploadSingleFile = async (file: File, runningTotal: number): Promise<number> => {
+    let fileToUpload: File | Blob = file;
+    let finalSize = file.size;
+
+    if (isFreeUser) {
+      // Always compress for free users
+      const result = await compressFile(file);
+      fileToUpload = result.blob;
+      finalSize = result.size;
+    } else {
+      // Premium users get a choice
+      const shouldCompress = await askPremiumCompression(file);
+      if (shouldCompress) {
+        const result = await compressFile(file);
+        fileToUpload = result.blob;
+        finalSize = result.size;
+      }
+    }
+
+    if (runningTotal + finalSize > storageLimit) {
+      toast.error(`Not enough storage for ${file.name}. Upgrade your plan.`);
+      return 0;
+    }
+
+    const filePath = `${user!.id}/${Date.now()}_${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from("documents")
+      .upload(filePath, fileToUpload);
+
+    if (uploadError) {
+      toast.error(`Failed to upload ${file.name}: ${uploadError.message}`);
+      return 0;
+    }
+
+    const { error: dbError } = await supabase.from("documents").insert({
+      user_id: user!.id,
+      name: file.name,
+      file_path: filePath,
+      file_size: finalSize,
+      file_type: file.type,
+      drawer_name: drawerName,
+    });
+
+    if (dbError) {
+      toast.error(`Failed to save ${file.name}: ${dbError.message}`);
+      return 0;
+    }
+
+    toast.success(`${file.name} stored safely!`);
+    return finalSize;
+  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -79,74 +185,11 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
 
     setUploading(true);
     let runningTotal = storageUsed;
-    const isFreeUser = storageLimit === 50 * 1024 * 1024;
 
     try {
       for (const file of Array.from(files)) {
-        let fileToUpload: File | Blob = file;
-        let finalSize = file.size;
-
-        // Auto-compress for free users
-        if (isFreeUser) {
-          try {
-            const formData = new FormData();
-            formData.append("file", file);
-
-            const { data: compressData, error: compressError } = await supabase.functions.invoke(
-              "compress-document",
-              {
-                body: formData,
-              }
-            );
-
-            if (!compressError && compressData) {
-              const compressedBlob = new Blob([compressData]);
-              fileToUpload = compressedBlob;
-              finalSize = compressedBlob.size;
-              const savings = ((1 - finalSize / file.size) * 100).toFixed(0);
-              if (finalSize < file.size) {
-                toast.success(`${file.name} compressed by ${savings}%`);
-              }
-            }
-          } catch (e) {
-            console.warn("Compression failed, using original:", e);
-          }
-        }
-
-        if (runningTotal + finalSize > storageLimit) {
-          toast.error(
-            `Not enough storage for ${file.name}. Upgrade your plan.`
-          );
-          continue;
-        }
-
-        const filePath = `${user.id}/${Date.now()}_${file.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("documents")
-          .upload(filePath, fileToUpload);
-
-        if (uploadError) {
-          toast.error(
-            `Failed to upload ${file.name}: ${uploadError.message}`
-          );
-          continue;
-        }
-
-        const { error: dbError } = await supabase.from("documents").insert({
-          user_id: user.id,
-          name: file.name,
-          file_path: filePath,
-          file_size: finalSize,
-          file_type: file.type,
-          drawer_name: drawerName,
-        });
-
-        if (dbError) {
-          toast.error(`Failed to save ${file.name}: ${dbError.message}`);
-        } else {
-          toast.success(`${file.name} stored safely!`);
-          runningTotal += finalSize;
-        }
+        const added = await uploadSingleFile(file, runningTotal);
+        runningTotal += added;
       }
       refreshDocs();
     } finally {
@@ -155,7 +198,18 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     }
   };
 
-  const handleDownload = async (doc: Document) => {
+  const handleCameraCapture = async (file: File) => {
+    if (!user || !canUpload) return;
+    setUploading(true);
+    try {
+      await uploadSingleFile(file, storageUsed);
+      refreshDocs();
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const performDownload = async (doc: Document) => {
     if (!canAccess) {
       toast.error("Documents are frozen. Please unlock access first.");
       return;
@@ -179,11 +233,36 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     toast.success("Downloaded " + doc.name);
   };
 
-  const handleDelete = async (doc: Document) => {
+  const handleDownloadClick = (doc: Document) => {
     if (!canAccess) {
       toast.error("Documents are frozen. Please unlock access first.");
       return;
     }
+    // Show quality choice dialog
+    setDownloadDoc(doc);
+  };
+
+  const handleDownloadChoice = async (highQuality: boolean) => {
+    if (!downloadDoc) return;
+    setDownloadDoc(null);
+    // For now both download the stored file - high quality is the stored version
+    await performDownload(downloadDoc);
+    if (highQuality) {
+      toast.info("Downloaded in highest available quality");
+    }
+  };
+
+  const handleDeleteClick = (doc: Document) => {
+    if (!canAccess) {
+      toast.error("Documents are frozen. Please unlock access first.");
+      return;
+    }
+    setDeleteDoc(doc);
+  };
+
+  const performDelete = async () => {
+    if (!deleteDoc) return;
+    const doc = deleteDoc;
 
     queryClient.setQueryData(
       ["documents", user?.id],
@@ -209,7 +288,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
       toast.error("Failed to delete record: " + dbError.message);
       refreshDocs();
     } else {
-      toast.success("Document removed");
+      toast.success("Document permanently removed");
     }
   };
 
@@ -250,6 +329,16 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
             className="hidden"
           />
           <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowCamera(true)}
+            disabled={!canUpload}
+            className="text-muted-foreground hover:text-primary hover:bg-secondary"
+            title="Camera & Scanner"
+          >
+            <Camera className="h-5 w-5" />
+          </Button>
+          <Button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || !canUpload}
             className="brass-gradient text-primary-foreground hover:opacity-90 disabled:opacity-50"
@@ -261,7 +350,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
                 ? isFrozen
                   ? "Frozen"
                   : "Full"
-                : "Store Document"}
+                : "Store"}
           </Button>
         </div>
       </div>
@@ -278,7 +367,7 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
             This drawer is empty
           </p>
           <p className="text-muted-foreground/60 text-sm mt-1">
-            Upload documents to store them safely
+            Upload documents or use the camera to store them safely
           </p>
         </motion.div>
       ) : (
@@ -290,11 +379,10 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ delay: i * 0.04 }}
-              className={`wood-panel rounded-lg border border-border p-4 flex items-center justify-between gap-4 group transition-colors ${
-                canAccess
-                  ? "hover:border-brass/30"
-                  : "opacity-60"
+              className={`wood-panel rounded-lg border border-border p-4 flex items-center justify-between gap-4 group transition-colors cursor-pointer ${
+                canAccess ? "hover:border-brass/30" : "opacity-60"
               }`}
+              onClick={() => canAccess && setPreviewDoc(doc)}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 {getFileIcon(doc.file_type)}
@@ -310,20 +398,32 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
               </div>
 
               {canAccess ? (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDownload(doc)}
+                    onClick={() => setPreviewDoc(doc)}
                     className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
+                    title="Preview"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleDownloadClick(doc)}
+                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
+                    title="Download"
                   >
                     <Download className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleDelete(doc)}
+                    onClick={() => handleDeleteClick(doc)}
                     className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-secondary"
+                    title="Delete"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -335,6 +435,49 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           ))}
         </div>
       )}
+
+      {/* Dialogs */}
+      <FilePreviewDialog
+        open={!!previewDoc}
+        onClose={() => setPreviewDoc(null)}
+        document={previewDoc}
+        onDownload={() => previewDoc && performDownload(previewDoc)}
+      />
+
+      <SecureDeleteDialog
+        open={!!deleteDoc}
+        onClose={() => setDeleteDoc(null)}
+        documentName={deleteDoc?.name || ""}
+        onConfirmDelete={performDelete}
+      />
+
+      <CameraCapture
+        open={showCamera}
+        onClose={() => setShowCamera(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      {compressionFile && (
+        <CompressionChoiceDialog
+          open={true}
+          fileName={compressionFile.file.name}
+          onChoice={(compress) => {
+            compressionFile.resolve(compress);
+            setCompressionFile(null);
+          }}
+          onClose={() => {
+            compressionFile.resolve(false);
+            setCompressionFile(null);
+          }}
+        />
+      )}
+
+      <DownloadQualityDialog
+        open={!!downloadDoc}
+        fileName={downloadDoc?.name || ""}
+        onChoice={handleDownloadChoice}
+        onClose={() => setDownloadDoc(null)}
+      />
     </motion.div>
   );
 };
