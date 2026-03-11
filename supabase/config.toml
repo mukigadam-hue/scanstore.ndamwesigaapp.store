@@ -1,1 +1,4 @@
 project_id = "kvszglovdoecnocxuzhe"
+
+[functions.compress-document]
+verify_jwt = false
