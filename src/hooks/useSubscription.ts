@@ -120,13 +120,14 @@ export function useSubscription() {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Auto-freeze expired premium subscriptions
+  // Auto-freeze expired premium subscriptions but allow free-tier fallback
   useEffect(() => {
     if (!subscription || !user) return;
     if (subscription.tier === "free") return;
     if (subscription.status === "active" && subscription.expires_at) {
       const expired = new Date(subscription.expires_at) < new Date();
       if (expired) {
+        // Downgrade to frozen but user can still access free-tier (50MB, first 6 drawers)
         supabase
           .from("user_subscriptions")
           .update({ status: "frozen" })
@@ -137,6 +138,9 @@ export function useSubscription() {
       }
     }
   }, [subscription, user, queryClient]);
+
+  // Expired premium users get free tier access (50MB)
+  const isExpiredPremium = subscription?.tier !== "free" && isFrozen && !isRetrievalActive;
 
   const storageLimit = subscription?.storage_limit_bytes ?? 50 * 1024 * 1024;
   const storageUsed = useMemo(
