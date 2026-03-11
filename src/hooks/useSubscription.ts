@@ -179,6 +179,7 @@ export function useSubscription() {
     storageUsed,
     storagePercent,
     isFrozen,
+    isExpiredPremium,
     isRetrievalActive,
     retrievalDaysLeft,
     canAccess,
