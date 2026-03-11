@@ -139,9 +139,6 @@ export function useSubscription() {
     }
   }, [subscription, user, queryClient]);
 
-  // Expired premium users get free tier access (50MB)
-  const isExpiredPremium = subscription?.tier !== "free" && isFrozen && !isRetrievalActive;
-
   const storageLimit = subscription?.storage_limit_bytes ?? 50 * 1024 * 1024;
   const storageUsed = useMemo(
     () => (documents as any[]).reduce((sum, d) => sum + (d.file_size || 0), 0),
@@ -157,6 +154,9 @@ export function useSubscription() {
     : false;
   const canAccess = !isFrozen || isRetrievalActive;
   const canUpload = canAccess && storageUsed < storageLimit;
+
+  // Expired premium users get free tier access (50MB)
+  const isExpiredPremium = subscription?.tier !== "free" && isFrozen && !isRetrievalActive;
 
   const expiresAt = subscription?.expires_at;
   const daysUntilExpiry =
