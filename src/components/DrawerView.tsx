@@ -27,6 +27,7 @@ import SecureDeleteDialog from "@/components/SecureDeleteDialog";
 import CameraCapture from "@/components/CameraCapture";
 import CompressionChoiceDialog from "@/components/CompressionChoiceDialog";
 import DownloadQualityDialog from "@/components/DownloadQualityDialog";
+import { compressImage, canCompress } from "@/lib/compressImage";
 
 interface Document {
   id: string;
