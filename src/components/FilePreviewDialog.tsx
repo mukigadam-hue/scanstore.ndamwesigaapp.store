@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, X, FileText, Music, Video, File } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,9 +68,14 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
       <DialogContent className="max-w-3xl max-h-[90vh] bg-card border-border overflow-hidden flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <div className="flex items-center justify-between">
-            <DialogTitle className="font-display brass-text text-lg truncate pr-4">
-              {doc.name}
-            </DialogTitle>
+            <div>
+              <DialogTitle className="font-display brass-text text-lg truncate pr-4">
+                {doc.name}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Preview your stored document
+              </DialogDescription>
+            </div>
             <div className="flex items-center gap-2">
               <Button
                 size="sm"

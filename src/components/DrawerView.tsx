@@ -27,6 +27,7 @@ import SecureDeleteDialog from "@/components/SecureDeleteDialog";
 import CameraCapture from "@/components/CameraCapture";
 import CompressionChoiceDialog from "@/components/CompressionChoiceDialog";
 import DownloadQualityDialog from "@/components/DownloadQualityDialog";
+import { compressImage, canCompress } from "@/lib/compressImage";
 
 interface Document {
   id: string;
@@ -89,27 +90,21 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const refreshDocs = () =>
     queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
 
-  const compressFile = async (file: File): Promise<{ blob: Blob; size: number }> => {
+  const compressFile = async (file: File): Promise<{ file: File; size: number }> => {
+    if (!canCompress(file)) {
+      return { file, size: file.size };
+    }
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const { data, error } = await supabase.functions.invoke("compress-document", {
-        body: formData,
-      });
-
-      if (!error && data) {
-        const compressedBlob = new Blob([data]);
-        if (compressedBlob.size < file.size) {
-          const savings = ((1 - compressedBlob.size / file.size) * 100).toFixed(0);
-          toast.success(`${file.name} compressed by ${savings}%`);
-          return { blob: compressedBlob, size: compressedBlob.size };
-        }
+      const compressed = await compressImage(file);
+      if (compressed.size < file.size) {
+        const savings = ((1 - compressed.size / file.size) * 100).toFixed(0);
+        toast.success(`${file.name} compressed by ${savings}%`);
+        return { file: compressed, size: compressed.size };
       }
     } catch (e) {
       console.warn("Compression failed, using original:", e);
     }
-    return { blob: file, size: file.size };
+    return { file, size: file.size };
   };
 
   const askPremiumCompression = (file: File): Promise<boolean> => {
@@ -125,14 +120,14 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     if (isFreeUser) {
       // Always compress for free users
       const result = await compressFile(file);
-      fileToUpload = result.blob;
+      fileToUpload = result.file;
       finalSize = result.size;
     } else {
       // Premium users get a choice
       const shouldCompress = await askPremiumCompression(file);
       if (shouldCompress) {
         const result = await compressFile(file);
-        fileToUpload = result.blob;
+        fileToUpload = result.file;
         finalSize = result.size;
       }
     }

@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -18,14 +18,23 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   const [streaming, setStreaming] = useState(false);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
 
-  const startCamera = useCallback(async () => {
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setStreaming(false);
+  }, []);
+
+  const startCamera = useCallback(async (facing: "user" | "environment") => {
     try {
+      // Stop any existing stream first
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode,
+          facingMode: facing,
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         },
@@ -38,17 +47,22 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       setStreaming(true);
       setCaptured(null);
     } catch (err) {
+      console.error("Camera error:", err);
       toast.error("Camera access denied. Please allow camera permissions.");
     }
-  }, [facingMode]);
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setStreaming(false);
   }, []);
+
+  // Start camera when dialog opens
+  useEffect(() => {
+    if (open) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => startCamera(facingMode), 100);
+      return () => clearTimeout(timer);
+    } else {
+      stopCamera();
+      setCaptured(null);
+    }
+  }, [open]);
 
   const takePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -64,41 +78,34 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     stopCamera();
   };
 
-  const switchCamera = () => {
-    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
-    if (streaming) startCamera();
+  const switchCamera = async () => {
+    const newMode = facingMode === "user" ? "environment" : "user";
+    setFacingMode(newMode);
+    if (streaming) {
+      await startCamera(newMode);
+    }
+  };
+
+  const dataUrlToFile = (dataUrl: string, filename: string, type: string): File => {
+    const byteString = atob(dataUrl.split(",")[1]);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+    const blob = new Blob([ab], { type });
+    return new File([blob], filename, { type });
   };
 
   const saveAsImage = () => {
     if (!captured) return;
-    const byteString = atob(captured.split(",")[1]);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: "image/jpeg" });
-    const file = new File([blob], `capture_${Date.now()}.jpg`, { type: "image/jpeg" });
+    const file = dataUrlToFile(captured, `photo_${Date.now()}.jpg`, "image/jpeg");
     onCapture(file);
     handleClose();
   };
 
-  const saveAsPdf = async () => {
-    if (!captured || !canvasRef.current) return;
-    // Create a simple PDF from the image using canvas
-    const canvas = canvasRef.current;
-    const imgData = canvas.toDataURL("image/jpeg", 0.85);
-
-    // Simple PDF generation (minimal PDF structure)
-    const img = new Image();
-    img.src = imgData;
-    await new Promise((r) => (img.onload = r));
-
-    // Convert to blob as image for now (PDF generation would need a library)
-    const byteString = atob(imgData.split(",")[1]);
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-    const blob = new Blob([ab], { type: "image/jpeg" });
-    const file = new File([blob], `scan_${Date.now()}.jpg`, { type: "image/jpeg" });
+  const saveAsDocument = () => {
+    if (!captured) return;
+    // Save as high-quality JPEG scan
+    const file = dataUrlToFile(captured, `scan_${Date.now()}.jpg`, "image/jpeg");
     onCapture(file);
     toast.success("Document scanned and saved!");
     handleClose();
@@ -110,19 +117,17 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     onClose();
   };
 
-  const handleOpenChange = (v: boolean) => {
-    if (!v) handleClose();
-    else startCamera();
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="max-w-lg bg-card border-border p-0 overflow-hidden">
         <DialogHeader className="p-4 pb-0">
           <DialogTitle className="font-display brass-text flex items-center gap-2">
             <Camera className="h-5 w-5" />
             Camera & Scanner
           </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Take a photo or scan a document
+          </DialogDescription>
         </DialogHeader>
 
         <div className="relative">
@@ -146,6 +151,11 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                   <div className="absolute bottom-8 left-8 w-6 h-6 border-b-2 border-l-2 border-primary rounded-bl-lg" />
                   <div className="absolute bottom-8 right-8 w-6 h-6 border-b-2 border-r-2 border-primary rounded-br-lg" />
                 </div>
+                {!streaming && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+                    <p className="text-muted-foreground text-sm">Starting camera...</p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-center gap-4 p-4">
@@ -193,14 +203,14 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                     className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
                   >
                     <ImageIcon className="h-4 w-4 mr-2" />
-                    Save as Photo
+                    Save Photo
                   </Button>
                   <Button
-                    onClick={saveAsPdf}
+                    onClick={saveAsDocument}
                     className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
                   >
                     <FileText className="h-4 w-4 mr-2" />
-                    Scan Document
+                    Save Scan
                   </Button>
                 </div>
                 <div className="flex gap-2">
@@ -209,7 +219,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                     className="flex-1 text-muted-foreground"
                     onClick={() => {
                       setCaptured(null);
-                      startCamera();
+                      startCamera(facingMode);
                     }}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
