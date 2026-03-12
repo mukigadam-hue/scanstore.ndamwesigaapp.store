@@ -120,14 +120,14 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     if (isFreeUser) {
       // Always compress for free users
       const result = await compressFile(file);
-      fileToUpload = result.blob;
+      fileToUpload = result.file;
       finalSize = result.size;
     } else {
       // Premium users get a choice
       const shouldCompress = await askPremiumCompression(file);
       if (shouldCompress) {
         const result = await compressFile(file);
-        fileToUpload = result.blob;
+        fileToUpload = result.file;
         finalSize = result.size;
       }
     }
