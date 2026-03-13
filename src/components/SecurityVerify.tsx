@@ -142,7 +142,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
               <div className="brass-gradient rounded-full p-4 brass-glow">
                 <Shield className="h-8 w-8 text-primary-foreground" />
               </div>
-            </motion.div>
+            </div>
 
             <h2 className="font-display text-2xl font-bold brass-text text-center mb-1">
               Unlock Your Locker

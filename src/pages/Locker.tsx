@@ -298,7 +298,7 @@ const Locker = () => {
 
         {/* Main content */}
         <main className="max-w-6xl mx-auto px-4 py-8">
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="popLayout">
             {selectedDrawer ? (
               <DrawerView
                 key="drawer-view"
