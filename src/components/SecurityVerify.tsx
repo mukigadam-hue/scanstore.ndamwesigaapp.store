@@ -3,9 +3,12 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
+  KeyRound, Mail,
 } from "lucide-react";
 
 interface SecuritySettingsRow {
@@ -25,11 +28,14 @@ interface SecurityVerifyProps {
 type MethodId = "pin" | "fingerprint" | "face" | "school" | "family" | "id";
 
 const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
+  const { user } = useAuth();
   const [selectedMethod, setSelectedMethod] = useState<MethodId | null>(null);
   const [verifiedMethods, setVerifiedMethods] = useState<Set<MethodId>>(new Set());
   const [pin, setPin] = useState("");
   const [school, setSchool] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotSending, setForgotSending] = useState(false);
 
   const REQUIRED_VERIFICATIONS = 2;
 
@@ -42,7 +48,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     settings.id_document_path && { id: "id" as MethodId, label: "Show ID", icon: IdCard },
   ].filter(Boolean) as { id: MethodId; label: string; icon: any }[];
 
-  // If user only has 1 method configured, allow single verification
   const requiredCount = Math.min(REQUIRED_VERIFICATIONS, availableMethods.length);
 
   const markVerified = (methodId: MethodId) => {
@@ -89,7 +94,36 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     markVerified(methodId);
   };
 
-  // Methods not yet verified
+  const handleForgotSecurity = async () => {
+    if (!user?.email) {
+      toast.error("No email associated with your account");
+      return;
+    }
+    setForgotSending(true);
+    try {
+      // Reset security settings so user must re-setup
+      const { error } = await supabase.from("security_settings").update({
+        pin_code: null,
+        fingerprint_enabled: false,
+        face_image_path: null,
+        last_school: null,
+        family_face_path: null,
+        id_document_path: null,
+        setup_completed: false,
+      }).eq("user_id", user.id);
+
+      if (error) throw error;
+
+      toast.success("Security has been reset. You'll now set up new security methods.");
+      // Force page reload so Locker re-fetches security_settings and shows SecuritySetup
+      window.location.reload();
+    } catch (err: any) {
+      toast.error("Failed to reset security: " + err.message);
+    } finally {
+      setForgotSending(false);
+    }
+  };
+
   const remainingMethods = availableMethods.filter((m) => !verifiedMethods.has(m.id));
 
   return (
@@ -144,51 +178,92 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
               </span>
             </div>
 
-            {!selectedMethod ? (
-              <div className="grid grid-cols-2 gap-2">
-                {remainingMethods.map((method) => {
-                  const Icon = method.icon;
-                  return (
-                    <motion.button
-                      key={method.id}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.97 }}
-                      onClick={() => setSelectedMethod(method.id)}
-                      className="wood-panel border border-border rounded-lg p-4 text-center hover:border-primary/40 transition-colors"
-                    >
-                      <div className="brass-gradient rounded-lg p-2 inline-block mb-2">
-                        <Icon className="h-5 w-5 text-primary-foreground" />
-                      </div>
-                      <p className="text-xs font-medium text-foreground">
-                        {method.label}
-                      </p>
-                    </motion.button>
-                  );
-                })}
-
-                {/* Show already verified methods as disabled */}
-                {availableMethods
-                  .filter((m) => verifiedMethods.has(m.id))
-                  .map((method) => {
+            {showForgot ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-4"
+              >
+                <div className="wood-panel border border-border rounded-lg p-4 text-center">
+                  <KeyRound className="h-10 w-10 text-primary mx-auto mb-3" />
+                  <p className="text-sm text-foreground font-medium mb-1">
+                    Forgot your security methods?
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    This will reset ALL your security methods (PIN, fingerprint, photos, etc.). 
+                    You'll need to set up new ones immediately.
+                  </p>
+                  <Button
+                    className="w-full brass-gradient text-primary-foreground font-semibold mb-2"
+                    onClick={handleForgotSecurity}
+                    disabled={forgotSending}
+                  >
+                    {forgotSending ? "Resetting…" : "Reset All Security Methods"}
+                  </Button>
+                  <button
+                    onClick={() => setShowForgot(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Back to verification
+                  </button>
+                </div>
+              </motion.div>
+            ) : !selectedMethod ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {remainingMethods.map((method) => {
                     const Icon = method.icon;
                     return (
-                      <div
+                      <motion.button
                         key={method.id}
-                        className="wood-panel border border-primary/30 rounded-lg p-4 text-center opacity-60"
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.97 }}
+                        onClick={() => setSelectedMethod(method.id)}
+                        className="wood-panel border border-border rounded-lg p-4 text-center hover:border-primary/40 transition-colors"
                       >
-                        <div className="relative inline-block mb-2">
-                          <div className="brass-gradient rounded-lg p-2">
-                            <Icon className="h-5 w-5 text-primary-foreground" />
-                          </div>
-                          <CheckCircle2 className="h-4 w-4 text-primary absolute -top-1 -right-1" />
+                        <div className="brass-gradient rounded-lg p-2 inline-block mb-2">
+                          <Icon className="h-5 w-5 text-primary-foreground" />
                         </div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          Verified ✓
+                        <p className="text-xs font-medium text-foreground">
+                          {method.label}
                         </p>
-                      </div>
+                      </motion.button>
                     );
                   })}
-              </div>
+
+                  {availableMethods
+                    .filter((m) => verifiedMethods.has(m.id))
+                    .map((method) => {
+                      const Icon = method.icon;
+                      return (
+                        <div
+                          key={method.id}
+                          className="wood-panel border border-primary/30 rounded-lg p-4 text-center opacity-60"
+                        >
+                          <div className="relative inline-block mb-2">
+                            <div className="brass-gradient rounded-lg p-2">
+                              <Icon className="h-5 w-5 text-primary-foreground" />
+                            </div>
+                            <CheckCircle2 className="h-4 w-4 text-primary absolute -top-1 -right-1" />
+                          </div>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Verified ✓
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                {/* Forgot security link */}
+                <div className="mt-4 text-center">
+                  <button
+                    onClick={() => setShowForgot(true)}
+                    className="text-xs text-primary/70 hover:text-primary transition-colors"
+                  >
+                    Can't remember your security methods?
+                  </button>
+                </div>
+              </>
             ) : (
               <motion.div
                 initial={{ opacity: 0, x: 10 }}
