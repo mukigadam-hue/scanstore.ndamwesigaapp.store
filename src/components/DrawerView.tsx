@@ -428,34 +428,37 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
               </div>
 
               {canAccess ? (
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                <div className="flex items-center gap-1 shrink-0"
                   onClick={(e) => e.stopPropagation()}>
                   <Button
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
                     onClick={() => setPreviewDoc(doc)}
-                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
+                    className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
                     title="Preview"
                   >
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-3.5 w-3.5 sm:mr-1" />
+                    <span className="hidden sm:inline">View</span>
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleDownloadClick(doc)}
-                    className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-secondary"
+                    className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
                     title="Download"
                   >
-                    <Download className="h-4 w-4" />
+                    <Download className="h-3.5 w-3.5 sm:mr-1" />
+                    <span className="hidden sm:inline">Save</span>
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleDeleteClick(doc)}
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-secondary"
+                    className="h-8 px-2 sm:px-3 text-xs border-destructive/40 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
                     title="Delete"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
+                    <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
               ) : (
