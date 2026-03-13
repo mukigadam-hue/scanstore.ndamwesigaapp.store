@@ -28,6 +28,7 @@ import CameraCapture from "@/components/CameraCapture";
 import CompressionChoiceDialog from "@/components/CompressionChoiceDialog";
 import DownloadQualityDialog from "@/components/DownloadQualityDialog";
 import { compressImage, canCompress } from "@/lib/compressImage";
+import { enhanceImageBlob } from "@/lib/enhanceImage";
 
 interface Document {
   id: string;
