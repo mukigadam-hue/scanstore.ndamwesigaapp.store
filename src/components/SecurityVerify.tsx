@@ -129,9 +129,9 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 200 }}
+        transition={{ duration: 0.2 }}
         className="w-full max-w-sm"
       >
         <div className="wood-panel rounded-lg overflow-hidden border border-border">
