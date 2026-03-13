@@ -77,7 +77,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   const handleVerifyFingerprint = async () => {
     setFingerprintScanning(true);
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 600));
     setFingerprintScanning(false);
     markVerified("fingerprint");
   };
@@ -129,30 +129,20 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 200 }}
+        transition={{ duration: 0.2 }}
         className="w-full max-w-sm"
       >
         <div className="wood-panel rounded-lg overflow-hidden border border-border">
           <div className="brass-gradient h-2" />
 
           <div className="p-6">
-            <motion.div
-              className="flex justify-center mb-5"
-              animate={{
-                boxShadow: [
-                  "0 0 0px hsl(38 70% 50% / 0)",
-                  "0 0 30px hsl(38 70% 50% / 0.4)",
-                  "0 0 0px hsl(38 70% 50% / 0)",
-                ],
-              }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-            >
+            <div className="flex justify-center mb-5">
               <div className="brass-gradient rounded-full p-4 brass-glow">
                 <Shield className="h-8 w-8 text-primary-foreground" />
               </div>
-            </motion.div>
+            </div>
 
             <h2 className="font-display text-2xl font-bold brass-text text-center mb-1">
               Unlock Your Locker
