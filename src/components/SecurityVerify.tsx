@@ -138,17 +138,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <div className="brass-gradient h-2" />
 
           <div className="p-6">
-            <motion.div
-              className="flex justify-center mb-5"
-              animate={{
-                boxShadow: [
-                  "0 0 0px hsl(38 70% 50% / 0)",
-                  "0 0 30px hsl(38 70% 50% / 0.4)",
-                  "0 0 0px hsl(38 70% 50% / 0)",
-                ],
-              }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-            >
+            <div className="flex justify-center mb-5">
               <div className="brass-gradient rounded-full p-4 brass-glow">
                 <Shield className="h-8 w-8 text-primary-foreground" />
               </div>
