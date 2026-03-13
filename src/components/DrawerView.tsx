@@ -240,12 +240,46 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
 
   const handleDownloadChoice = async (highQuality: boolean) => {
     if (!downloadDoc) return;
+    const doc = downloadDoc;
     setDownloadDoc(null);
-    // For now both download the stored file - high quality is the stored version
-    await performDownload(downloadDoc);
-    if (highQuality) {
-      toast.info("Downloaded in highest available quality");
+
+    if (!canAccess) {
+      toast.error("Documents are frozen. Please unlock access first.");
+      return;
     }
+
+    const { data, error } = await supabase.storage
+      .from("documents")
+      .download(doc.file_path);
+
+    if (error) {
+      toast.error("Failed to download: " + error.message);
+      return;
+    }
+
+    let blobToDownload: Blob = data;
+
+    if (highQuality && data.type.startsWith("image/")) {
+      toast.info("Enhancing image quality…");
+      try {
+        blobToDownload = await enhanceImageBlob(data);
+        toast.success("Enhanced quality download ready");
+      } catch {
+        toast.info("Could not enhance — downloading original");
+      }
+    }
+
+    const url = URL.createObjectURL(blobToDownload);
+    const a = document.createElement("a");
+    a.href = url;
+    // For enhanced images, change extension to .png
+    const downloadName = highQuality && data.type.startsWith("image/")
+      ? doc.name.replace(/\.\w+$/, "_hq.png")
+      : doc.name;
+    a.download = downloadName;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Downloaded " + downloadName);
   };
 
   const handleDeleteClick = (doc: Document) => {
