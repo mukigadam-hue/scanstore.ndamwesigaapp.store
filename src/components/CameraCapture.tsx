@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { jsPDF } from "jspdf";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -28,7 +29,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
 
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     try {
-      // Stop any existing stream first
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
@@ -52,10 +52,8 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     }
   }, []);
 
-  // Start camera when dialog opens
   useEffect(() => {
     if (open) {
-      // Small delay to ensure DOM is ready
       const timer = setTimeout(() => startCamera(facingMode), 100);
       return () => clearTimeout(timer);
     } else {
@@ -103,12 +101,49 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   };
 
   const saveAsDocument = () => {
-    if (!captured) return;
-    // Save as high-quality JPEG scan
-    const file = dataUrlToFile(captured, `scan_${Date.now()}.jpg`, "image/jpeg");
-    onCapture(file);
-    toast.success("Document scanned and saved!");
-    handleClose();
+    if (!captured || !canvasRef.current) return;
+
+    try {
+      const canvas = canvasRef.current;
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+
+      // Create PDF with A4 dimensions
+      const pdf = new jsPDF({
+        orientation: imgWidth > imgHeight ? "landscape" : "portrait",
+        unit: "mm",
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      // Scale image to fit page with margins
+      const margin = 10;
+      const availableWidth = pageWidth - margin * 2;
+      const availableHeight = pageHeight - margin * 2;
+      const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+      const scaledWidth = imgWidth * ratio;
+      const scaledHeight = imgHeight * ratio;
+
+      // Center the image on the page
+      const xOffset = (pageWidth - scaledWidth) / 2;
+      const yOffset = (pageHeight - scaledHeight) / 2;
+
+      pdf.addImage(captured, "JPEG", xOffset, yOffset, scaledWidth, scaledHeight);
+
+      const pdfBlob = pdf.output("blob");
+      const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
+        type: "application/pdf",
+      });
+
+      onCapture(pdfFile);
+      toast.success("Document scanned and saved as PDF!");
+      handleClose();
+    } catch (err) {
+      console.error("PDF creation error:", err);
+      toast.error("Failed to create PDF. Saving as image instead.");
+      saveAsImage();
+    }
   };
 
   const handleClose = () => {
@@ -126,7 +161,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             Camera & Scanner
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
-            Take a photo or scan a document
+            Take a photo or scan a document into PDF
           </DialogDescription>
         </DialogHeader>
 
@@ -143,7 +178,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                   muted
                   className="w-full h-full object-cover"
                 />
-                {/* Scan guide overlay */}
                 <div className="absolute inset-0 pointer-events-none">
                   <div className="absolute inset-8 border-2 border-primary/40 rounded-lg" />
                   <div className="absolute top-8 left-8 w-6 h-6 border-t-2 border-l-2 border-primary rounded-tl-lg" />
@@ -195,7 +229,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               </div>
               <div className="p-4 space-y-3">
                 <p className="text-sm text-muted-foreground text-center">
-                  Save as image or scan as document
+                  Save as photo or scan as PDF document
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -210,7 +244,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                     className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
                   >
                     <FileText className="h-4 w-4 mr-2" />
-                    Save Scan
+                    Save as PDF
                   </Button>
                 </div>
                 <div className="flex gap-2">

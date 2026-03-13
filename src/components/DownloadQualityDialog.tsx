@@ -37,7 +37,7 @@ const DownloadQualityDialog = ({ open, fileName, onChoice, onClose }: DownloadQu
                 <div>
                   <p className="text-sm font-semibold text-foreground">Saved Quality</p>
                   <p className="text-xs text-muted-foreground">
-                    Download as stored in your locker
+                    Download exactly as stored — smaller file, faster download
                   </p>
                 </div>
               </div>
@@ -54,7 +54,7 @@ const DownloadQualityDialog = ({ open, fileName, onChoice, onClose }: DownloadQu
                 <div>
                   <p className="text-sm font-semibold text-foreground">High Quality</p>
                   <p className="text-xs text-muted-foreground">
-                    Enhanced quality (may take longer)
+                    Enhanced sharpness & resolution — larger file
                   </p>
                 </div>
               </div>
