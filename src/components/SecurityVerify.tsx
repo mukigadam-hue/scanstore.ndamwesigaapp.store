@@ -77,7 +77,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   const handleVerifyFingerprint = async () => {
     setFingerprintScanning(true);
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 600));
     setFingerprintScanning(false);
     markVerified("fingerprint");
   };
