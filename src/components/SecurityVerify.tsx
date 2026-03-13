@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   Shield, Hash, Fingerprint, Camera,
-  GraduationCap, Users, IdCard, ArrowLeft,
+  GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
 } from "lucide-react";
 
 interface SecuritySettingsRow {
@@ -22,50 +22,49 @@ interface SecurityVerifyProps {
   onVerified: () => void;
 }
 
+type MethodId = "pin" | "fingerprint" | "face" | "school" | "family" | "id";
+
 const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
-  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [selectedMethod, setSelectedMethod] = useState<MethodId | null>(null);
+  const [verifiedMethods, setVerifiedMethods] = useState<Set<MethodId>>(new Set());
   const [pin, setPin] = useState("");
   const [school, setSchool] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+
+  const REQUIRED_VERIFICATIONS = 2;
 
   const availableMethods = [
-    settings.pin_code && {
-      id: "pin",
-      label: "Enter PIN",
-      icon: Hash,
-    },
-    settings.fingerprint_enabled && {
-      id: "fingerprint",
-      label: "Fingerprint",
-      icon: Fingerprint,
-    },
-    settings.face_image_path && {
-      id: "face",
-      label: "Face Photo",
-      icon: Camera,
-    },
-    settings.last_school && {
-      id: "school",
-      label: "School Name",
-      icon: GraduationCap,
-    },
-    settings.family_face_path && {
-      id: "family",
-      label: "Family Face",
-      icon: Users,
-    },
-    settings.id_document_path && {
-      id: "id",
-      label: "Show ID",
-      icon: IdCard,
-    },
-  ].filter(Boolean) as { id: string; label: string; icon: any }[];
+    settings.pin_code && { id: "pin" as MethodId, label: "Enter PIN", icon: Hash },
+    settings.fingerprint_enabled && { id: "fingerprint" as MethodId, label: "Fingerprint", icon: Fingerprint },
+    settings.face_image_path && { id: "face" as MethodId, label: "Face Photo", icon: Camera },
+    settings.last_school && { id: "school" as MethodId, label: "School Name", icon: GraduationCap },
+    settings.family_face_path && { id: "family" as MethodId, label: "Family Face", icon: Users },
+    settings.id_document_path && { id: "id" as MethodId, label: "Show ID", icon: IdCard },
+  ].filter(Boolean) as { id: MethodId; label: string; icon: any }[];
+
+  // If user only has 1 method configured, allow single verification
+  const requiredCount = Math.min(REQUIRED_VERIFICATIONS, availableMethods.length);
+
+  const markVerified = (methodId: MethodId) => {
+    const updated = new Set(verifiedMethods);
+    updated.add(methodId);
+    setVerifiedMethods(updated);
+    setSelectedMethod(null);
+    setPin("");
+    setSchool("");
+
+    if (updated.size >= requiredCount) {
+      toast.success("Identity fully verified! Welcome back 🔓");
+      onVerified();
+    } else {
+      const remaining = requiredCount - updated.size;
+      toast.success(`Method verified ✓ — ${remaining} more needed`);
+    }
+  };
 
   const handleVerifyPin = () => {
     if (pin === settings.pin_code) {
-      toast.success("PIN verified! Welcome back 🔓");
-      onVerified();
+      markVerified("pin");
     } else {
       toast.error("Incorrect PIN — try again");
     }
@@ -75,25 +74,23 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setFingerprintScanning(true);
     await new Promise((r) => setTimeout(r, 2000));
     setFingerprintScanning(false);
-    toast.success("Fingerprint verified! Welcome back 🔓");
-    onVerified();
+    markVerified("fingerprint");
   };
 
   const handleVerifySchool = () => {
-    if (
-      school.trim().toLowerCase() === settings.last_school?.toLowerCase()
-    ) {
-      toast.success("School verified! Welcome back 🔓");
-      onVerified();
+    if (school.trim().toLowerCase() === settings.last_school?.toLowerCase()) {
+      markVerified("school");
     } else {
       toast.error("School name does not match — try again");
     }
   };
 
-  const handleImageConfirm = () => {
-    toast.success("Identity confirmed! Welcome back 🔓");
-    onVerified();
+  const handleImageConfirm = (methodId: MethodId) => {
+    markVerified(methodId);
   };
+
+  // Methods not yet verified
+  const remainingMethods = availableMethods.filter((m) => !verifiedMethods.has(m.id));
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -107,7 +104,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <div className="brass-gradient h-2" />
 
           <div className="p-6">
-            {/* Icon */}
             <motion.div
               className="flex justify-center mb-5"
               animate={{
@@ -127,14 +123,30 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             <h2 className="font-display text-2xl font-bold brass-text text-center mb-1">
               Unlock Your Locker
             </h2>
-            <p className="text-xs text-muted-foreground text-center mb-6">
-              Choose any verification method to open your locker
+            <p className="text-xs text-muted-foreground text-center mb-2">
+              Verify with {requiredCount} methods to unlock your locker
             </p>
 
+            {/* Progress indicator */}
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {Array.from({ length: requiredCount }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-2 w-8 rounded-full transition-colors ${
+                    i < verifiedMethods.size
+                      ? "bg-primary"
+                      : "bg-muted"
+                  }`}
+                />
+              ))}
+              <span className="text-xs text-muted-foreground ml-1">
+                {verifiedMethods.size}/{requiredCount}
+              </span>
+            </div>
+
             {!selectedMethod ? (
-              /* Method selection grid */
               <div className="grid grid-cols-2 gap-2">
-                {availableMethods.map((method) => {
+                {remainingMethods.map((method) => {
                   const Icon = method.icon;
                   return (
                     <motion.button
@@ -153,6 +165,29 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                     </motion.button>
                   );
                 })}
+
+                {/* Show already verified methods as disabled */}
+                {availableMethods
+                  .filter((m) => verifiedMethods.has(m.id))
+                  .map((method) => {
+                    const Icon = method.icon;
+                    return (
+                      <div
+                        key={method.id}
+                        className="wood-panel border border-primary/30 rounded-lg p-4 text-center opacity-60"
+                      >
+                        <div className="relative inline-block mb-2">
+                          <div className="brass-gradient rounded-lg p-2">
+                            <Icon className="h-5 w-5 text-primary-foreground" />
+                          </div>
+                          <CheckCircle2 className="h-4 w-4 text-primary absolute -top-1 -right-1" />
+                        </div>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Verified ✓
+                        </p>
+                      </div>
+                    );
+                  })}
               </div>
             ) : (
               <motion.div
@@ -160,7 +195,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 animate={{ opacity: 1, x: 0 }}
                 className="space-y-4"
               >
-                {/* Back button */}
                 <button
                   onClick={() => {
                     setSelectedMethod(null);
@@ -197,7 +231,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       onClick={handleVerifyPin}
                       disabled={pin.length !== 5}
                     >
-                      Unlock Locker
+                      Verify PIN
                     </Button>
                   </>
                 )}
@@ -252,7 +286,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       onClick={handleVerifySchool}
                       disabled={!school.trim()}
                     >
-                      Verify & Unlock
+                      Verify School
                     </Button>
                   </>
                 )}
@@ -266,42 +300,36 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       {selectedMethod === "face" && (
                         <>
                           <Camera className="h-10 w-10 text-primary mx-auto mb-2" />
-                          <p className="text-sm text-foreground font-medium">
-                            Face verification
-                          </p>
+                          <p className="text-sm text-foreground font-medium">Face verification</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Your registered face photo is on file. Confirm to unlock.
+                            Your registered face photo is on file. Confirm to verify.
                           </p>
                         </>
                       )}
                       {selectedMethod === "family" && (
                         <>
                           <Users className="h-10 w-10 text-primary mx-auto mb-2" />
-                          <p className="text-sm text-foreground font-medium">
-                            Family member verification
-                          </p>
+                          <p className="text-sm text-foreground font-medium">Family member verification</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Your registered family photo is on file. Confirm to unlock.
+                            Your registered family photo is on file. Confirm to verify.
                           </p>
                         </>
                       )}
                       {selectedMethod === "id" && (
                         <>
                           <IdCard className="h-10 w-10 text-primary mx-auto mb-2" />
-                          <p className="text-sm text-foreground font-medium">
-                            ID document verification
-                          </p>
+                          <p className="text-sm text-foreground font-medium">ID document verification</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Your registered ID document is on file. Confirm to unlock.
+                            Your registered ID document is on file. Confirm to verify.
                           </p>
                         </>
                       )}
                     </div>
                     <Button
                       className="w-full brass-gradient text-primary-foreground font-semibold"
-                      onClick={handleImageConfirm}
+                      onClick={() => handleImageConfirm(selectedMethod)}
                     >
-                      Confirm & Unlock
+                      Confirm & Verify
                     </Button>
                   </div>
                 )}
