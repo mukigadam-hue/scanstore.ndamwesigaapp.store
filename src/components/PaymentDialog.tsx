@@ -3,13 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Smartphone, Building2, CheckCircle2, Copy } from "lucide-react";
+import { CreditCard, Building2, CheckCircle2, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 // ── Configure your payment details here ──────────────────────────────────────
-const MOBILE_MONEY_NUMBER = "+1 (000) 000-0000";
 const BANK_NAME = "Your Bank";
 const BANK_ACCOUNT = "0000-0000-0000";
 const BANK_ACCOUNT_NAME = "DocLocker Ltd";
@@ -26,7 +25,7 @@ interface PaymentDialogProps {
   durationYears?: number;
 }
 
-type Method = "mobile_money" | "bank_transfer";
+type Method = "card" | "bank_transfer";
 type Step = "method" | "details" | "done";
 
 const PaymentDialog = ({
@@ -120,15 +119,15 @@ const PaymentDialog = ({
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => handleMethodSelect("mobile_money")}
+                onClick={() => handleMethodSelect("card")}
                 className="wood-panel rounded-lg border border-border p-4 flex flex-col items-center gap-2 hover:border-brass/50 transition-colors group"
               >
-                <Smartphone className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
+                <CreditCard className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
                 <span className="text-sm font-medium text-foreground">
-                  Mobile Money
+                  Card Payment
                 </span>
                 <span className="text-xs text-muted-foreground text-center">
-                  M-Pesa, Airtel, MTN & more
+                  Visa, Mastercard & more
                 </span>
               </button>
               <button
@@ -151,18 +150,12 @@ const PaymentDialog = ({
         {step === "details" && method && (
           <div className="space-y-4 pt-2">
             <div className="bg-muted/50 rounded-lg p-4 space-y-2 border border-border">
-              {method === "mobile_money" ? (
+              {method === "card" ? (
                 <>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                    Send via Mobile Money
+                    Card Payment
                   </p>
                   <div className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Number:</span>
-                      <span className="text-foreground font-medium">
-                        {MOBILE_MONEY_NUMBER}
-                      </span>
-                    </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Amount:</span>
                       <span className="text-primary font-bold">${amount}</span>
@@ -179,7 +172,7 @@ const PaymentDialog = ({
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Include the reference in your payment message.
+                    Complete your card payment and enter the transaction reference below.
                   </p>
                 </>
               ) : (
@@ -230,14 +223,14 @@ const PaymentDialog = ({
 
             <div className="space-y-2">
               <Label className="text-muted-foreground text-xs uppercase tracking-wide">
-                {method === "mobile_money"
-                  ? "Transaction ID / M-Pesa Code"
+                {method === "card"
+                  ? "Card Transaction Reference"
                   : "Bank Transaction Reference"}
               </Label>
               <Input
                 placeholder={
-                  method === "mobile_money"
-                    ? "e.g. QAB12345CD"
+                  method === "card"
+                    ? "e.g. TXN-ABC123456"
                     : "e.g. TXN20240101001"
                 }
                 value={reference}
