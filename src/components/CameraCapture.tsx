@@ -99,11 +99,38 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const scanCanvas = scanCanvasRef.current;
     const mainCanvas = canvasRef.current;
 
-    // Set up scan canvas at full video resolution
-    scanCanvas.width = video.videoWidth;
-    scanCanvas.height = video.videoHeight;
-    mainCanvas.width = video.videoWidth;
-    mainCanvas.height = video.videoHeight;
+    // Calculate the boundary area (matching the inset-6 = 24px guide frame)
+    // The video element is displayed as object-cover, so we need to map
+    // the 24px CSS inset to actual video pixel coordinates
+    const videoEl = videoRef.current;
+    const displayW = videoEl.clientWidth;
+    const displayH = videoEl.clientHeight;
+    const videoW = video.videoWidth;
+    const videoH = video.videoHeight;
+
+    // object-cover scaling: find which dimension overflows
+    const scaleX = videoW / displayW;
+    const scaleY = videoH / displayH;
+    const coverScale = Math.min(scaleX, scaleY);
+
+    // Visible area of the video in video-pixels
+    const visibleW = displayW * coverScale;
+    const visibleH = displayH * coverScale;
+    const offsetX = (videoW - visibleW) / 2;
+    const offsetY = (videoH - visibleH) / 2;
+
+    // The boundary guide is inset-6 = 24px from each edge of the display
+    const insetPx = 24;
+    const cropX = offsetX + insetPx * coverScale;
+    const cropY = offsetY + insetPx * coverScale;
+    const cropW = visibleW - insetPx * 2 * coverScale;
+    const cropH = visibleH - insetPx * 2 * coverScale;
+
+    // Set canvases to the cropped dimensions
+    scanCanvas.width = cropW;
+    scanCanvas.height = cropH;
+    mainCanvas.width = cropW;
+    mainCanvas.height = cropH;
 
     const scanCtx = scanCanvas.getContext("2d");
     if (!scanCtx) return;
@@ -117,15 +144,15 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       const progress = Math.min(elapsed / duration, 1);
       setScanProgress(progress);
 
-      const currentRow = Math.floor(progress * video.videoHeight);
+      const currentRow = Math.floor(progress * cropH);
 
-      // Progressively capture rows from the video onto the scan canvas
+      // Progressively capture rows from the cropped boundary area
       if (currentRow > lastRow) {
         const rowsToCopy = currentRow - lastRow;
         scanCtx.drawImage(
           video,
-          0, lastRow, video.videoWidth, rowsToCopy,
-          0, lastRow, video.videoWidth, rowsToCopy
+          cropX, cropY + lastRow, cropW, rowsToCopy,
+          0, lastRow, cropW, rowsToCopy
         );
         lastRow = currentRow;
       }
@@ -134,19 +161,18 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
         requestAnimationFrame(animateScanning);
       } else {
         // Final: copy any remaining rows
-        if (lastRow < video.videoHeight) {
+        if (lastRow < cropH) {
           scanCtx.drawImage(
             video,
-            0, lastRow, video.videoWidth, video.videoHeight - lastRow,
-            0, lastRow, video.videoWidth, video.videoHeight - lastRow
+            cropX, cropY + lastRow, cropW, cropH - lastRow,
+            0, lastRow, cropW, cropH - lastRow
           );
         }
 
-        // Apply sharpening/enhancement
+        // Apply light enhancement preserving original colors
         const mainCtx = mainCanvas.getContext("2d");
         if (mainCtx) {
-          // Apply contrast enhancement for document clarity
-          mainCtx.filter = "contrast(1.3) brightness(1.05) saturate(0)";
+          mainCtx.filter = "contrast(1.15) brightness(1.03)";
           mainCtx.drawImage(scanCanvas, 0, 0);
           mainCtx.filter = "none";
         }
