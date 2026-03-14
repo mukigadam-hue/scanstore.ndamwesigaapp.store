@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, Check,
-  ChevronDown, ChevronUp, KeyRound,
+  ChevronDown, ChevronUp, KeyRound, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
