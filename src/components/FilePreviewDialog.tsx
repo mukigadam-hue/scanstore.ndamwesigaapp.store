@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Maximize2, Minimize2 } from "lucide-react";
+import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -22,10 +22,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Pinch-to-zoom state
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
@@ -35,7 +33,6 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     if (!open || !doc) {
       setPreviewUrl(null);
       setZoom(1);
-      setIsFullscreen(false);
       return;
     }
 
@@ -67,21 +64,31 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     };
   }, [open, doc?.id]);
 
-  // Auto-hide controls
+  // Auto-hide controls after 3s
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
     controlsTimer.current = setTimeout(() => {
-      if (isFullscreen) setShowControls(false);
+      setShowControls(false);
     }, 3000);
-  }, [isFullscreen]);
+  }, []);
 
   useEffect(() => {
-    if (isFullscreen) resetControlsTimer();
+    if (open) resetControlsTimer();
     return () => {
       if (controlsTimer.current) clearTimeout(controlsTimer.current);
     };
-  }, [isFullscreen, resetControlsTimer]);
+  }, [open, resetControlsTimer]);
+
+  // ESC key to close
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
 
   // Pinch-to-zoom handlers
   const getTouchDistance = (touches: React.TouchList) => {
@@ -121,7 +128,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     }
   };
 
-  if (!doc) return null;
+  if (!open || !doc) return null;
 
   const isImage = doc.file_type.startsWith("image/");
   const isPdf = doc.file_type.includes("pdf");
@@ -129,176 +136,156 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   const isAudio = doc.file_type.startsWith("audio/");
   const isWord = doc.file_type.includes("word") || doc.file_type.includes("msword") || doc.name.endsWith(".docx") || doc.name.endsWith(".doc");
 
-  const dialogClasses = isFullscreen
-    ? "fixed inset-0 max-w-none w-full h-full rounded-none bg-background border-none z-[100] flex flex-col"
-    : "max-w-[95vw] sm:max-w-3xl max-h-[90vh] bg-card border-border overflow-hidden flex flex-col";
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className={dialogClasses}>
-        {/* Controls bar */}
-        <div
-          className={`flex-shrink-0 transition-opacity duration-300 ${
-            showControls ? "opacity-100" : "opacity-0 pointer-events-none"
-          }`}
-          onClick={resetControlsTimer}
-        >
-          <DialogHeader>
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <DialogTitle className="font-display brass-text text-base sm:text-lg truncate pr-2">
-                  {doc.name}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  {isFullscreen ? "Pinch or scroll to zoom • Tap to show controls" : "Preview your stored document"}
-                </DialogDescription>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                {(isImage || isPdf) && (
-                  <>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      title="Zoom out"
-                    >
-                      <ZoomOut className="h-4 w-4" />
-                    </Button>
-                    <span className="text-xs text-muted-foreground w-10 text-center">
-                      {Math.round(zoom * 100)}%
-                    </span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => setZoom((z) => Math.min(5, z + 0.25))}
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      title="Zoom in"
-                    >
-                      <ZoomIn className="h-4 w-4" />
-                    </Button>
-                  </>
-                )}
+  const overlay = (
+    <div
+      className="fixed inset-0 z-[9999] bg-black flex flex-col"
+      onClick={resetControlsTimer}
+    >
+      {/* Top controls bar */}
+      <div
+        className={`absolute top-0 left-0 right-0 z-10 transition-all duration-300 ${
+          showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"
+        }`}
+      >
+        <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-2 safe-area-top">
+          <h3 className="text-white text-sm font-medium truncate flex-1 mr-2">
+            {doc.name}
+          </h3>
+          <div className="flex items-center gap-1 shrink-0">
+            {(isImage || isPdf) && (
+              <>
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => {
-                    setIsFullscreen(!isFullscreen);
-                    setZoom(1);
-                  }}
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                  onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+                  className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
                 >
-                  {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  <ZoomOut className="h-4 w-4" />
                 </Button>
+                <span className="text-xs text-white/70 w-10 text-center">
+                  {Math.round(zoom * 100)}%
+                </span>
                 <Button
-                  size="sm"
-                  onClick={onDownload}
-                  className="brass-gradient text-primary-foreground hover:opacity-90 h-8 px-2 sm:px-3"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setZoom((z) => Math.min(5, z + 0.25))}
+                  className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
                 >
-                  <Download className="h-4 w-4 sm:mr-1" />
-                  <span className="hidden sm:inline">Download</span>
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            <Button
+              size="sm"
+              onClick={onDownload}
+              className="brass-gradient text-primary-foreground hover:opacity-90 h-8 px-3"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Save
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onClose}
+              className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Content area */}
+      <div
+        className="flex-1 overflow-auto touch-manipulation flex items-center justify-center"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel}
+      >
+        {loading ? (
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
+          </div>
+        ) : previewUrl ? (
+          <>
+            {isImage && (
+              <img
+                src={previewUrl}
+                alt={doc.name}
+                className="max-w-full max-h-full object-contain select-none"
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "center center",
+                  transition: pinchStartDist ? "none" : "transform 0.15s ease",
+                }}
+                draggable={false}
+              />
+            )}
+            {isPdf && (
+              <iframe
+                src={previewUrl}
+                className="w-full h-full border-none"
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "top center",
+                  transition: pinchStartDist ? "none" : "transform 0.15s ease",
+                }}
+                title={doc.name}
+              />
+            )}
+            {isVideo && (
+              <video
+                src={previewUrl}
+                controls
+                className="max-w-full max-h-full"
+              />
+            )}
+            {isAudio && (
+              <div className="flex flex-col items-center gap-4 p-8">
+                <Music className="h-16 w-16 text-primary" />
+                <p className="text-white text-lg">{doc.name}</p>
+                <audio src={previewUrl} controls className="w-full max-w-md" />
+              </div>
+            )}
+            {isWord && (
+              <div className="flex flex-col items-center gap-4 p-8">
+                <FileText className="h-16 w-16 text-primary" />
+                <p className="text-white">{doc.name}</p>
+                <p className="text-sm text-white/60 text-center max-w-xs">
+                  Word documents can be viewed by downloading.
+                </p>
+                <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download to view
                 </Button>
               </div>
-            </div>
-          </DialogHeader>
-        </div>
-
-        {/* Content area with touch/zoom */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-auto min-h-0 touch-manipulation"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onWheel={handleWheel}
-          onClick={resetControlsTimer}
-        >
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent" />
-            </div>
-          ) : previewUrl ? (
-            <div className="flex items-center justify-center min-h-full">
-              {isImage && (
-                <img
-                  src={previewUrl}
-                  alt={doc.name}
-                  className="max-w-full object-contain rounded-lg select-none"
-                  style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "center center",
-                    maxHeight: isFullscreen ? "100vh" : "70vh",
-                    transition: pinchStartDist ? "none" : "transform 0.15s ease",
-                  }}
-                  draggable={false}
-                />
-              )}
-              {isPdf && (
-                <iframe
-                  src={previewUrl}
-                  className="w-full rounded-lg border border-border"
-                  style={{
-                    height: isFullscreen ? "100vh" : "70vh",
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "top center",
-                    transition: pinchStartDist ? "none" : "transform 0.15s ease",
-                  }}
-                  title={doc.name}
-                />
-              )}
-              {isVideo && (
-                <video
-                  src={previewUrl}
-                  controls
-                  className="max-w-full rounded-lg"
-                  style={{ maxHeight: isFullscreen ? "100vh" : "70vh" }}
-                />
-              )}
-              {isAudio && (
-                <div className="flex flex-col items-center gap-4 py-12">
-                  <Music className="h-16 w-16 text-primary" />
-                  <p className="text-foreground font-display text-lg">{doc.name}</p>
-                  <audio src={previewUrl} controls className="w-full max-w-md" />
-                </div>
-              )}
-              {isWord && (
-                <div className="flex flex-col items-center gap-4 py-12">
-                  <FileText className="h-16 w-16 text-primary" />
-                  <p className="text-foreground font-display">{doc.name}</p>
-                  <p className="text-sm text-muted-foreground text-center max-w-xs">
-                    Word documents can be viewed by downloading. Tap download to open in your device's document viewer.
-                  </p>
-                  <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download to view
-                  </Button>
-                </div>
-              )}
-              {!isImage && !isPdf && !isVideo && !isAudio && !isWord && (
-                <div className="flex flex-col items-center gap-4 py-12">
-                  <File className="h-16 w-16 text-muted-foreground" />
-                  <p className="text-foreground font-display">{doc.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Tap download to open with your device's viewer
-                  </p>
-                  <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download to view
-                  </Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-4 py-12">
-              <FileText className="h-16 w-16 text-muted-foreground/30" />
-              <p className="text-muted-foreground">Unable to load preview</p>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+            )}
+            {!isImage && !isPdf && !isVideo && !isAudio && !isWord && (
+              <div className="flex flex-col items-center gap-4 p-8">
+                <File className="h-16 w-16 text-white/30" />
+                <p className="text-white">{doc.name}</p>
+                <p className="text-sm text-white/60">
+                  Tap download to open with your device's viewer
+                </p>
+                <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
+                  <Download className="h-4 w-4 mr-2" />
+                  Download to view
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <FileText className="h-16 w-16 text-white/20" />
+            <p className="text-white/50">Unable to load preview</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
+
+  return createPortal(overlay, document.body);
 };
 
 export default FilePreviewDialog;
