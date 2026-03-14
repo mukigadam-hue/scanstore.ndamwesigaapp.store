@@ -272,10 +272,15 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     const url = URL.createObjectURL(blobToDownload);
     const a = document.createElement("a");
     a.href = url;
-    // For enhanced images, change extension to .png
-    const downloadName = highQuality && data.type.startsWith("image/")
-      ? doc.name.replace(/\.\w+$/, "_hq.png")
-      : doc.name;
+    // Distinct naming per quality so both can coexist
+    let downloadName: string;
+    if (highQuality && data.type.startsWith("image/")) {
+      downloadName = doc.name.replace(/(\.\w+)$/, "_high_quality.png");
+    } else if (!highQuality) {
+      downloadName = doc.name.replace(/(\.\w+)$/, "_saved_quality$1");
+    } else {
+      downloadName = doc.name;
+    }
     a.download = downloadName;
     a.click();
     URL.revokeObjectURL(url);

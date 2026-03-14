@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
-  KeyRound, Mail,
+  KeyRound, AlertTriangle,
 } from "lucide-react";
 
 interface SecuritySettingsRow {
@@ -101,7 +101,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     }
     setForgotSending(true);
     try {
-      // Reset security settings so user must re-setup
       const { error } = await supabase.from("security_settings").update({
         pin_code: null,
         fingerprint_enabled: false,
@@ -115,7 +114,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       if (error) throw error;
 
       toast.success("Security has been reset. You'll now set up new security methods.");
-      // Force page reload so Locker re-fetches security_settings and shows SecuritySetup
       window.location.reload();
     } catch (err: any) {
       toast.error("Failed to reset security: " + err.message);
@@ -152,7 +150,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             </p>
 
             {/* Progress indicator */}
-            <div className="flex items-center justify-center gap-2 mb-6">
+            <div className="flex items-center justify-center gap-2 mb-4">
               {Array.from({ length: requiredCount }).map((_, i) => (
                 <div
                   key={i}
@@ -166,6 +164,16 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
               <span className="text-xs text-muted-foreground ml-1">
                 {verifiedMethods.size}/{requiredCount}
               </span>
+            </div>
+
+            {/* Security advice banner */}
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 mb-5">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+                <p className="text-xs text-destructive">
+                  <strong>Security Tip:</strong> Always delete sensitive documents from your device after saving them in the locker. This protects your files if your phone is lost or falls into the wrong hands.
+                </p>
+              </div>
             </div>
 
             {showForgot ? (
@@ -244,7 +252,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                     })}
                 </div>
 
-                {/* Forgot security link */}
                 <div className="mt-4 text-center">
                   <button
                     onClick={() => setShowForgot(true)}
@@ -272,7 +279,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   Back to methods
                 </button>
 
-                {/* PIN */}
                 {selectedMethod === "pin" && (
                   <>
                     <p className="text-sm text-muted-foreground text-center">
@@ -301,7 +307,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   </>
                 )}
 
-                {/* Fingerprint */}
                 {selectedMethod === "fingerprint" && (
                   <div className="text-center space-y-4">
                     <p className="text-sm text-muted-foreground">
@@ -330,7 +335,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   </div>
                 )}
 
-                {/* School */}
                 {selectedMethod === "school" && (
                   <>
                     <p className="text-sm text-muted-foreground text-center">
@@ -356,7 +360,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   </>
                 )}
 
-                {/* Image-based methods */}
                 {(selectedMethod === "face" ||
                   selectedMethod === "family" ||
                   selectedMethod === "id") && (
