@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, Check,
-  ChevronDown, ChevronUp, KeyRound,
+  ChevronDown, ChevronUp, KeyRound, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +23,7 @@ interface CompletedMethods {
 
 interface SecuritySetupProps {
   onComplete: () => void;
+  onCancel?: () => void;
 }
 
 const METHODS = [
@@ -64,7 +65,7 @@ const METHODS = [
   },
 ];
 
-const SecuritySetup = ({ onComplete }: SecuritySetupProps) => {
+const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   const { user } = useAuth();
   const [completed, setCompleted] = useState<CompletedMethods>({});
   const [expanded, setExpanded] = useState<string | null>("pin");
@@ -193,18 +194,31 @@ const SecuritySetup = ({ onComplete }: SecuritySetupProps) => {
 
           <div className="p-6">
             {/* Header */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="brass-gradient rounded-lg p-2">
-                <Shield className="h-5 w-5 text-primary-foreground" />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="brass-gradient rounded-lg p-2">
+                  <Shield className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold brass-text">
+                    {onCancel ? "Security Settings" : "Secure Your Locker"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Register at least 3 of the 6 security methods below
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="font-display text-xl font-bold brass-text">
-                  Secure Your Locker
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Register at least 3 of the 6 security methods below
-                </p>
-              </div>
+              {onCancel && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancel}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Close
+                </Button>
+              )}
             </div>
 
             {/* Progress bar */}

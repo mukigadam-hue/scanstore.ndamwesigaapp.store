@@ -40,10 +40,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     const loadPreview = async () => {
       setLoading(true);
       try {
-        // Use signed URL for reliable access
         const { data, error } = await supabase.storage
           .from("documents")
-          .createSignedUrl(doc.file_path, 3600); // 1 hour
+          .createSignedUrl(doc.file_path, 3600);
 
         if (error || !data?.signedUrl) {
           toast.error("Failed to load preview");
@@ -62,11 +61,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
 
     return () => {
       revoked = true;
-      // signed URLs don't need revoking
     };
   }, [open, doc?.id]);
 
-  // Auto-hide controls after 3s
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
@@ -143,7 +140,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
       className="fixed inset-0 z-[9999] bg-black flex flex-col"
       onClick={resetControlsTimer}
     >
-      {/* Top controls bar */}
+      {/* Top controls bar - always accessible close button */}
       <div
         className={`absolute top-0 left-0 right-0 z-10 transition-all duration-300 ${
           showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"
@@ -191,11 +188,21 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
               onClick={onClose}
               className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Persistent close button - always visible */}
+      <button
+        onClick={onClose}
+        className={`absolute top-3 right-3 z-20 h-10 w-10 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white/90 hover:bg-black/80 hover:text-white transition-all ${
+          showControls ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+      >
+        <X className="h-5 w-5" />
+      </button>
 
       {/* Content area */}
       <div
@@ -226,13 +233,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
             )}
             {isPdf && (
               <iframe
-                src={previewUrl + "#toolbar=1"}
-                className="w-full h-full border-none"
-                style={{
-                  transform: `scale(${zoom})`,
-                  transformOrigin: "top center",
-                  transition: pinchStartDist ? "none" : "transform 0.15s ease",
-                }}
+                src={previewUrl + "#toolbar=1&view=FitH"}
+                className="w-full h-full border-none bg-white"
                 title={doc.name}
               />
             )}

@@ -211,7 +211,7 @@ const Locker = () => {
     );
   }
 
-  if (!securitySettings?.setup_completed || showSecuritySetup) {
+  if (!securitySettings?.setup_completed) {
     return (
       <SecuritySetup
         onComplete={() => {
@@ -219,6 +219,18 @@ const Locker = () => {
           setShowSecuritySetup(false);
           if (!sessionVerified) markVerified();
         }}
+      />
+    );
+  }
+
+  if (showSecuritySetup) {
+    return (
+      <SecuritySetup
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ["security_settings", user?.id] });
+          setShowSecuritySetup(false);
+        }}
+        onCancel={() => setShowSecuritySetup(false)}
       />
     );
   }
