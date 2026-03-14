@@ -76,10 +76,87 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   };
 
   const handleVerifyFingerprint = async () => {
-    setFingerprintScanning(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setFingerprintScanning(false);
-    markVerified("fingerprint");
+    // Use WebAuthn for real device biometric authentication
+    if (!window.PublicKeyCredential) {
+      toast.error("Biometric authentication is not supported on this device");
+      return;
+    }
+
+    try {
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      if (!available) {
+        toast.error("No biometric sensor found on this device. Please use another method.");
+        return;
+      }
+
+      setFingerprintScanning(true);
+
+      // Create a challenge for WebAuthn - we use it for user verification only
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+
+      const userId = new TextEncoder().encode(user?.id || "user");
+
+      // Check if credential already exists (registered before)
+      const storedCredId = localStorage.getItem(`webauthn_cred_${user?.id}`);
+
+      if (storedCredId) {
+        // Authenticate with existing credential
+        const credIdArray = Uint8Array.from(atob(storedCredId), c => c.charCodeAt(0));
+        const assertionOptions: PublicKeyCredentialRequestOptions = {
+          challenge,
+          timeout: 60000,
+          userVerification: "required",
+          allowCredentials: [{
+            id: credIdArray,
+            type: "public-key",
+            transports: ["internal"],
+          }],
+        };
+
+        await navigator.credentials.get({ publicKey: assertionOptions });
+        setFingerprintScanning(false);
+        markVerified("fingerprint");
+      } else {
+        // First time: register the biometric credential
+        const createOptions: PublicKeyCredentialCreationOptions = {
+          challenge,
+          rp: { name: "DocLocker", id: window.location.hostname },
+          user: {
+            id: userId,
+            name: user?.email || "user",
+            displayName: user?.email || "User",
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" },   // ES256
+            { alg: -257, type: "public-key" },  // RS256
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "preferred",
+          },
+          timeout: 60000,
+        };
+
+        const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
+
+        // Store credential ID for future authentication
+        const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+        localStorage.setItem(`webauthn_cred_${user?.id}`, credId);
+
+        setFingerprintScanning(false);
+        toast.success("Biometric registered to your device!");
+        markVerified("fingerprint");
+      }
+    } catch (err: any) {
+      setFingerprintScanning(false);
+      if (err.name === "NotAllowedError") {
+        toast.error("Biometric verification cancelled or failed. Only your registered fingerprint/face can unlock.");
+      } else {
+        toast.error("Biometric verification failed. Try another method.");
+      }
+    }
   };
 
   const handleVerifySchool = () => {
@@ -112,6 +189,9 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       }).eq("user_id", user.id);
 
       if (error) throw error;
+
+      // Also clear stored WebAuthn credential
+      localStorage.removeItem(`webauthn_cred_${user.id}`);
 
       toast.success("Security has been reset. You'll now set up new security methods.");
       window.location.reload();
@@ -155,9 +235,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 <div
                   key={i}
                   className={`h-2 w-8 rounded-full transition-colors ${
-                    i < verifiedMethods.size
-                      ? "bg-primary"
-                      : "bg-muted"
+                    i < verifiedMethods.size ? "bg-primary" : "bg-muted"
                   }`}
                 />
               ))}
@@ -310,7 +388,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 {selectedMethod === "fingerprint" && (
                   <div className="text-center space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Place your finger on the sensor
+                      Use your device's biometric sensor
                     </p>
                     <motion.button
                       onClick={handleVerifyFingerprint}
@@ -330,7 +408,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       )}
                     </motion.button>
                     <p className="text-xs text-muted-foreground">
-                      {fingerprintScanning ? "Scanning… hold still" : "Tap to scan"}
+                      {fingerprintScanning ? "Verifying with your device…" : "Tap to authenticate with your fingerprint or face"}
                     </p>
                   </div>
                 )}
