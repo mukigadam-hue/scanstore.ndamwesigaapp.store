@@ -194,18 +194,31 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
 
           <div className="p-6">
             {/* Header */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="brass-gradient rounded-lg p-2">
-                <Shield className="h-5 w-5 text-primary-foreground" />
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="brass-gradient rounded-lg p-2">
+                  <Shield className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold brass-text">
+                    {onCancel ? "Security Settings" : "Secure Your Locker"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Register at least 3 of the 6 security methods below
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="font-display text-xl font-bold brass-text">
-                  Secure Your Locker
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Register at least 3 of the 6 security methods below
-                </p>
-              </div>
+              {onCancel && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancel}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Close
+                </Button>
+              )}
             </div>
 
             {/* Progress bar */}
