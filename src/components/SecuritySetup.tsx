@@ -65,7 +65,7 @@ const METHODS = [
   },
 ];
 
-const SecuritySetup = ({ onComplete }: SecuritySetupProps) => {
+const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   const { user } = useAuth();
   const [completed, setCompleted] = useState<CompletedMethods>({});
   const [expanded, setExpanded] = useState<string | null>("pin");
