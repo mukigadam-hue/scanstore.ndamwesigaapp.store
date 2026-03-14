@@ -36,20 +36,21 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
       return;
     }
 
+    let revoked = false;
     const loadPreview = async () => {
       setLoading(true);
       try {
+        // Use signed URL for reliable access
         const { data, error } = await supabase.storage
           .from("documents")
-          .download(doc.file_path);
+          .createSignedUrl(doc.file_path, 3600); // 1 hour
 
-        if (error) {
+        if (error || !data?.signedUrl) {
           toast.error("Failed to load preview");
           return;
         }
 
-        const url = URL.createObjectURL(data);
-        setPreviewUrl(url);
+        if (!revoked) setPreviewUrl(data.signedUrl);
       } catch {
         toast.error("Could not preview this file");
       } finally {
@@ -60,7 +61,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     loadPreview();
 
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      revoked = true;
+      // signed URLs don't need revoking
     };
   }, [open, doc?.id]);
 
@@ -224,7 +226,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
             )}
             {isPdf && (
               <iframe
-                src={previewUrl}
+                src={previewUrl + "#toolbar=1"}
                 className="w-full h-full border-none"
                 style={{
                   transform: `scale(${zoom})`,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Plus, KeyRound, X, Crown, Timer, Info } from "lucide-react";
+import { LogOut, Plus, KeyRound, X, Crown, Timer, Info, Shield, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -47,6 +47,10 @@ const DEFAULT_DRAWERS = [
 
 const FREE_DRAWER_LIMIT = 6;
 
+const DRAWER_COLORS = [
+  "brass", "bronze", "copper", "gold", "silver", "iron",
+];
+
 const Locker = () => {
   const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
@@ -56,6 +60,7 @@ const Locker = () => {
   const [sessionVerified, setSessionVerified] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
   const [showAutoLock, setShowAutoLock] = useState(false);
+  const [showSecuritySetup, setShowSecuritySetup] = useState(false);
 
   const { currentPlan, isFrozen, isRetrievalActive, showExpiryWarning, daysUntilExpiry } = useSubscription();
   const canAccessDrawers = !isFrozen || isRetrievalActive;
@@ -64,7 +69,7 @@ const Locker = () => {
   // Auto-lock settings
   const [autoLockSeconds, setAutoLockSeconds] = useState(() => {
     const saved = localStorage.getItem("doclocker_autolock");
-    return saved ? parseInt(saved, 10) : 60; // default 60 seconds
+    return saved ? parseInt(saved, 10) : 60;
   });
 
   const handleAutoLockSave = (seconds: number) => {
@@ -73,7 +78,6 @@ const Locker = () => {
     toast.success(seconds === 0 ? "Auto-lock disabled" : `Auto-lock set to ${seconds}s`);
   };
 
-  // Auto-lock hook
   useAutoLock({
     enabled: sessionVerified && autoLockSeconds > 0,
     timeoutMs: autoLockSeconds * 1000,
@@ -88,15 +92,13 @@ const Locker = () => {
 
   useEffect(() => {
     if (user?.id) {
-      const verified =
-        localStorage.getItem(`locker_verified_${user.id}`) === "true";
+      const verified = localStorage.getItem(`locker_verified_${user.id}`) === "true";
       if (verified) setSessionVerified(true);
     }
   }, [user?.id]);
 
   const markVerified = () => {
-    if (user?.id)
-      localStorage.setItem(`locker_verified_${user.id}`, "true");
+    if (user?.id) localStorage.setItem(`locker_verified_${user.id}`, "true");
     setSessionVerified(true);
   };
 
@@ -155,22 +157,22 @@ const Locker = () => {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Separate free drawers (first 6) from premium drawers
   const freeDrawers = drawers.slice(0, FREE_DRAWER_LIMIT);
-  const premiumDrawers = drawers.slice(FREE_DRAWER_LIMIT);
+  const extraDrawers = drawers.slice(FREE_DRAWER_LIMIT);
 
   const addDrawer = async () => {
     if (!newDrawerName.trim() || !user) return;
-    if (!isPremium && drawers.length >= FREE_DRAWER_LIMIT) {
-      toast.error("Free tier is limited to 6 drawers. Upgrade for more!");
+    if (!isPremium) {
+      toast.error("Upgrade to Premium to add custom drawers!");
       setShowPricing(true);
       return;
     }
+    const colorIndex = extraDrawers.length % DRAWER_COLORS.length;
     const { error } = await supabase.from("drawers").insert({
       user_id: user.id,
       name: newDrawerName.trim(),
       icon: "📁",
-      color: "brass",
+      color: DRAWER_COLORS[colorIndex],
     });
     if (error) {
       toast.error("Failed to create drawer");
@@ -190,9 +192,7 @@ const Locker = () => {
 
   const handleDrawerClick = (drawerName: string) => {
     if (!canAccessDrawers) {
-      toast.error(
-        "Your vault is frozen. Pay the retrieval fee to access documents."
-      );
+      toast.error("Your vault is frozen. Pay the retrieval fee to access documents.");
       return;
     }
     setSelectedDrawer(drawerName);
@@ -211,15 +211,13 @@ const Locker = () => {
     );
   }
 
-  if (!securitySettings?.setup_completed) {
+  if (!securitySettings?.setup_completed || showSecuritySetup) {
     return (
       <SecuritySetup
         onComplete={() => {
-          queryClient.setQueryData(
-            ["security_settings", user?.id],
-            (old: any) => ({ ...(old ?? {}), setup_completed: true })
-          );
-          markVerified();
+          queryClient.invalidateQueries({ queryKey: ["security_settings", user?.id] });
+          setShowSecuritySetup(false);
+          if (!sessionVerified) markVerified();
         }}
       />
     );
@@ -264,6 +262,15 @@ const Locker = () => {
 
             <div className="flex items-center gap-2 flex-1 justify-end">
               <StorageBar />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowSecuritySetup(true)}
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+                title="Security settings"
+              >
+                <Shield className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -316,7 +323,7 @@ const Locker = () => {
                 {/* Subscription alerts */}
                 <SubscriptionAlert />
 
-                {/* Premium tip: store essentials in free drawers */}
+                {/* Premium tip */}
                 {isPremium && showExpiryWarning && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
@@ -326,8 +333,8 @@ const Locker = () => {
                     <div className="flex items-start gap-2">
                       <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                       <p className="text-xs text-muted-foreground">
-                        <span className="text-foreground font-medium">Tip:</span> Your subscription expires in {daysUntilExpiry} days. 
-                        Store your most essential and frequently used documents in the first 6 drawers — 
+                        <span className="text-foreground font-medium">Tip:</span> Your subscription expires in {daysUntilExpiry} days.
+                        Store your most essential documents in the first 6 drawers —
                         these remain accessible on the free tier (50 MB) even after your premium expires.
                       </p>
                     </div>
@@ -343,7 +350,7 @@ const Locker = () => {
                   </p>
                 </div>
 
-                {/* Free Drawers Section */}
+                {/* Essential Drawers */}
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -367,123 +374,118 @@ const Locker = () => {
                   </div>
                 </div>
 
-                {/* Premium Drawers Section */}
-                {(premiumDrawers.length > 0 || isPremium) && (
-                  <div className="mb-6">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Premium Drawers
-                      </span>
-                      <Crown className="h-3.5 w-3.5 text-primary" />
+                {/* Custom Drawers Section */}
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Custom Drawers
+                    </span>
+                    <Crown className="h-3.5 w-3.5 text-primary" />
+                  </div>
+
+                  {/* Info message */}
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <Plus className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                      <p className="text-xs text-muted-foreground">
+                        <span className="text-foreground font-medium">Add as many drawers as you need!</span>{" "}
+                        Create custom drawers with your own names to organize your documents however you like.
+                        All custom drawers share your plan's storage limit.
+                        {!isPremium && (
+                          <span>
+                            {" "}
+                            <button
+                              onClick={() => setShowPricing(true)}
+                              className="text-primary hover:underline font-medium"
+                            >
+                              Upgrade to Premium
+                            </button>{" "}
+                            to unlock custom drawers.
+                          </span>
+                        )}
+                      </p>
                     </div>
+                  </motion.div>
 
-                    {!isPremium && premiumDrawers.length > 0 && (
-                      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 mb-3">
-                        <p className="text-xs text-muted-foreground">
-                          These drawers require an active premium subscription.{" "}
-                          <button
-                            onClick={() => setShowPricing(true)}
-                            className="text-primary hover:underline font-medium"
-                          >
-                            Upgrade now
-                          </button>
-                        </p>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {extraDrawers.map((drawer, i) => (
+                      <DrawerCard
+                        key={drawer.id}
+                        name={drawer.name}
+                        icon={drawer.icon}
+                        documentCount={getDocCount(drawer.name)}
+                        onClick={() => {
+                          if (!isPremium) {
+                            toast.error("Premium subscription required for custom drawers");
+                            setShowPricing(true);
+                            return;
+                          }
+                          handleDrawerClick(drawer.name);
+                        }}
+                        index={i}
+                      />
+                    ))}
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {premiumDrawers.map((drawer, i) => (
-                        <DrawerCard
-                          key={drawer.id}
-                          name={drawer.name}
-                          icon={drawer.icon}
-                          documentCount={getDocCount(drawer.name)}
+                    {/* Add new drawer button */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: extraDrawers.length * 0.05 }}
+                    >
+                      {showNewDrawer ? (
+                        <div className="wood-panel rounded-lg border border-border p-5">
+                          <div className="brass-gradient h-1.5 rounded-t -mt-5 -mx-5 mb-4" />
+                          <Input
+                            placeholder="Drawer name..."
+                            value={newDrawerName}
+                            onChange={(e) => setNewDrawerName(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && addDrawer()}
+                            className="mb-3 bg-input border-border text-foreground placeholder:text-muted-foreground"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={addDrawer}
+                              className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
+                            >
+                              Create
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setShowNewDrawer(false)}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
                           onClick={() => {
                             if (!isPremium) {
-                              toast.error("Premium subscription required for extra drawers");
+                              toast.info("Upgrade to Premium to add custom drawers!");
                               setShowPricing(true);
                               return;
                             }
-                            handleDrawerClick(drawer.name);
+                            setShowNewDrawer(true);
                           }}
-                          index={i}
-                        />
-                      ))}
-
-                      {/* Add new drawer - only for premium */}
-                      {isPremium && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: premiumDrawers.length * 0.05 }}
+                          className="w-full h-full min-h-[160px] rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-2 transition-colors group"
                         >
-                          {showNewDrawer ? (
-                            <div className="wood-panel rounded-lg border border-border p-5">
-                              <div className="brass-gradient h-1.5 rounded-t -mt-5 -mx-5 mb-4" />
-                              <Input
-                                placeholder="Drawer name..."
-                                value={newDrawerName}
-                                onChange={(e) => setNewDrawerName(e.target.value)}
-                                onKeyDown={(e) => e.key === "Enter" && addDrawer()}
-                                className="mb-3 bg-input border-border text-foreground placeholder:text-muted-foreground"
-                                autoFocus
-                              />
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={addDrawer}
-                                  className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
-                                >
-                                  Create
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setShowNewDrawer(false)}
-                                  className="text-muted-foreground hover:text-foreground"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setShowNewDrawer(true)}
-                              className="w-full h-full min-h-[160px] rounded-lg border-2 border-dashed border-border hover:border-brass/50 flex flex-col items-center justify-center gap-2 transition-colors group"
-                            >
-                              <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                              <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                                Add Drawer
-                              </span>
-                            </button>
-                          )}
-                        </motion.div>
+                          <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                            Add Drawer
+                          </span>
+                        </button>
                       )}
-                    </div>
+                    </motion.div>
                   </div>
-                )}
-
-                {/* Add drawer for free users - show upgrade prompt */}
-                {!isPremium && (
-                  <div className="mt-4">
-                    <button
-                      onClick={() => {
-                        if (drawers.length >= FREE_DRAWER_LIMIT) {
-                          toast.info("Upgrade to Premium to add more drawers!");
-                          setShowPricing(true);
-                        } else {
-                          setShowNewDrawer(true);
-                        }
-                      }}
-                      className="w-full rounded-lg border-2 border-dashed border-border hover:border-brass/50 flex items-center justify-center gap-2 py-4 transition-colors group"
-                    >
-                      <Crown className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                        Upgrade for more drawers
-                      </span>
-                    </button>
-                  </div>
-                )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
