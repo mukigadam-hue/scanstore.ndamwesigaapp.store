@@ -23,6 +23,7 @@ interface CompletedMethods {
 
 interface SecuritySetupProps {
   onComplete: () => void;
+  onCancel?: () => void;
 }
 
 const METHODS = [
