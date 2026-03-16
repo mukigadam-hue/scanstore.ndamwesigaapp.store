@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogOut, Plus, KeyRound, X, Crown, Timer, Info, Shield, Settings } from "lucide-react";
+import { LogOut, Plus, KeyRound, X, Crown, Timer, Info, Shield, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,7 +66,6 @@ const Locker = () => {
   const canAccessDrawers = !isFrozen || isRetrievalActive;
   const isPremium = currentPlan.id !== "free";
 
-  // Auto-lock settings
   const [autoLockSeconds, setAutoLockSeconds] = useState(() => {
     const saved = localStorage.getItem("doclocker_autolock");
     return saved ? parseInt(saved, 10) : 60;
@@ -160,11 +159,20 @@ const Locker = () => {
   const freeDrawers = drawers.slice(0, FREE_DRAWER_LIMIT);
   const extraDrawers = drawers.slice(FREE_DRAWER_LIMIT);
 
+  // Check if essential drawers have documents (compulsory fill rule)
+  const essentialDrawersFilled = freeDrawers.every(
+    (drawer) => documents.some((d) => d.drawer_name === drawer.name)
+  );
+
   const addDrawer = async () => {
     if (!newDrawerName.trim() || !user) return;
     if (!isPremium) {
       toast.error("Upgrade to Premium to add custom drawers!");
       setShowPricing(true);
+      return;
+    }
+    if (!essentialDrawersFilled) {
+      toast.error("Please fill all 6 Essential Drawers first before creating custom drawers.");
       return;
     }
     const colorIndex = extraDrawers.length % DRAWER_COLORS.length;
@@ -369,9 +377,26 @@ const Locker = () => {
                       Essential Drawers
                     </span>
                     <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                      Always Free
+                      Always Free · Fill First
                     </span>
                   </div>
+
+                  {/* Compulsory fill warning */}
+                  {!essentialDrawersFilled && isPremium && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mb-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground">
+                          <span className="text-foreground font-medium">Important:</span> Fill all 6 essential drawers with your most critical documents first. These remain accessible even if your premium subscription expires.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {freeDrawers.map((drawer, i) => (
                       <DrawerCard
@@ -386,118 +411,126 @@ const Locker = () => {
                   </div>
                 </div>
 
-                {/* Custom Drawers Section */}
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Custom Drawers
-                    </span>
-                    <Crown className="h-3.5 w-3.5 text-primary" />
-                  </div>
-
-                  {/* Info message */}
-                  <motion.div
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Plus className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground">
-                        <span className="text-foreground font-medium">Add as many drawers as you need!</span>{" "}
-                        Create custom drawers with your own names to organize your documents however you like.
-                        All custom drawers share your plan's storage limit.
-                        {!isPremium && (
-                          <span>
-                            {" "}
-                            <button
-                              onClick={() => setShowPricing(true)}
-                              className="text-primary hover:underline font-medium"
-                            >
-                              Upgrade to Premium
-                            </button>{" "}
-                            to unlock custom drawers.
-                          </span>
-                        )}
-                      </p>
+                {/* Custom Drawers Section - only visible for premium users */}
+                {isPremium && (
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        Custom Drawers
+                      </span>
+                      <Crown className="h-3.5 w-3.5 text-primary" />
                     </div>
-                  </motion.div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {extraDrawers.map((drawer, i) => (
-                      <DrawerCard
-                        key={drawer.id}
-                        name={drawer.name}
-                        icon={drawer.icon}
-                        documentCount={getDocCount(drawer.name)}
-                        onClick={() => {
-                          if (!isPremium) {
-                            toast.error("Premium subscription required for custom drawers");
-                            setShowPricing(true);
-                            return;
-                          }
-                          handleDrawerClick(drawer.name);
-                        }}
-                        index={i}
-                      />
-                    ))}
-
-                    {/* Add new drawer button */}
                     <motion.div
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: -5 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: extraDrawers.length * 0.05 }}
+                      className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3"
                     >
-                      {showNewDrawer ? (
-                        <div className="wood-panel rounded-lg border border-border p-5">
-                          <div className="brass-gradient h-1.5 rounded-t -mt-5 -mx-5 mb-4" />
-                          <Input
-                            placeholder="Drawer name..."
-                            value={newDrawerName}
-                            onChange={(e) => setNewDrawerName(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && addDrawer()}
-                            className="mb-3 bg-input border-border text-foreground placeholder:text-muted-foreground"
-                            autoFocus
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={addDrawer}
-                              className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
-                            >
-                              Create
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setShowNewDrawer(false)}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                      <div className="flex items-start gap-2">
+                        <Plus className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground">
+                          <span className="text-foreground font-medium">Create your own drawers!</span>{" "}
+                          Name them however you like to organize your documents.
+                          {!essentialDrawersFilled && (
+                            <span className="text-yellow-500 font-medium"> Fill all essential drawers first to unlock this.</span>
+                          )}
+                        </p>
+                      </div>
+                    </motion.div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {extraDrawers.map((drawer, i) => (
+                        <DrawerCard
+                          key={drawer.id}
+                          name={drawer.name}
+                          icon={drawer.icon}
+                          documentCount={getDocCount(drawer.name)}
+                          onClick={() => handleDrawerClick(drawer.name)}
+                          index={i}
+                        />
+                      ))}
+
+                      {/* Add new drawer button */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: extraDrawers.length * 0.05 }}
+                      >
+                        {showNewDrawer ? (
+                          <div className="wood-panel rounded-lg border border-border p-5">
+                            <div className="brass-gradient h-1.5 rounded-t -mt-5 -mx-5 mb-4" />
+                            <Input
+                              placeholder="Drawer name..."
+                              value={newDrawerName}
+                              onChange={(e) => setNewDrawerName(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && addDrawer()}
+                              className="mb-3 bg-input border-border text-foreground placeholder:text-muted-foreground"
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={addDrawer}
+                                className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
+                              >
+                                Create
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setShowNewDrawer(false)}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            if (!isPremium) {
-                              toast.info("Upgrade to Premium to add custom drawers!");
-                              setShowPricing(true);
-                              return;
-                            }
-                            setShowNewDrawer(true);
-                          }}
-                          className="w-full h-full min-h-[160px] rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-2 transition-colors group"
-                        >
-                          <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                          <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                            Add Drawer
-                          </span>
-                        </button>
-                      )}
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (!essentialDrawersFilled) {
+                                toast.error("Fill all 6 Essential Drawers first before adding custom drawers.");
+                                return;
+                              }
+                              setShowNewDrawer(true);
+                            }}
+                            className="w-full h-full min-h-[160px] rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-2 transition-colors group"
+                          >
+                            <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                            <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                              Add Drawer
+                            </span>
+                          </button>
+                        )}
+                      </motion.div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Upgrade prompt for free users */}
+                {!isPremium && (
+                  <div className="mb-6">
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center"
+                    >
+                      <Crown className="h-6 w-6 text-primary mx-auto mb-2" />
+                      <p className="text-sm text-foreground font-medium mb-1">Want more drawers?</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Upgrade to Premium to create unlimited custom drawers with your own names.
+                      </p>
+                      <Button
+                        size="sm"
+                        onClick={() => setShowPricing(true)}
+                        className="brass-gradient text-primary-foreground"
+                      >
+                        <Crown className="h-4 w-4 mr-1.5" />
+                        Upgrade Now
+                      </Button>
                     </motion.div>
                   </div>
-                </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

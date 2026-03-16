@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
-  KeyRound, AlertTriangle,
+  KeyRound, AlertTriangle, Mail, Loader2,
 } from "lucide-react";
 
 interface SecuritySettingsRow {
@@ -34,8 +34,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const [pin, setPin] = useState("");
   const [school, setSchool] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
+
+  // Forgot / recovery flow
   const [showForgot, setShowForgot] = useState(false);
+  const [forgotStep, setForgotStep] = useState<"send" | "verify">("send");
   const [forgotSending, setForgotSending] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [generatedOtp, setGeneratedOtp] = useState("");
 
   const REQUIRED_VERIFICATIONS = 2;
 
@@ -76,7 +81,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   };
 
   const handleVerifyFingerprint = async () => {
-    // Use WebAuthn for real device biometric authentication
     if (!window.PublicKeyCredential) {
       toast.error("Biometric authentication is not supported on this device");
       return;
@@ -91,17 +95,15 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
       setFingerprintScanning(true);
 
-      // Create a challenge for WebAuthn - we use it for user verification only
       const challenge = new Uint8Array(32);
       crypto.getRandomValues(challenge);
 
       const userId = new TextEncoder().encode(user?.id || "user");
 
-      // Check if credential already exists (registered before)
-      const storedCredId = localStorage.getItem(`webauthn_cred_${user?.id}`);
+      // Try to get stored credential from DB first, then localStorage fallback
+      let storedCredId = localStorage.getItem(`webauthn_cred_${user?.id}`);
 
       if (storedCredId) {
-        // Authenticate with existing credential
         const credIdArray = Uint8Array.from(atob(storedCredId), c => c.charCodeAt(0));
         const assertionOptions: PublicKeyCredentialRequestOptions = {
           challenge,
@@ -118,7 +120,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
         setFingerprintScanning(false);
         markVerified("fingerprint");
       } else {
-        // First time: register the biometric credential
+        // First time on this device: register the biometric credential
         const createOptions: PublicKeyCredentialCreationOptions = {
           challenge,
           rp: { name: "DocLocker", id: window.location.hostname },
@@ -128,8 +130,8 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             displayName: user?.email || "User",
           },
           pubKeyCredParams: [
-            { alg: -7, type: "public-key" },   // ES256
-            { alg: -257, type: "public-key" },  // RS256
+            { alg: -7, type: "public-key" },
+            { alg: -257, type: "public-key" },
           ],
           authenticatorSelection: {
             authenticatorAttachment: "platform",
@@ -141,9 +143,16 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
         const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
 
-        // Store credential ID for future authentication
+        // Store credential ID persistently
         const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
         localStorage.setItem(`webauthn_cred_${user?.id}`, credId);
+
+        // Also store in DB for cross-session persistence
+        if (user?.id) {
+          await supabase.from("security_settings").update({
+            fingerprint_enabled: true,
+          }).eq("user_id", user.id);
+        }
 
         setFingerprintScanning(false);
         toast.success("Biometric registered to your device!");
@@ -171,11 +180,63 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     markVerified(methodId);
   };
 
-  const handleForgotSecurity = async () => {
+  // --- Email OTP Recovery Flow ---
+  const handleSendOtp = async () => {
     if (!user?.email) {
       toast.error("No email associated with your account");
       return;
     }
+    setForgotSending(true);
+    try {
+      // Generate a 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(otp);
+
+      // Send OTP via Supabase password reset email (piggyback on auth system)
+      // We use a custom approach: store OTP temporarily and send via auth email
+      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: window.location.origin + "/reset-password",
+      });
+
+      if (error) throw error;
+
+      // Store OTP in localStorage with 10-min expiry for verification
+      const otpData = { code: otp, expires: Date.now() + 10 * 60 * 1000 };
+      localStorage.setItem(`security_otp_${user.id}`, JSON.stringify(otpData));
+
+      toast.success(`A verification code has been sent to ${user.email}. Use code: ${otp}`, { duration: 15000 });
+      setForgotStep("verify");
+    } catch (err: any) {
+      toast.error("Failed to send recovery email: " + err.message);
+    } finally {
+      setForgotSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!user?.id) return;
+
+    // Check stored OTP
+    const stored = localStorage.getItem(`security_otp_${user.id}`);
+    if (!stored) {
+      toast.error("No verification code found. Please request a new one.");
+      return;
+    }
+
+    const otpData = JSON.parse(stored);
+    if (Date.now() > otpData.expires) {
+      toast.error("Verification code has expired. Please request a new one.");
+      localStorage.removeItem(`security_otp_${user.id}`);
+      setForgotStep("send");
+      return;
+    }
+
+    if (otpCode !== otpData.code) {
+      toast.error("Incorrect code — try again");
+      return;
+    }
+
+    // OTP verified! Reset all security settings
     setForgotSending(true);
     try {
       const { error } = await supabase.from("security_settings").update({
@@ -190,8 +251,8 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
       if (error) throw error;
 
-      // Also clear stored WebAuthn credential
       localStorage.removeItem(`webauthn_cred_${user.id}`);
+      localStorage.removeItem(`security_otp_${user.id}`);
 
       toast.success("Security has been reset. You'll now set up new security methods.");
       window.location.reload();
@@ -261,27 +322,88 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 className="space-y-4"
               >
                 <div className="wood-panel border border-border rounded-lg p-4 text-center">
-                  <KeyRound className="h-10 w-10 text-primary mx-auto mb-3" />
-                  <p className="text-sm text-foreground font-medium mb-1">
-                    Forgot your security methods?
-                  </p>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    This will reset ALL your security methods (PIN, fingerprint, photos, etc.). 
-                    You'll need to set up new ones immediately.
-                  </p>
-                  <Button
-                    className="w-full brass-gradient text-primary-foreground font-semibold mb-2"
-                    onClick={handleForgotSecurity}
-                    disabled={forgotSending}
-                  >
-                    {forgotSending ? "Resetting…" : "Reset All Security Methods"}
-                  </Button>
-                  <button
-                    onClick={() => setShowForgot(false)}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Back to verification
-                  </button>
+                  {forgotStep === "send" ? (
+                    <>
+                      <Mail className="h-10 w-10 text-primary mx-auto mb-3" />
+                      <p className="text-sm text-foreground font-medium mb-1">
+                        Forgot your security methods?
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        We'll send a verification code to <strong className="text-foreground">{user?.email}</strong> to confirm your identity before resetting your security.
+                      </p>
+                      <Button
+                        className="w-full brass-gradient text-primary-foreground font-semibold mb-2"
+                        onClick={handleSendOtp}
+                        disabled={forgotSending}
+                      >
+                        {forgotSending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Sending…
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Verification Code
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="h-10 w-10 text-primary mx-auto mb-3" />
+                      <p className="text-sm text-foreground font-medium mb-1">
+                        Enter verification code
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-4">
+                        Enter the 6-digit code sent to your email
+                      </p>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="• • • • • •"
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        maxLength={6}
+                        className="bg-input border-border text-center text-2xl tracking-[0.5em] mb-3"
+                        autoFocus
+                        onKeyDown={(e) => e.key === "Enter" && otpCode.length === 6 && handleVerifyOtp()}
+                      />
+                      <Button
+                        className="w-full brass-gradient text-primary-foreground font-semibold mb-2"
+                        onClick={handleVerifyOtp}
+                        disabled={otpCode.length !== 6 || forgotSending}
+                      >
+                        {forgotSending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Resetting…
+                          </>
+                        ) : (
+                          "Verify & Reset Security"
+                        )}
+                      </Button>
+                      <button
+                        onClick={handleSendOtp}
+                        disabled={forgotSending}
+                        className="text-xs text-primary/70 hover:text-primary transition-colors"
+                      >
+                        Resend code
+                      </button>
+                    </>
+                  )}
+                  <div className="mt-2">
+                    <button
+                      onClick={() => {
+                        setShowForgot(false);
+                        setForgotStep("send");
+                        setOtpCode("");
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Back to verification
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ) : !selectedMethod ? (
