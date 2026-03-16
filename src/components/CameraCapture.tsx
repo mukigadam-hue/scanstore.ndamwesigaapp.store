@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor } from "lucide-react";
+import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 
@@ -22,6 +22,8 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   const [scanOrientation, setScanOrientation] = useState<"portrait" | "landscape">("portrait");
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -29,6 +31,8 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       streamRef.current = null;
     }
     setStreaming(false);
+    setTorchOn(false);
+    setTorchSupported(false);
   }, []);
 
   const startCamera = useCallback(async (facing: "user" | "environment") => {
@@ -50,11 +54,32 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       }
       setStreaming(true);
       setCaptured(null);
+
+      // Check torch support
+      const track = stream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities?.() as any;
+      if (capabilities?.torch) {
+        setTorchSupported(true);
+      } else {
+        setTorchSupported(false);
+      }
     } catch (err) {
       console.error("Camera error:", err);
       toast.error("Camera access denied. Please allow camera permissions.");
     }
   }, []);
+
+  const toggleTorch = async () => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    try {
+      const newState = !torchOn;
+      await (track as any).applyConstraints({ advanced: [{ torch: newState }] });
+      setTorchOn(newState);
+    } catch {
+      toast.error("Flashlight not available on this device");
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -68,7 +93,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     }
   }, [open]);
 
-  // ESC to close
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
@@ -99,34 +123,27 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const scanCanvas = scanCanvasRef.current;
     const mainCanvas = canvasRef.current;
 
-    // Calculate the boundary area (matching the inset-6 = 24px guide frame)
-    // The video element is displayed as object-cover, so we need to map
-    // the 24px CSS inset to actual video pixel coordinates
     const videoEl = videoRef.current;
     const displayW = videoEl.clientWidth;
     const displayH = videoEl.clientHeight;
     const videoW = video.videoWidth;
     const videoH = video.videoHeight;
 
-    // object-cover scaling: find which dimension overflows
     const scaleX = videoW / displayW;
     const scaleY = videoH / displayH;
     const coverScale = Math.min(scaleX, scaleY);
 
-    // Visible area of the video in video-pixels
     const visibleW = displayW * coverScale;
     const visibleH = displayH * coverScale;
     const offsetX = (videoW - visibleW) / 2;
     const offsetY = (videoH - visibleH) / 2;
 
-    // The boundary guide is inset-6 = 24px from each edge of the display
     const insetPx = 24;
     const cropX = offsetX + insetPx * coverScale;
     const cropY = offsetY + insetPx * coverScale;
     const cropW = visibleW - insetPx * 2 * coverScale;
     const cropH = visibleH - insetPx * 2 * coverScale;
 
-    // Set canvases to the cropped dimensions
     scanCanvas.width = cropW;
     scanCanvas.height = cropH;
     mainCanvas.width = cropW;
@@ -135,7 +152,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const scanCtx = scanCanvas.getContext("2d");
     if (!scanCtx) return;
 
-    const duration = 1500; // 1.5s scan
+    const duration = 1500;
     const startTime = Date.now();
     let lastRow = 0;
 
@@ -146,7 +163,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
 
       const currentRow = Math.floor(progress * cropH);
 
-      // Progressively capture rows from the cropped boundary area
       if (currentRow > lastRow) {
         const rowsToCopy = currentRow - lastRow;
         scanCtx.drawImage(
@@ -160,7 +176,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       if (progress < 1) {
         requestAnimationFrame(animateScanning);
       } else {
-        // Final: copy any remaining rows
         if (lastRow < cropH) {
           scanCtx.drawImage(
             video,
@@ -169,10 +184,10 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           );
         }
 
-        // Apply light enhancement preserving original colors
+        // Apply light color-preserving enhancement
         const mainCtx = mainCanvas.getContext("2d");
         if (mainCtx) {
-          mainCtx.filter = "contrast(1.15) brightness(1.03)";
+          mainCtx.filter = "contrast(1.12) brightness(1.02) saturate(1.05)";
           mainCtx.drawImage(scanCanvas, 0, 0);
           mainCtx.filter = "none";
         }
@@ -225,6 +240,9 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
 
+      // Use high-quality JPEG for PDF to keep file size manageable while preserving colors
+      const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
       const pdf = new jsPDF({
         orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
         unit: "mm",
@@ -243,7 +261,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       const xOffset = (pageWidth - scaledWidth) / 2;
       const yOffset = (pageHeight - scaledHeight) / 2;
 
-      pdf.addImage(captured, "PNG", xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
+      pdf.addImage(jpegDataUrl, "JPEG", xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
 
       const pdfBlob = pdf.output("blob");
       const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
@@ -330,7 +348,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             {/* Scanning animation */}
             {scanning && (
               <div className="absolute inset-0 pointer-events-none">
-                {/* Scanned area - slightly brighter/clearer */}
                 <div
                   className="absolute left-0 right-0 top-0"
                   style={{
@@ -338,7 +355,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                     background: "linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)",
                   }}
                 />
-                {/* Unscanned area - darker overlay */}
                 <div
                   className="absolute left-0 right-0 bottom-0"
                   style={{
@@ -346,7 +362,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                     background: "rgba(0,0,0,0.35)",
                   }}
                 />
-                {/* The bright scanning line */}
                 <div
                   className="absolute left-0 right-0 h-1"
                   style={{
@@ -355,7 +370,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                     background: `linear-gradient(90deg, transparent 0%, hsl(var(--primary)) 15%, hsl(45 80% 70%) 50%, hsl(var(--primary)) 85%, transparent 100%)`,
                   }}
                 />
-                {/* Progress text */}
                 <div className="absolute bottom-4 left-0 right-0 text-center">
                   <span className="text-white text-sm font-medium bg-black/60 px-3 py-1 rounded-full">
                     Scanning… {Math.round(scanProgress * 100)}%
@@ -392,6 +406,20 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             >
               <RotateCcw className="h-5 w-5" />
             </Button>
+
+            {/* Flashlight toggle */}
+            {torchSupported && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTorch}
+                className={`h-12 w-12 ${torchOn ? "text-yellow-400 bg-yellow-400/20" : "text-white/70 hover:text-white hover:bg-white/10"}`}
+                title={torchOn ? "Turn off flashlight" : "Turn on flashlight"}
+              >
+                {torchOn ? <Flashlight className="h-5 w-5" /> : <FlashlightOff className="h-5 w-5" />}
+              </Button>
+            )}
+
             <Button
               onClick={takePhoto}
               disabled={!streaming || scanning}

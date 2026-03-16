@@ -1,19 +1,8 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft,
-  Upload,
-  Download,
-  Trash2,
-  FileText,
-  File,
-  Image,
-  FileSpreadsheet,
-  Lock,
-  Camera,
-  Eye,
-  Video,
-  Music,
+  ArrowLeft, Upload, Download, Trash2, FileText, File,
+  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,16 +35,11 @@ interface DrawerViewProps {
 }
 
 const getFileIcon = (type: string) => {
-  if (type.startsWith("image/"))
-    return <Image className="h-5 w-5 text-primary" />;
-  if (type.startsWith("video/"))
-    return <Video className="h-5 w-5 text-primary" />;
-  if (type.startsWith("audio/"))
-    return <Music className="h-5 w-5 text-primary" />;
-  if (type.includes("spreadsheet") || type.includes("excel"))
-    return <FileSpreadsheet className="h-5 w-5 text-primary" />;
-  if (type.includes("pdf"))
-    return <FileText className="h-5 w-5 text-destructive" />;
+  if (type.startsWith("image/")) return <Image className="h-5 w-5 text-primary" />;
+  if (type.startsWith("video/")) return <Video className="h-5 w-5 text-primary" />;
+  if (type.startsWith("audio/")) return <Music className="h-5 w-5 text-primary" />;
+  if (type.includes("spreadsheet") || type.includes("excel")) return <FileSpreadsheet className="h-5 w-5 text-primary" />;
+  if (type.includes("pdf")) return <FileText className="h-5 w-5 text-destructive" />;
   return <File className="h-5 w-5 text-muted-foreground" />;
 };
 
@@ -77,15 +61,10 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const isNearLimit = storagePercent >= 90;
   const isFreeUser = currentPlan.id === "free";
 
-  // Preview
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
-  // Secure delete
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
-  // Camera
   const [showCamera, setShowCamera] = useState(false);
-  // Compression choice (premium only)
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
-  // Download quality
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
 
   const refreshDocs = () =>
@@ -118,18 +97,21 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     let fileToUpload: File | Blob = file;
     let finalSize = file.size;
 
-    if (isFreeUser) {
-      // Always compress for free users
-      const result = await compressFile(file);
-      fileToUpload = result.file;
-      finalSize = result.size;
-    } else {
-      // Premium users get a choice
-      const shouldCompress = await askPremiumCompression(file);
-      if (shouldCompress) {
+    // Skip compression for PDFs (including scanned documents) — they're already optimized
+    const isPdf = file.type === "application/pdf";
+
+    if (!isPdf) {
+      if (isFreeUser) {
         const result = await compressFile(file);
         fileToUpload = result.file;
         finalSize = result.size;
+      } else if (canCompress(file)) {
+        const shouldCompress = await askPremiumCompression(file);
+        if (shouldCompress) {
+          const result = await compressFile(file);
+          fileToUpload = result.file;
+          finalSize = result.size;
+        }
       }
     }
 
@@ -234,7 +216,6 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
       toast.error("Documents are frozen. Please unlock access first.");
       return;
     }
-    // Show quality choice dialog
     setDownloadDoc(doc);
   };
 
@@ -272,7 +253,6 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
     const url = URL.createObjectURL(blobToDownload);
     const a = document.createElement("a");
     a.href = url;
-    // Distinct naming per quality so both can coexist
     let downloadName: string;
     if (highQuality && data.type.startsWith("image/")) {
       downloadName = doc.name.replace(/(\.\w+)$/, "_high_quality.png");

@@ -27,42 +27,12 @@ interface SecuritySetupProps {
 }
 
 const METHODS = [
-  {
-    id: "pin",
-    label: "5-Digit PIN Code",
-    desc: "A 5-number personal code to unlock your locker",
-    icon: Hash,
-  },
-  {
-    id: "fingerprint",
-    label: "Fingerprint Scan",
-    desc: "Register your device fingerprint sensor",
-    icon: Fingerprint,
-  },
-  {
-    id: "face",
-    label: "Your Face Photo",
-    desc: "Upload a clear photo of your face",
-    icon: Camera,
-  },
-  {
-    id: "school",
-    label: "Last School Attended",
-    desc: "Name of your last school or university",
-    icon: GraduationCap,
-  },
-  {
-    id: "family",
-    label: "Family Member's Face",
-    desc: "A photo of a trusted family member",
-    icon: Users,
-  },
-  {
-    id: "id",
-    label: "National ID / Driving Permit",
-    desc: "Upload your government-issued identity document",
-    icon: IdCard,
-  },
+  { id: "pin", label: "5-Digit PIN Code", desc: "A 5-number personal code to unlock your locker", icon: Hash },
+  { id: "fingerprint", label: "Fingerprint Scan", desc: "Register your device fingerprint sensor", icon: Fingerprint },
+  { id: "face", label: "Your Face Photo", desc: "Upload a clear photo of your face", icon: Camera },
+  { id: "school", label: "Last School Attended", desc: "Name of your last school or university", icon: GraduationCap },
+  { id: "family", label: "Family Member's Face", desc: "A photo of a trusted family member", icon: Users },
+  { id: "id", label: "National ID / Driving Permit", desc: "Upload your government-issued identity document", icon: IdCard },
 ];
 
 const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
@@ -71,7 +41,6 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   const [expanded, setExpanded] = useState<string | null>("pin");
   const [saving, setSaving] = useState(false);
 
-  // Per-method state
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [school, setSchool] = useState("");
@@ -103,13 +72,63 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
     toast.success("PIN registered ✓");
   };
 
-  const handleFingerprintScan = () => {
-    setFingerprintScanning(true);
-    setTimeout(() => {
+  const handleFingerprintScan = async () => {
+    // Use real WebAuthn for persistent biometric registration
+    if (!window.PublicKeyCredential) {
+      toast.error("Biometric authentication is not supported on this device");
+      return;
+    }
+
+    try {
+      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+      if (!available) {
+        toast.error("No biometric sensor found on this device.");
+        return;
+      }
+
+      setFingerprintScanning(true);
+
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      const userId = new TextEncoder().encode(user?.id || "user");
+
+      const createOptions: PublicKeyCredentialCreationOptions = {
+        challenge,
+        rp: { name: "DocLocker", id: window.location.hostname },
+        user: {
+          id: userId,
+          name: user?.email || "user",
+          displayName: user?.email || "User",
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: "public-key" },
+          { alg: -257, type: "public-key" },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+          residentKey: "preferred",
+        },
+        timeout: 60000,
+      };
+
+      const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
+
+      // Store credential ID persistently in localStorage
+      const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+      localStorage.setItem(`webauthn_cred_${user?.id}`, credId);
+
       setFingerprintScanning(false);
       markDone("fingerprint", true);
-      toast.success("Fingerprint registered ✓");
-    }, 2500);
+      toast.success("Fingerprint registered ✓ — Your device will remember this!");
+    } catch (err: any) {
+      setFingerprintScanning(false);
+      if (err.name === "NotAllowedError") {
+        toast.error("Biometric registration cancelled.");
+      } else {
+        toast.error("Biometric registration failed: " + err.message);
+      }
+    }
   };
 
   const handleImageFile = (type: "face" | "family" | "id", file: File) => {
@@ -251,135 +270,50 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                 const isOpen = expanded === method.id;
 
                 return (
-                  <div
-                    key={method.id}
-                    className="border border-border rounded-lg overflow-hidden"
-                  >
+                  <div key={method.id} className="border border-border rounded-lg overflow-hidden">
                     <button
                       className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/40 transition-colors"
-                      onClick={() =>
-                        setExpanded(isOpen ? null : method.id)
-                      }
+                      onClick={() => setExpanded(isOpen ? null : method.id)}
                     >
                       <div className="flex items-center gap-3">
-                        <div
-                          className={cn(
-                            "p-1.5 rounded transition-colors",
-                            isDone ? "bg-accent/20" : "bg-secondary"
-                          )}
-                        >
-                          {isDone ? (
-                            <Check className="h-4 w-4 text-accent" />
-                          ) : (
-                            <Icon className="h-4 w-4 text-primary" />
-                          )}
+                        <div className={cn("p-1.5 rounded transition-colors", isDone ? "bg-accent/20" : "bg-secondary")}>
+                          {isDone ? <Check className="h-4 w-4 text-accent" /> : <Icon className="h-4 w-4 text-primary" />}
                         </div>
                         <div>
-                          <p
-                            className={cn(
-                              "text-sm font-medium leading-tight",
-                              isDone
-                                ? "text-muted-foreground line-through"
-                                : "text-foreground"
-                            )}
-                          >
+                          <p className={cn("text-sm font-medium leading-tight", isDone ? "text-muted-foreground line-through" : "text-foreground")}>
                             {method.label}
                           </p>
-                          {!isDone && (
-                            <p className="text-xs text-muted-foreground">
-                              {method.desc}
-                            </p>
-                          )}
-                          {isDone && (
-                            <p className="text-xs text-accent">
-                              Registered ✓
-                            </p>
-                          )}
+                          {!isDone && <p className="text-xs text-muted-foreground">{method.desc}</p>}
+                          {isDone && <p className="text-xs text-accent">Registered ✓</p>}
                         </div>
                       </div>
-                      {isOpen ? (
-                        <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                      )}
+                      {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                     </button>
 
                     <AnimatePresence>
                       {isOpen && (
-                        <motion.div
-                          initial={{ height: 0 }}
-                          animate={{ height: "auto" }}
-                          exit={{ height: 0 }}
-                          className="overflow-hidden"
-                        >
+                        <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
                           <div className="p-4 border-t border-border bg-secondary/20 space-y-3">
-                            {/* PIN */}
                             {method.id === "pin" && (
                               <>
-                                <Input
-                                  type="password"
-                                  inputMode="numeric"
-                                  placeholder="Enter 5-digit PIN"
-                                  value={pin}
-                                  onChange={(e) =>
-                                    setPin(
-                                      e.target.value
-                                        .replace(/\D/g, "")
-                                        .slice(0, 5)
-                                    )
-                                  }
-                                  maxLength={5}
+                                <Input type="password" inputMode="numeric" placeholder="Enter 5-digit PIN" value={pin}
+                                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5}
+                                  className="bg-input border-border text-center text-xl tracking-[0.5em]" autoFocus />
+                                <Input type="password" inputMode="numeric" placeholder="Confirm PIN" value={confirmPin}
+                                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5}
                                   className="bg-input border-border text-center text-xl tracking-[0.5em]"
-                                  autoFocus
-                                />
-                                <Input
-                                  type="password"
-                                  inputMode="numeric"
-                                  placeholder="Confirm PIN"
-                                  value={confirmPin}
-                                  onChange={(e) =>
-                                    setConfirmPin(
-                                      e.target.value
-                                        .replace(/\D/g, "")
-                                        .slice(0, 5)
-                                    )
-                                  }
-                                  maxLength={5}
-                                  className="bg-input border-border text-center text-xl tracking-[0.5em]"
-                                  onKeyDown={(e) =>
-                                    e.key === "Enter" && handlePinSet()
-                                  }
-                                />
-                                <Button
-                                  size="sm"
-                                  className="w-full brass-gradient text-primary-foreground"
-                                  onClick={handlePinSet}
-                                >
-                                  Register PIN
-                                </Button>
+                                  onKeyDown={(e) => e.key === "Enter" && handlePinSet()} />
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handlePinSet}>Register PIN</Button>
                               </>
                             )}
 
-                            {/* Fingerprint */}
                             {method.id === "fingerprint" && (
                               <div className="text-center py-2">
-                                <p className="text-xs text-muted-foreground mb-4">
-                                  Place your finger on the device sensor
-                                </p>
-                                <motion.button
-                                  onClick={handleFingerprintScan}
-                                  disabled={fingerprintScanning}
-                                  whileTap={{ scale: 0.95 }}
-                                  className="brass-gradient rounded-full p-5 mx-auto block brass-glow disabled:opacity-70"
-                                >
+                                <p className="text-xs text-muted-foreground mb-4">Place your finger on the device sensor</p>
+                                <motion.button onClick={handleFingerprintScan} disabled={fingerprintScanning} whileTap={{ scale: 0.95 }}
+                                  className="brass-gradient rounded-full p-5 mx-auto block brass-glow disabled:opacity-70">
                                   {fingerprintScanning ? (
-                                    <motion.div
-                                      animate={{ scale: [1, 1.15, 1] }}
-                                      transition={{
-                                        repeat: Infinity,
-                                        duration: 0.7,
-                                      }}
-                                    >
+                                    <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 0.7 }}>
                                       <Fingerprint className="h-10 w-10 text-primary-foreground" />
                                     </motion.div>
                                   ) : (
@@ -387,129 +321,48 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                                   )}
                                 </motion.button>
                                 <p className="text-xs text-muted-foreground mt-3">
-                                  {fingerprintScanning
-                                    ? "Scanning… hold still"
-                                    : "Tap to scan fingerprint"}
+                                  {fingerprintScanning ? "Authenticating… hold still" : "Tap to register fingerprint"}
                                 </p>
                               </div>
                             )}
 
-                            {/* Face */}
                             {method.id === "face" && (
                               <>
-                                {previews.face && (
-                                  <img
-                                    src={previews.face}
-                                    alt="Face preview"
-                                    className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30"
-                                  />
-                                )}
-                                <input
-                                  type="file"
-                                  ref={faceRef}
-                                  accept="image/*"
-                                  capture="user"
-                                  className="hidden"
-                                  onChange={(e) =>
-                                    e.target.files?.[0] &&
-                                    handleImageFile("face", e.target.files[0])
-                                  }
-                                />
-                                <Button
-                                  size="sm"
-                                  className="w-full brass-gradient text-primary-foreground"
-                                  onClick={() => faceRef.current?.click()}
-                                >
-                                  <Camera className="h-4 w-4 mr-2" />
-                                  Upload / Take Face Photo
+                                {previews.face && <img src={previews.face} alt="Face preview" className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30" />}
+                                <input type="file" ref={faceRef} accept="image/*" capture="user" className="hidden"
+                                  onChange={(e) => e.target.files?.[0] && handleImageFile("face", e.target.files[0])} />
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={() => faceRef.current?.click()}>
+                                  <Camera className="h-4 w-4 mr-2" />Upload / Take Face Photo
                                 </Button>
                               </>
                             )}
 
-                            {/* School */}
                             {method.id === "school" && (
                               <>
-                                <Input
-                                  placeholder="e.g. Makerere University"
-                                  value={school}
-                                  onChange={(e) => setSchool(e.target.value)}
-                                  className="bg-input border-border"
-                                  autoFocus
-                                  onKeyDown={(e) =>
-                                    e.key === "Enter" && handleSchoolSet()
-                                  }
-                                />
-                                <Button
-                                  size="sm"
-                                  className="w-full brass-gradient text-primary-foreground"
-                                  onClick={handleSchoolSet}
-                                >
-                                  Register School
-                                </Button>
+                                <Input placeholder="e.g. Makerere University" value={school} onChange={(e) => setSchool(e.target.value)}
+                                  className="bg-input border-border" autoFocus onKeyDown={(e) => e.key === "Enter" && handleSchoolSet()} />
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handleSchoolSet}>Register School</Button>
                               </>
                             )}
 
-                            {/* Family face */}
                             {method.id === "family" && (
                               <>
-                                {previews.family && (
-                                  <img
-                                    src={previews.family}
-                                    alt="Family preview"
-                                    className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30"
-                                  />
-                                )}
-                                <input
-                                  type="file"
-                                  ref={familyRef}
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(e) =>
-                                    e.target.files?.[0] &&
-                                    handleImageFile(
-                                      "family",
-                                      e.target.files[0]
-                                    )
-                                  }
-                                />
-                                <Button
-                                  size="sm"
-                                  className="w-full brass-gradient text-primary-foreground"
-                                  onClick={() => familyRef.current?.click()}
-                                >
-                                  <Users className="h-4 w-4 mr-2" />
-                                  Upload Family Member's Photo
+                                {previews.family && <img src={previews.family} alt="Family preview" className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30" />}
+                                <input type="file" ref={familyRef} accept="image/*" className="hidden"
+                                  onChange={(e) => e.target.files?.[0] && handleImageFile("family", e.target.files[0])} />
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={() => familyRef.current?.click()}>
+                                  <Users className="h-4 w-4 mr-2" />Upload Family Member's Photo
                                 </Button>
                               </>
                             )}
 
-                            {/* National ID */}
                             {method.id === "id" && (
                               <>
-                                {previews.id && (
-                                  <img
-                                    src={previews.id}
-                                    alt="ID preview"
-                                    className="w-40 h-24 object-cover rounded-lg mx-auto border border-primary/30"
-                                  />
-                                )}
-                                <input
-                                  type="file"
-                                  ref={idRef}
-                                  accept="image/*,.pdf"
-                                  className="hidden"
-                                  onChange={(e) =>
-                                    e.target.files?.[0] &&
-                                    handleImageFile("id", e.target.files[0])
-                                  }
-                                />
-                                <Button
-                                  size="sm"
-                                  className="w-full brass-gradient text-primary-foreground"
-                                  onClick={() => idRef.current?.click()}
-                                >
-                                  <IdCard className="h-4 w-4 mr-2" />
-                                  Upload ID / Passport / Driving Permit
+                                {previews.id && <img src={previews.id} alt="ID preview" className="w-40 h-24 object-cover rounded-lg mx-auto border border-primary/30" />}
+                                <input type="file" ref={idRef} accept="image/*,.pdf" className="hidden"
+                                  onChange={(e) => e.target.files?.[0] && handleImageFile("id", e.target.files[0])} />
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={() => idRef.current?.click()}>
+                                  <IdCard className="h-4 w-4 mr-2" />Upload ID / Passport / Driving Permit
                                 </Button>
                               </>
                             )}
@@ -530,11 +383,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                 onClick={handleFinish}
               >
                 {saving ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                    className="mr-2"
-                  >
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="mr-2">
                     <KeyRound className="h-4 w-4" />
                   </motion.div>
                 ) : (
