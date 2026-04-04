@@ -20,6 +20,7 @@ interface FilePreviewDialogProps {
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePreviewDialogProps) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [showControls, setShowControls] = useState(true);
@@ -32,6 +33,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   useEffect(() => {
     if (!open || !doc) {
       setPreviewUrl(null);
+      setTextContent(null);
       setZoom(1);
       return;
     }
@@ -49,7 +51,20 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
           return;
         }
 
-        if (!revoked) setPreviewUrl(data.signedUrl);
+        if (!revoked) {
+          setPreviewUrl(data.signedUrl);
+          // Fetch text content for plain text files
+          const name = doc.name.toLowerCase();
+          const isText = doc.file_type.startsWith("text/") || 
+            [".txt",".csv",".json",".xml",".md",".rtf",".log",".html",".htm"].some(e => name.endsWith(e));
+          if (isText) {
+            try {
+              const resp = await fetch(data.signedUrl);
+              const text = await resp.text();
+              if (!revoked) setTextContent(text);
+            } catch { /* fallback to download */ }
+          }
+        }
       } catch {
         toast.error("Could not preview this file");
       } finally {
@@ -133,7 +148,24 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   const isPdf = doc.file_type.includes("pdf");
   const isVideo = doc.file_type.startsWith("video/");
   const isAudio = doc.file_type.startsWith("audio/");
-  const isWord = doc.file_type.includes("word") || doc.file_type.includes("msword") || doc.name.endsWith(".docx") || doc.name.endsWith(".doc");
+  
+  // Text-based formats that can be rendered inline
+  const isPlainText = doc.file_type.startsWith("text/") || 
+    doc.name.endsWith(".txt") || doc.name.endsWith(".csv") || doc.name.endsWith(".json") ||
+    doc.name.endsWith(".xml") || doc.name.endsWith(".md") || doc.name.endsWith(".rtf") ||
+    doc.name.endsWith(".log") || doc.name.endsWith(".html") || doc.name.endsWith(".htm");
+
+  // Office documents viewable via Google Docs Viewer
+  const officeExtensions = [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp"];
+  const isOfficeDoc = doc.file_type.includes("word") || doc.file_type.includes("msword") ||
+    doc.file_type.includes("spreadsheet") || doc.file_type.includes("excel") ||
+    doc.file_type.includes("presentation") || doc.file_type.includes("powerpoint") ||
+    doc.file_type.includes("opendocument") ||
+    officeExtensions.some(ext => doc.name.toLowerCase().endsWith(ext));
+  
+  const googleViewerUrl = isOfficeDoc && previewUrl
+    ? `https://docs.google.com/gview?url=${encodeURIComponent(previewUrl)}&embedded=true`
+    : null;
 
   const overlay = (
     <div
@@ -252,20 +284,21 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
                 <audio src={previewUrl} controls className="w-full max-w-md" />
               </div>
             )}
-            {isWord && (
-              <div className="flex flex-col items-center gap-4 p-8">
-                <FileText className="h-16 w-16 text-primary" />
-                <p className="text-white">{doc.name}</p>
-                <p className="text-sm text-white/60 text-center max-w-xs">
-                  Word documents can be viewed by downloading.
-                </p>
-                <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download to view
-                </Button>
+            {isOfficeDoc && googleViewerUrl && (
+              <iframe
+                src={googleViewerUrl}
+                className="w-full h-full border-none bg-white"
+                title={doc.name}
+              />
+            )}
+            {isPlainText && (
+              <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
+                <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono max-w-4xl mx-auto">
+                  {textContent || "Loading..."}
+                </pre>
               </div>
             )}
-            {!isImage && !isPdf && !isVideo && !isAudio && !isWord && (
+            {!isImage && !isPdf && !isVideo && !isAudio && !isOfficeDoc && !isPlainText && (
               <div className="flex flex-col items-center gap-4 p-8">
                 <File className="h-16 w-16 text-white/30" />
                 <p className="text-white">{doc.name}</p>
