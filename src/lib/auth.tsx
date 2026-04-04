@@ -19,19 +19,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timeout: if auth never resolves, unblock UI after 5s
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      clearTimeout(timeout);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeout);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+    }).catch(async () => {
+      // Clear corrupted/expired tokens to stop infinite refresh loop
+      try { await supabase.auth.signOut(); } catch {}
+      setSession(null);
+      setUser(null);
+      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email: string, password: string) => {
