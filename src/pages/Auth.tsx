@@ -91,6 +91,12 @@ const Auth = () => {
           toast.success("Account created! Check your email to verify before signing in.");
         }
       }
+    } catch (err: any) {
+      if (err?.message?.includes("Failed to fetch")) {
+        toast.error("Network error. Please check your connection and try again.");
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }
