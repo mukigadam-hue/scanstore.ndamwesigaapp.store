@@ -284,20 +284,21 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
                 <audio src={previewUrl} controls className="w-full max-w-md" />
               </div>
             )}
-            {isWord && (
-              <div className="flex flex-col items-center gap-4 p-8">
-                <FileText className="h-16 w-16 text-primary" />
-                <p className="text-white">{doc.name}</p>
-                <p className="text-sm text-white/60 text-center max-w-xs">
-                  Word documents can be viewed by downloading.
-                </p>
-                <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download to view
-                </Button>
+            {isOfficeDoc && googleViewerUrl && (
+              <iframe
+                src={googleViewerUrl}
+                className="w-full h-full border-none bg-white"
+                title={doc.name}
+              />
+            )}
+            {isPlainText && (
+              <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
+                <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono max-w-4xl mx-auto">
+                  {textContent || "Loading..."}
+                </pre>
               </div>
             )}
-            {!isImage && !isPdf && !isVideo && !isAudio && !isWord && (
+            {!isImage && !isPdf && !isVideo && !isAudio && !isOfficeDoc && !isPlainText && (
               <div className="flex flex-col items-center gap-4 p-8">
                 <File className="h-16 w-16 text-white/30" />
                 <p className="text-white">{doc.name}</p>
