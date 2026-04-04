@@ -133,7 +133,24 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   const isPdf = doc.file_type.includes("pdf");
   const isVideo = doc.file_type.startsWith("video/");
   const isAudio = doc.file_type.startsWith("audio/");
-  const isWord = doc.file_type.includes("word") || doc.file_type.includes("msword") || doc.name.endsWith(".docx") || doc.name.endsWith(".doc");
+  
+  // Text-based formats that can be rendered inline
+  const isPlainText = doc.file_type.startsWith("text/") || 
+    doc.name.endsWith(".txt") || doc.name.endsWith(".csv") || doc.name.endsWith(".json") ||
+    doc.name.endsWith(".xml") || doc.name.endsWith(".md") || doc.name.endsWith(".rtf") ||
+    doc.name.endsWith(".log") || doc.name.endsWith(".html") || doc.name.endsWith(".htm");
+
+  // Office documents viewable via Google Docs Viewer
+  const officeExtensions = [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp"];
+  const isOfficeDoc = doc.file_type.includes("word") || doc.file_type.includes("msword") ||
+    doc.file_type.includes("spreadsheet") || doc.file_type.includes("excel") ||
+    doc.file_type.includes("presentation") || doc.file_type.includes("powerpoint") ||
+    doc.file_type.includes("opendocument") ||
+    officeExtensions.some(ext => doc.name.toLowerCase().endsWith(ext));
+  
+  const googleViewerUrl = isOfficeDoc && previewUrl
+    ? `https://docs.google.com/gview?url=${encodeURIComponent(previewUrl)}&embedded=true`
+    : null;
 
   const overlay = (
     <div
