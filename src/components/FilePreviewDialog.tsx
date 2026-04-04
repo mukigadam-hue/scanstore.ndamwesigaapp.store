@@ -33,6 +33,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   useEffect(() => {
     if (!open || !doc) {
       setPreviewUrl(null);
+      setTextContent(null);
       setZoom(1);
       return;
     }
