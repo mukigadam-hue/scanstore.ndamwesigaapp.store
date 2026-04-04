@@ -20,6 +20,7 @@ interface FilePreviewDialogProps {
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePreviewDialogProps) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [showControls, setShowControls] = useState(true);
