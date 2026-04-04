@@ -51,7 +51,20 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
           return;
         }
 
-        if (!revoked) setPreviewUrl(data.signedUrl);
+        if (!revoked) {
+          setPreviewUrl(data.signedUrl);
+          // Fetch text content for plain text files
+          const name = doc.name.toLowerCase();
+          const isText = doc.file_type.startsWith("text/") || 
+            [".txt",".csv",".json",".xml",".md",".rtf",".log",".html",".htm"].some(e => name.endsWith(e));
+          if (isText) {
+            try {
+              const resp = await fetch(data.signedUrl);
+              const text = await resp.text();
+              if (!revoked) setTextContent(text);
+            } catch { /* fallback to download */ }
+          }
+        }
       } catch {
         toast.error("Could not preview this file");
       } finally {
