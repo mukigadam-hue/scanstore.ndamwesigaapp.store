@@ -40,19 +40,27 @@ const isOfficeFile = (name: string, fileType: string) => {
     OFFICE_EXTENSIONS.some(ext => lower.endsWith(ext));
 };
 
-type ViewerType = "google" | "microsoft";
+const isExcelFile = (name: string, fileType: string) => {
+  const lower = name.toLowerCase();
+  return lower.endsWith(".xlsx") || lower.endsWith(".xls") || lower.endsWith(".ods") ||
+    fileType.includes("spreadsheet") || fileType.includes("excel");
+};
+
+const isWordFile = (name: string, fileType: string) => {
+  const lower = name.toLowerCase();
+  return lower.endsWith(".docx") || lower.endsWith(".doc") || lower.endsWith(".odt") ||
+    fileType.includes("word") || fileType.includes("msword") || fileType.includes("opendocument.text");
+};
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [officeHtml, setOfficeHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [showControls, setShowControls] = useState(true);
-  const [officeViewer, setOfficeViewer] = useState<ViewerType>("google");
-  const [officeLoadError, setOfficeLoadError] = useState(false);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const iframeLoadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState(1);
@@ -61,9 +69,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     if (!open || !doc) {
       setPreviewUrl(null);
       setTextContent(null);
+      setOfficeHtml(null);
       setZoom(1);
-      setOfficeViewer("google");
-      setOfficeLoadError(false);
       return;
     }
 
@@ -82,6 +89,35 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
 
         if (revoked) return;
         setPreviewUrl(data.signedUrl);
+
+        // Client-side rendering for Office files
+        if (isExcelFile(doc.name, doc.file_type)) {
+          try {
+            const resp = await fetch(data.signedUrl);
+            const arrayBuffer = await resp.arrayBuffer();
+            const XLSX = await import("xlsx");
+            const workbook = XLSX.read(arrayBuffer, { type: "array" });
+            let html = "";
+            workbook.SheetNames.forEach((sheetName) => {
+              const sheet = workbook.Sheets[sheetName];
+              html += `<h3 style="margin:16px 0 8px;font-weight:600;font-size:16px;">${sheetName}</h3>`;
+              html += XLSX.utils.sheet_to_html(sheet, { editable: false });
+            });
+            if (!revoked) setOfficeHtml(html);
+          } catch {
+            if (!revoked) setOfficeHtml(null);
+          }
+        } else if (isWordFile(doc.name, doc.file_type)) {
+          try {
+            const resp = await fetch(data.signedUrl);
+            const arrayBuffer = await resp.arrayBuffer();
+            const mammoth = await import("mammoth");
+            const result = await mammoth.convertToHtml({ arrayBuffer });
+            if (!revoked) setOfficeHtml(result.value);
+          } catch {
+            if (!revoked) setOfficeHtml(null);
+          }
+        }
 
         // Fetch text content for text-based files
         if (isTextFile(doc.name, doc.file_type)) {
@@ -103,36 +139,6 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
     loadPreview();
     return () => { revoked = true; };
   }, [open, doc?.id]);
-
-  // Auto-switch office viewer if iframe fails to load within 8s
-  useEffect(() => {
-    if (!open || !doc || !previewUrl) return;
-    if (!isOfficeFile(doc.name, doc.file_type)) return;
-
-    if (iframeLoadTimer.current) clearTimeout(iframeLoadTimer.current);
-    setOfficeLoadError(false);
-
-    iframeLoadTimer.current = setTimeout(() => {
-      if (officeViewer === "google") {
-        setOfficeViewer("microsoft");
-      } else {
-        setOfficeLoadError(true);
-      }
-    }, 10000);
-
-    return () => {
-      if (iframeLoadTimer.current) clearTimeout(iframeLoadTimer.current);
-    };
-  }, [open, doc?.id, previewUrl, officeViewer]);
-
-  const handleIframeLoad = () => {
-    if (iframeLoadTimer.current) clearTimeout(iframeLoadTimer.current);
-  };
-
-  const retryOfficeViewer = () => {
-    setOfficeLoadError(false);
-    setOfficeViewer("google");
-  };
 
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
@@ -192,16 +198,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
   const isAudio = doc.file_type.startsWith("audio/");
   const isText = isTextFile(doc.name, doc.file_type);
   const isOffice = isOfficeFile(doc.name, doc.file_type);
-
-  const getOfficeViewerUrl = () => {
-    if (!previewUrl) return null;
-    if (officeViewer === "google") {
-      return `https://docs.google.com/gview?url=${encodeURIComponent(previewUrl)}&embedded=true`;
-    }
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewUrl)}`;
-  };
-
-  const officeViewerUrl = isOffice ? getOfficeViewerUrl() : null;
+  const hasClientRendered = isOffice && officeHtml !== null;
 
   const overlay = (
     <div
@@ -282,46 +279,26 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
               </div>
             )}
 
-            {isOffice && !officeLoadError && officeViewerUrl && (
-              <div className="w-full h-full relative">
-                <iframe
-                  src={officeViewerUrl}
-                  className="w-full h-full border-none bg-white"
-                  title={doc.name}
-                  onLoad={handleIframeLoad}
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            {isOffice && hasClientRendered && (
+              <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
+                <div
+                  className="max-w-4xl mx-auto prose prose-sm"
+                  dangerouslySetInnerHTML={{ __html: officeHtml }}
+                  style={{ fontSize: "14px" }}
                 />
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                  <div className="bg-black/70 backdrop-blur-sm rounded-full px-3 py-1 flex items-center gap-2">
-                    <span className="text-white/60 text-xs">
-                      Viewer: {officeViewer === "google" ? "Google" : "Microsoft"}
-                    </span>
-                    <button
-                      onClick={() => setOfficeViewer(officeViewer === "google" ? "microsoft" : "google")}
-                      className="text-xs text-primary underline"
-                    >
-                      Switch viewer
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
 
-            {isOffice && officeLoadError && (
+            {isOffice && !hasClientRendered && !loading && (
               <div className="flex flex-col items-center gap-4 p-8">
                 <FileText className="h-16 w-16 text-white/30" />
                 <p className="text-white text-lg">{doc.name}</p>
                 <p className="text-sm text-white/60 text-center max-w-sm">
-                  Unable to preview this document online. Download it to open with your device's native app.
+                  This document format couldn't be rendered in-app. Download it to open with your device's native app.
                 </p>
-                <div className="flex gap-2">
-                  <Button onClick={retryOfficeViewer} variant="outline" className="border-white/20 text-white hover:bg-white/10">
-                    <RefreshCw className="h-4 w-4 mr-2" /> Retry
-                  </Button>
-                  <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                    <Download className="h-4 w-4 mr-2" /> Download
-                  </Button>
-                </div>
+                <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
+                  <Download className="h-4 w-4 mr-2" /> Download
+                </Button>
               </div>
             )}
 
