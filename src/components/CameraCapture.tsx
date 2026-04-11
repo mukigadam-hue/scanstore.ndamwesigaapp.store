@@ -2,9 +2,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff } from "lucide-react";
+import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CameraCaptureProps {
   open: boolean;
