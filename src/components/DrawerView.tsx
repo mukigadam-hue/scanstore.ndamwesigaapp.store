@@ -27,6 +27,7 @@ interface Document {
   file_size: number;
   file_type: string;
   created_at: string;
+  last_upgraded_at?: string | null;
 }
 
 interface DrawerViewProps {
