@@ -316,8 +316,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           sections: [{ children }],
         });
 
-        const buffer = await Packer.toBuffer(docFile);
-        const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+        const bufferResult = await Packer.toBuffer(docFile);
+        const uint8 = new Uint8Array(bufferResult);
+        const blob = new Blob([uint8], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
 
         const { error } = await supabase.storage
           .from("documents")
