@@ -1,8 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
-  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music,
+  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ import CompressionChoiceDialog from "@/components/CompressionChoiceDialog";
 import DownloadQualityDialog from "@/components/DownloadQualityDialog";
 import { compressImage, canCompress } from "@/lib/compressImage";
 import { enhanceImageBlob } from "@/lib/enhanceImage";
+import DocumentUpgradeDialog, { needsUpgrade } from "@/components/DocumentUpgradeDialog";
 
 interface Document {
   id: string;
@@ -66,6 +67,9 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const [showCamera, setShowCamera] = useState(false);
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
 
   const refreshDocs = () =>
     queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
