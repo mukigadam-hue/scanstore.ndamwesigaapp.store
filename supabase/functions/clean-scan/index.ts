@@ -55,14 +55,83 @@ serve(async (req) => {
       }
       const t = await response.text();
       console.error("AI error:", response.status, t);
-      throw new Error("AI processing failed");
+      // Return original as fallback instead of crashing
+      return new Response(JSON.stringify({ cleanedImage: image, fallback: true, error: "AI processing failed" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
-    const cleanedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    // Log the response structure for debugging
+    console.log("AI response keys:", JSON.stringify(Object.keys(data)));
+    if (data.choices?.[0]) {
+      const msg = data.choices[0].message;
+      console.log("Message keys:", JSON.stringify(Object.keys(msg || {})));
+      if (msg?.content) {
+        const contentType = typeof msg.content;
+        if (contentType === "string") {
+          console.log("Content is string, length:", msg.content.length);
+        } else {
+          console.log("Content type:", contentType);
+          if (Array.isArray(msg.content)) {
+            console.log("Content array types:", JSON.stringify(msg.content.map((c: any) => c.type)));
+          }
+        }
+      }
+    }
+
+    // Try multiple possible response formats
+    let cleanedImage: string | undefined;
+
+    // Format 1: images array on message
+    cleanedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+    // Format 2: content array with image_url parts
+    if (!cleanedImage && Array.isArray(data.choices?.[0]?.message?.content)) {
+      const parts = data.choices[0].message.content;
+      for (const part of parts) {
+        if (part.type === "image_url" && part.image_url?.url) {
+          cleanedImage = part.image_url.url;
+          break;
+        }
+        if (part.type === "image" && part.image_url?.url) {
+          cleanedImage = part.image_url.url;
+          break;
+        }
+      }
+    }
+
+    // Format 3: inline_data in content parts
+    if (!cleanedImage && Array.isArray(data.choices?.[0]?.message?.content)) {
+      const parts = data.choices[0].message.content;
+      for (const part of parts) {
+        if (part.inline_data?.data) {
+          cleanedImage = `data:${part.inline_data.mime_type || 'image/png'};base64,${part.inline_data.data}`;
+          break;
+        }
+      }
+    }
+
+    // Format 4: content is a base64 string itself
+    if (!cleanedImage) {
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content === "string" && (content.startsWith("data:image") || content.length > 1000)) {
+        if (content.startsWith("data:image")) {
+          cleanedImage = content;
+        } else {
+          // Might be raw base64
+          cleanedImage = `data:image/png;base64,${content}`;
+        }
+      }
+    }
 
     if (!cleanedImage) {
-      throw new Error("No cleaned image returned from AI");
+      // Return original image as fallback instead of erroring
+      console.error("No cleaned image found in AI response. Returning original.");
+      return new Response(JSON.stringify({ cleanedImage: image, fallback: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ cleanedImage }), {
