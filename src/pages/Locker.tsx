@@ -77,7 +77,7 @@ const Locker = () => {
     toast.success(seconds === 0 ? "Auto-lock disabled" : `Auto-lock set to ${seconds}s`);
   };
 
-  useAutoLock({
+  const { pause: pauseAutoLock, resume: resumeAutoLock } = useAutoLock({
     enabled: sessionVerified && autoLockSeconds > 0,
     timeoutMs: autoLockSeconds * 1000,
     onLock: () => {
