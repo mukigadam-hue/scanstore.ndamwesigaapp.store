@@ -53,7 +53,7 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 };
 
-const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
+const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: DrawerViewProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
