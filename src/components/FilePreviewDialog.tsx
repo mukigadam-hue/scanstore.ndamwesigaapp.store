@@ -17,6 +17,10 @@ interface FilePreviewDialogProps {
     file_type: string;
   } | null;
   onDownload: () => void;
+  /** For local file opening (not from storage) */
+  localPreviewUrl?: string | null;
+  localOfficeHtml?: string | null;
+  localTextContent?: string | null;
 }
 
 const TEXT_EXTENSIONS = [".txt", ".csv", ".json", ".xml", ".md", ".rtf", ".log", ".html", ".htm", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env", ".sh", ".bat", ".ps1", ".py", ".js", ".ts", ".jsx", ".tsx", ".css", ".scss", ".sql", ".r", ".rb", ".php", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".swift", ".kt"];
@@ -52,7 +56,7 @@ const isWordFile = (name: string, fileType: string) => {
     fileType.includes("word") || fileType.includes("msword") || fileType.includes("opendocument.text");
 };
 
-const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePreviewDialogProps) => {
+const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -71,6 +75,15 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
       setTextContent(null);
       setOfficeHtml(null);
       setZoom(1);
+      return;
+    }
+
+    // If local props are provided, use them directly
+    if (localPreviewUrl !== undefined) {
+      setPreviewUrl(localPreviewUrl);
+      if (localOfficeHtml !== undefined) setOfficeHtml(localOfficeHtml);
+      if (localTextContent !== undefined) setTextContent(localTextContent);
+      setLoading(false);
       return;
     }
 
