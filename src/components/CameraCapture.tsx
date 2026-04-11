@@ -131,6 +131,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const performScan = async (): Promise<string | null> => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return null;
+    onScanStart?.();
     setScanning(true);
     setScanProgress(0);
 
