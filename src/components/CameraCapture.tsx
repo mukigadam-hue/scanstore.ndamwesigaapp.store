@@ -188,7 +188,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           );
         }
 
-        // Apply light color-preserving enhancement
+        // Apply light local enhancement first
         const mainCtx = mainCanvas.getContext("2d");
         if (mainCtx) {
           mainCtx.filter = "contrast(1.12) brightness(1.02) saturate(1.05)";
@@ -196,12 +196,33 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           mainCtx.filter = "none";
         }
 
-        const dataUrl = mainCanvas.toDataURL("image/png", 1.0);
-        setCaptured(dataUrl);
+        const rawDataUrl = mainCanvas.toDataURL("image/jpeg", 0.92);
+        setCaptured(rawDataUrl);
         stopCamera();
         setScanning(false);
         setScanProgress(0);
-        toast.success("Scan complete!");
+
+        // Now run AI cleaning automatically
+        setAiCleaning(true);
+        toast.info("AI is cleaning your scan...");
+        try {
+          const { data, error } = await supabase.functions.invoke("clean-scan", {
+            body: { image: rawDataUrl },
+          });
+          if (error) throw error;
+          if (data?.cleanedImage) {
+            setCaptured(data.cleanedImage);
+            toast.success("AI cleaned your document!");
+          } else if (data?.error) {
+            console.warn("AI clean warning:", data.error);
+            toast.warning("AI cleaning unavailable. Using enhanced scan.");
+          }
+        } catch (err) {
+          console.error("AI clean error:", err);
+          toast.warning("AI cleaning failed. Using enhanced scan.");
+        } finally {
+          setAiCleaning(false);
+        }
       }
     };
 
