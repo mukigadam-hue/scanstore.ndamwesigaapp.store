@@ -478,6 +478,34 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           <div className="space-y-2 max-w-sm mx-auto">
             <div className="flex gap-2">
               <Button
+                onClick={async () => {
+                  if (!captured) return;
+                  setAiCleaning(true);
+                  toast.info("AI is re-cleaning your scan...");
+                  try {
+                    const { data, error } = await supabase.functions.invoke("clean-scan", {
+                      body: { image: captured },
+                    });
+                    if (error) throw error;
+                    if (data?.cleanedImage) {
+                      setCaptured(data.cleanedImage);
+                      toast.success("Document re-cleaned!");
+                    }
+                  } catch {
+                    toast.error("AI cleaning failed");
+                  } finally {
+                    setAiCleaning(false);
+                  }
+                }}
+                disabled={aiCleaning}
+                variant="outline"
+                className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                AI Clean
+              </Button>
+            </div>
+              <Button
                 onClick={saveAsImage}
                 className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
               >
