@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, RefreshCw } from "lucide-react";
+import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -17,21 +17,17 @@ interface FilePreviewDialogProps {
     file_type: string;
   } | null;
   onDownload: () => void;
-  /** For local file opening (not from storage) */
   localPreviewUrl?: string | null;
   localOfficeHtml?: string | null;
   localTextContent?: string | null;
 }
 
 const TEXT_EXTENSIONS = [".txt", ".csv", ".json", ".xml", ".md", ".rtf", ".log", ".html", ".htm", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env", ".sh", ".bat", ".ps1", ".py", ".js", ".ts", ".jsx", ".tsx", ".css", ".scss", ".sql", ".r", ".rb", ".php", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".swift", ".kt"];
-
 const OFFICE_EXTENSIONS = [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp"];
 
 const isTextFile = (name: string, fileType: string) => {
   const lower = name.toLowerCase();
-  return fileType.startsWith("text/") ||
-    fileType === "application/json" ||
-    fileType === "application/xml" ||
+  return fileType.startsWith("text/") || fileType === "application/json" || fileType === "application/xml" ||
     TEXT_EXTENSIONS.some(ext => lower.endsWith(ext));
 };
 
@@ -56,6 +52,10 @@ const isWordFile = (name: string, fileType: string) => {
     fileType.includes("word") || fileType.includes("msword") || fileType.includes("opendocument.text");
 };
 
+const canEdit = (name: string, fileType: string) => {
+  return isTextFile(name, fileType) || isWordFile(name, fileType) || isExcelFile(name, fileType);
+};
+
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -64,10 +64,17 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const [loading, setLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [showControls, setShowControls] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editedText, setEditedText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const editorRef = useRef<HTMLDivElement>(null);
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState(1);
+
+  // Store original arrayBuffer for Excel re-save
+  const excelBufferRef = useRef<ArrayBuffer | null>(null);
 
   useEffect(() => {
     if (!open || !doc) {
@@ -75,10 +82,13 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       setTextContent(null);
       setOfficeHtml(null);
       setZoom(1);
+      setEditing(false);
+      setEditedText("");
+      setHasChanges(false);
+      excelBufferRef.current = null;
       return;
     }
 
-    // If local props are provided, use them directly
     if (localPreviewUrl !== undefined) {
       setPreviewUrl(localPreviewUrl);
       if (localOfficeHtml !== undefined) setOfficeHtml(localOfficeHtml);
@@ -99,15 +109,14 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           toast.error("Failed to load preview");
           return;
         }
-
         if (revoked) return;
         setPreviewUrl(data.signedUrl);
 
-        // Client-side rendering for Office files
         if (isExcelFile(doc.name, doc.file_type)) {
           try {
             const resp = await fetch(data.signedUrl);
             const arrayBuffer = await resp.arrayBuffer();
+            excelBufferRef.current = arrayBuffer.slice(0);
             const XLSX = await import("xlsx");
             const workbook = XLSX.read(arrayBuffer, { type: "array" });
             let html = "";
@@ -132,12 +141,14 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           }
         }
 
-        // Fetch text content for text-based files
         if (isTextFile(doc.name, doc.file_type)) {
           try {
             const resp = await fetch(data.signedUrl);
             const text = await resp.text();
-            if (!revoked) setTextContent(text);
+            if (!revoked) {
+              setTextContent(text);
+              setEditedText(text);
+            }
           } catch {
             if (!revoked) setTextContent("Failed to load file content.");
           }
@@ -156,7 +167,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
     if (controlsTimer.current) clearTimeout(controlsTimer.current);
-    controlsTimer.current = setTimeout(() => setShowControls(false), 3000);
+    controlsTimer.current = setTimeout(() => setShowControls(false), 5000);
   }, []);
 
   useEffect(() => {
@@ -203,6 +214,181 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
     }
   };
 
+  // === SAVE LOGIC ===
+  const handleSaveText = async () => {
+    if (!doc || !doc.file_path || localPreviewUrl !== undefined) return;
+    setSaving(true);
+    try {
+      const blob = new Blob([editedText], { type: doc.file_type || "text/plain" });
+      const { error } = await supabase.storage
+        .from("documents")
+        .update(doc.file_path, blob, { upsert: true });
+      if (error) throw error;
+
+      setTextContent(editedText);
+      setHasChanges(false);
+      setEditing(false);
+      toast.success("File saved successfully!");
+    } catch (err: any) {
+      toast.error("Failed to save: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveOfficeDoc = async () => {
+    if (!doc || !doc.file_path || localPreviewUrl !== undefined) return;
+    if (!editorRef.current) return;
+
+    setSaving(true);
+    try {
+      const editedHtml = editorRef.current.innerHTML;
+
+      if (isWordFile(doc.name, doc.file_type)) {
+        // Convert HTML back to a simple .docx
+        const { Document, Packer, Paragraph, TextRun } = await import("docx");
+
+        // Parse HTML content into paragraphs
+        const tempDiv = window.document.createElement("div");
+        tempDiv.innerHTML = editedHtml;
+        const children: any[] = [];
+
+        const processNode = (node: Node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent?.trim();
+            if (text) {
+              children.push(new Paragraph({ children: [new TextRun(text)] }));
+            }
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const el = node as HTMLElement;
+            const tag = el.tagName.toLowerCase();
+
+            if (["h1", "h2", "h3", "h4", "h5", "h6"].includes(tag)) {
+              children.push(new Paragraph({
+                children: [new TextRun({ text: el.textContent || "", bold: true, size: tag === "h1" ? 32 : tag === "h2" ? 28 : 24 })],
+              }));
+            } else if (tag === "p" || tag === "div") {
+              const runs: any[] = [];
+              el.childNodes.forEach((child) => {
+                if (child.nodeType === Node.TEXT_NODE) {
+                  if (child.textContent) runs.push(new TextRun(child.textContent));
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                  const childEl = child as HTMLElement;
+                  const isBold = childEl.tagName === "STRONG" || childEl.tagName === "B";
+                  const isItalic = childEl.tagName === "EM" || childEl.tagName === "I";
+                  runs.push(new TextRun({
+                    text: childEl.textContent || "",
+                    bold: isBold,
+                    italics: isItalic,
+                  }));
+                }
+              });
+              if (runs.length > 0) {
+                children.push(new Paragraph({ children: runs }));
+              }
+            } else if (tag === "ul" || tag === "ol") {
+              el.querySelectorAll("li").forEach((li) => {
+                children.push(new Paragraph({
+                  children: [new TextRun("• " + (li.textContent || ""))],
+                  indent: { left: 720 },
+                }));
+              });
+            } else if (tag === "table") {
+              // Skip tables in Word save — too complex for simple conversion
+              el.querySelectorAll("tr").forEach((tr) => {
+                const cells = Array.from(tr.querySelectorAll("td, th")).map(c => c.textContent || "").join(" | ");
+                if (cells) children.push(new Paragraph({ children: [new TextRun(cells)] }));
+              });
+            } else {
+              // Recurse into unknown elements
+              el.childNodes.forEach(processNode);
+            }
+          }
+        };
+
+        tempDiv.childNodes.forEach(processNode);
+
+        if (children.length === 0) {
+          children.push(new Paragraph({ children: [new TextRun("")] }));
+        }
+
+        const docFile = new Document({
+          sections: [{ children }],
+        });
+
+        const bufferResult = await Packer.toBuffer(docFile);
+        const uint8 = new Uint8Array(bufferResult);
+        const blob = new Blob([uint8], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+
+        const { error } = await supabase.storage
+          .from("documents")
+          .update(doc.file_path, blob, { upsert: true });
+        if (error) throw error;
+      } else if (isExcelFile(doc.name, doc.file_type)) {
+        // Parse edited HTML table back to XLSX
+        const XLSX = await import("xlsx");
+        const tables = editorRef.current.querySelectorAll("table");
+        const wb = XLSX.utils.book_new();
+
+        if (tables.length > 0) {
+          tables.forEach((table, idx) => {
+            // Find the sheet name from the preceding h3
+            let sheetName = `Sheet${idx + 1}`;
+            const prev = table.previousElementSibling;
+            if (prev && prev.tagName === "H3") {
+              sheetName = prev.textContent || sheetName;
+            }
+            const ws = XLSX.utils.table_to_sheet(table);
+            XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+          });
+        } else {
+          // Fallback: plain text
+          const ws = XLSX.utils.aoa_to_sheet([[editorRef.current.textContent || ""]]);
+          XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        }
+
+        const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbOut], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+
+        const { error } = await supabase.storage
+          .from("documents")
+          .update(doc.file_path, blob, { upsert: true });
+        if (error) throw error;
+      }
+
+      setHasChanges(false);
+      setEditing(false);
+      toast.success("Document saved successfully!");
+    } catch (err: any) {
+      toast.error("Failed to save: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleEdit = () => {
+    if (editing && hasChanges) {
+      // Switching back to view mode with unsaved changes
+      const confirm = window.confirm("You have unsaved changes. Discard them?");
+      if (!confirm) return;
+    }
+    setEditing(!editing);
+    setHasChanges(false);
+    if (!editing && textContent) {
+      setEditedText(textContent);
+    }
+    resetControlsTimer();
+  };
+
+  const handleSave = () => {
+    if (!doc) return;
+    if (isTextFile(doc.name, doc.file_type)) {
+      handleSaveText();
+    } else {
+      handleSaveOfficeDoc();
+    }
+  };
+
   if (!open || !doc) return null;
 
   const isImage = doc.file_type.startsWith("image/");
@@ -212,6 +398,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const isText = isTextFile(doc.name, doc.file_type);
   const isOffice = isOfficeFile(doc.name, doc.file_type);
   const hasClientRendered = isOffice && officeHtml !== null;
+  const isEditable = canEdit(doc.name, doc.file_type) && localPreviewUrl === undefined;
+  const isLocalFile = localPreviewUrl !== undefined;
 
   const overlay = (
     <div
@@ -221,7 +409,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       {/* Top controls */}
       <div className={`absolute top-0 left-0 right-0 z-10 transition-all duration-300 ${showControls ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full pointer-events-none"}`}>
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-2 safe-area-top">
-          <h3 className="text-white text-sm font-medium truncate flex-1 mr-2">{doc.name}</h3>
+          <h3 className="text-white text-sm font-medium truncate flex-1 mr-2">
+            {doc.name}
+            {editing && <span className="text-primary text-xs ml-2">Editing</span>}
+          </h3>
           <div className="flex items-center gap-1 shrink-0">
             {(isImage || isPdf) && (
               <>
@@ -234,8 +425,35 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
                 </Button>
               </>
             )}
+
+            {/* Edit / Save buttons */}
+            {isEditable && !editing && (
+              <Button size="sm" onClick={handleToggleEdit} variant="ghost" className="h-8 px-2 text-white/80 hover:text-white hover:bg-white/10">
+                <Pencil className="h-4 w-4 mr-1" /> Edit
+              </Button>
+            )}
+            {isEditable && editing && (
+              <>
+                <Button size="sm" onClick={handleToggleEdit} variant="ghost" className="h-8 px-2 text-white/80 hover:text-white hover:bg-white/10">
+                  <Eye className="h-4 w-4 mr-1" /> View
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving || !hasChanges}
+                  className="h-8 px-3 bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                >
+                  {saving ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                  ) : (
+                    <><Save className="h-4 w-4 mr-1" /> Save</>
+                  )}
+                </Button>
+              </>
+            )}
+
             <Button size="sm" onClick={onDownload} className="brass-gradient text-primary-foreground hover:opacity-90 h-8 px-3">
-              <Download className="h-4 w-4 mr-1" /> Save
+              <Download className="h-4 w-4 mr-1" /> {isLocalFile ? "Save" : "Download"}
             </Button>
             <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
               <X className="h-5 w-5" />
@@ -305,10 +523,27 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
                   .office-rendered img { max-width: 100%; height: auto; }
                   .office-rendered ul, .office-rendered ol { padding-left: 24px; margin: 8px 0; }
                   .office-rendered li { margin: 4px 0; }
+                  .office-rendered[contenteditable="true"] { outline: none; cursor: text; min-height: 200px; }
+                  .office-rendered[contenteditable="true"]:focus { box-shadow: inset 0 0 0 2px #b8860b40; border-radius: 4px; }
+                  .office-rendered[contenteditable="true"] td,
+                  .office-rendered[contenteditable="true"] th { cursor: text; }
                 `}</style>
+                {editing && (
+                  <div className="max-w-4xl mx-auto mb-3 flex items-center gap-2 px-1">
+                    <div className="flex-1 h-px bg-amber-300/30" />
+                    <span className="text-xs text-amber-700 font-medium px-2 py-1 bg-amber-50 rounded-full border border-amber-200">
+                      ✏️ Editing Mode — tap on text to edit, then Save
+                    </span>
+                    <div className="flex-1 h-px bg-amber-300/30" />
+                  </div>
+                )}
                 <div
+                  ref={editorRef}
                   className="office-rendered max-w-4xl mx-auto"
+                  contentEditable={editing}
+                  suppressContentEditableWarning
                   dangerouslySetInnerHTML={{ __html: officeHtml! }}
+                  onInput={() => setHasChanges(true)}
                   style={{
                     fontSize: "15px",
                     lineHeight: "1.7",
@@ -332,11 +567,33 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
               </div>
             )}
 
-            {isText && (
+            {isText && !editing && (
               <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
-                <pre className="text-sm text-foreground whitespace-pre-wrap font-mono max-w-4xl mx-auto">
+                <pre className="text-sm whitespace-pre-wrap font-mono max-w-4xl mx-auto" style={{ color: "#1a1a1a" }}>
                   {textContent || "Loading..."}
                 </pre>
+              </div>
+            )}
+
+            {isText && editing && (
+              <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8 flex flex-col">
+                <div className="max-w-4xl mx-auto w-full mb-3 flex items-center gap-2">
+                  <div className="flex-1 h-px bg-amber-300/30" />
+                  <span className="text-xs text-amber-700 font-medium px-2 py-1 bg-amber-50 rounded-full border border-amber-200">
+                    ✏️ Editing Mode
+                  </span>
+                  <div className="flex-1 h-px bg-amber-300/30" />
+                </div>
+                <textarea
+                  className="flex-1 w-full max-w-4xl mx-auto font-mono text-sm border border-gray-300 rounded-lg p-4 resize-none focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                  style={{ color: "#1a1a1a", backgroundColor: "#fffef7", minHeight: "300px" }}
+                  value={editedText}
+                  onChange={(e) => {
+                    setEditedText(e.target.value);
+                    setHasChanges(true);
+                  }}
+                  spellCheck={false}
+                />
               </div>
             )}
 
