@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut } from "lucide-react";
