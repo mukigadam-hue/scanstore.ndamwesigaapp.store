@@ -350,6 +350,17 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           <Button
             variant="ghost"
             size="icon"
+            onClick={() => setShowUpgrade(true)}
+            className={`hover:text-primary hover:bg-secondary ${
+              outdatedCount > 0 ? "text-destructive animate-pulse" : "text-muted-foreground"
+            }`}
+            title={outdatedCount > 0 ? `${outdatedCount} files need upgrading` : "Check file versions"}
+          >
+            <RefreshCw className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setShowCamera(true)}
             disabled={!canUpload}
             className="text-muted-foreground hover:text-primary hover:bg-secondary"
