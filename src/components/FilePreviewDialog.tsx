@@ -295,9 +295,15 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
             {isOffice && hasClientRendered && (
               <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
                 <div
-                  className="max-w-4xl mx-auto prose prose-sm"
+                  className="max-w-4xl mx-auto"
                   dangerouslySetInnerHTML={{ __html: officeHtml }}
-                  style={{ fontSize: "14px" }}
+                  style={{
+                    fontSize: "15px",
+                    lineHeight: "1.7",
+                    color: "#1a1a1a",
+                    fontFamily: "'Segoe UI', Arial, sans-serif",
+                  }}
+                />
                 />
               </div>
             )}
