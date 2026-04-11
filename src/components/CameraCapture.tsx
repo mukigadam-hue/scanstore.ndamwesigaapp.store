@@ -152,11 +152,28 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const offsetX = (videoW - visibleW) / 2;
     const offsetY = (videoH - visibleH) / 2;
 
-    const insetPx = 24;
-    const cropX = offsetX + insetPx * coverScale;
-    const cropY = offsetY + insetPx * coverScale;
-    const cropW = visibleW - insetPx * 2 * coverScale;
-    const cropH = visibleH - insetPx * 2 * coverScale;
+    const isIdScan = scanMode === "id-front" || scanMode === "id-back";
+
+    let cropX: number, cropY: number, cropW: number, cropH: number;
+
+    if (isIdScan) {
+      // Crop to the ID card frame (landscape rectangle centered on screen)
+      const cardDisplayW = Math.min(displayW * 0.9, 380);
+      const cardDisplayH = cardDisplayW / 1.586; // ID card aspect ratio
+      const cardCenterX = displayW / 2;
+      const cardCenterY = displayH / 2;
+
+      cropX = offsetX + (cardCenterX - cardDisplayW / 2) * coverScale;
+      cropY = offsetY + (cardCenterY - cardDisplayH / 2) * coverScale;
+      cropW = cardDisplayW * coverScale;
+      cropH = cardDisplayH * coverScale;
+    } else {
+      const insetPx = 24;
+      cropX = offsetX + insetPx * coverScale;
+      cropY = offsetY + insetPx * coverScale;
+      cropW = visibleW - insetPx * 2 * coverScale;
+      cropH = visibleH - insetPx * 2 * coverScale;
+    }
 
     scanCanvas.width = cropW;
     scanCanvas.height = cropH;
@@ -618,20 +635,36 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
 
             {/* Scanner frame guide */}
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute inset-6 border-2 border-white/30 rounded-lg" />
-              <div className="absolute top-6 left-6 w-8 h-8 border-primary rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
-              <div className="absolute top-6 right-6 w-8 h-8 border-primary rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
-              <div className="absolute bottom-6 left-6 w-8 h-8 border-primary rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
-              <div className="absolute bottom-6 right-6 w-8 h-8 border-primary rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              {isIdMode ? (
+                /* ID card frame: landscape card shape centered in portrait screen */
+                <>
+                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '12px' }} />
+                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px' }}>
+                    <div className="absolute top-0 left-0 w-8 h-8 border-amber-400 rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-amber-400 rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-amber-400 rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-amber-400 rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+                  </div>
+                </>
+              ) : (
+                /* Full document frame */
+                <>
+                  <div className="absolute inset-6 border-2 border-white/30 rounded-lg" />
+                  <div className="absolute top-6 left-6 w-8 h-8 border-primary rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
+                  <div className="absolute top-6 right-6 w-8 h-8 border-primary rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
+                  <div className="absolute bottom-6 left-6 w-8 h-8 border-primary rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
+                  <div className="absolute bottom-6 right-6 w-8 h-8 border-primary rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+                </>
+              )}
             </div>
 
             {/* ID mode hint */}
             {isIdMode && !scanning && streaming && (
-              <div className="absolute top-10 left-0 right-0 flex justify-center pointer-events-none">
-                <span className="bg-amber-500/90 text-black text-xs font-bold px-4 py-1.5 rounded-full flex items-center gap-2">
+              <div className="absolute top-12 left-0 right-0 flex justify-center pointer-events-none">
+                <span className="bg-amber-500/90 text-black text-xs font-bold px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
                   <CreditCard className="h-3.5 w-3.5" />
-                  Place the {idSideLabel} of your ID inside the frame
+                  Place {idSideLabel} of ID in the card frame
                 </span>
               </div>
             )}
