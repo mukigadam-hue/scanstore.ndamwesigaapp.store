@@ -534,6 +534,12 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
         onChoice={handleDownloadChoice}
         onClose={() => setDownloadDoc(null)}
       />
+
+      <DocumentUpgradeDialog
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        documents={documents}
+      />
     </motion.div>
   );
 };
