@@ -298,15 +298,6 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
         handleClose();
       };
       img.src = captured;
-
-      const pdfBlob = pdf.output("blob");
-      const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
-        type: "application/pdf",
-      });
-
-      onCapture(pdfFile);
-      toast.success("Document scanned and saved as PDF!");
-      handleClose();
     } catch (err) {
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
