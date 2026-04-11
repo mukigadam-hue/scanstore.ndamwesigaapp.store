@@ -175,16 +175,28 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
       cropH = visibleH - insetPx * 2 * coverScale;
     }
 
-    scanCanvas.width = cropW;
-    scanCanvas.height = cropH;
-    mainCanvas.width = cropW;
-    mainCanvas.height = cropH;
+    // For ID scans, cap resolution to speed up AI processing
+    let targetW = cropW;
+    let targetH = cropH;
+    if (isIdScan) {
+      const maxIdDim = 1200;
+      if (targetW > maxIdDim || targetH > maxIdDim) {
+        const scale = maxIdDim / Math.max(targetW, targetH);
+        targetW = Math.round(targetW * scale);
+        targetH = Math.round(targetH * scale);
+      }
+    }
+
+    scanCanvas.width = targetW;
+    scanCanvas.height = targetH;
+    mainCanvas.width = targetW;
+    mainCanvas.height = targetH;
 
     const scanCtx = scanCanvas.getContext("2d");
     if (!scanCtx) return null;
 
     return new Promise<string | null>((resolve) => {
-      const duration = 1500;
+      const duration = isIdScan ? 800 : 1500; // Faster scan animation for ID
       const startTime = Date.now();
       let lastRow = 0;
 
@@ -193,14 +205,14 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
         const progress = Math.min(elapsed / duration, 1);
         setScanProgress(progress);
 
-        const currentRow = Math.floor(progress * cropH);
+        const currentRow = Math.floor(progress * targetH);
 
         if (currentRow > lastRow) {
           const rowsToCopy = currentRow - lastRow;
           scanCtx.drawImage(
             video,
-            cropX, cropY + lastRow, cropW, rowsToCopy,
-            0, lastRow, cropW, rowsToCopy
+            cropX, cropY + (lastRow / targetH) * cropH, cropW, (rowsToCopy / targetH) * cropH,
+            0, lastRow, targetW, rowsToCopy
           );
           lastRow = currentRow;
         }
@@ -208,11 +220,11 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
         if (progress < 1) {
           requestAnimationFrame(animateScanning);
         } else {
-          if (lastRow < cropH) {
+          if (lastRow < targetH) {
             scanCtx.drawImage(
               video,
-              cropX, cropY + lastRow, cropW, cropH - lastRow,
-              0, lastRow, cropW, cropH - lastRow
+              cropX, cropY + (lastRow / targetH) * cropH, cropW, ((targetH - lastRow) / targetH) * cropH,
+              0, lastRow, targetW, targetH - lastRow
             );
           }
 
@@ -223,7 +235,29 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             mainCtx.filter = "none";
           }
 
-          const rawDataUrl = mainCanvas.toDataURL("image/jpeg", 0.92);
+          // For ID scans: mask everything outside a rounded-rect card shape to white
+          if (isIdScan && mainCtx) {
+            // Draw white over areas outside the card with rounded corners
+            mainCtx.globalCompositeOperation = "destination-in";
+            const r = 16; // corner radius
+            mainCtx.beginPath();
+            mainCtx.moveTo(r, 0);
+            mainCtx.lineTo(targetW - r, 0);
+            mainCtx.arcTo(targetW, 0, targetW, r, r);
+            mainCtx.lineTo(targetW, targetH - r);
+            mainCtx.arcTo(targetW, targetH, targetW - r, targetH, r);
+            mainCtx.lineTo(r, targetH);
+            mainCtx.arcTo(0, targetH, 0, targetH - r, r);
+            mainCtx.lineTo(0, r);
+            mainCtx.arcTo(0, 0, r, 0, r);
+            mainCtx.closePath();
+            mainCtx.fillStyle = "#fff";
+            mainCtx.fill();
+            mainCtx.globalCompositeOperation = "source-over";
+          }
+
+          const jpegQuality = isIdScan ? 0.85 : 0.92;
+          const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
           stopCamera();
           setScanning(false);
           setScanProgress(0);
@@ -233,7 +267,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           toast.info("AI is cleaning your scan...");
           try {
             const { data, error } = await supabase.functions.invoke("clean-scan", {
-              body: { image: rawDataUrl },
+              body: { image: rawDataUrl, isIdScan },
             });
             if (error) throw error;
             if (data?.cleanedImage) {
@@ -637,9 +671,12 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             {/* Scanner frame guide */}
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               {isIdMode ? (
-                /* ID card frame: landscape card shape centered in portrait screen */
+                /* ID card frame: only the card area is visible, rest is dark overlay */
                 <>
-                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '12px' }} />
+                  {/* Dark overlay masks - cover everything OUTSIDE the card */}
+                  <div className="absolute inset-0 bg-black/70" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, calc(50% - min(45%, 190px)) calc(50% - min(45%, 190px)/1.586/2), calc(50% - min(45%, 190px)) calc(50% + min(45%, 190px)/1.586/2), calc(50% + min(45%, 190px)) calc(50% + min(45%, 190px)/1.586/2), calc(50% + min(45%, 190px)) calc(50% - min(45%, 190px)/1.586/2), calc(50% - min(45%, 190px)) calc(50% - min(45%, 190px)/1.586/2))' }} />
+                  {/* Visible card cutout with border */}
+                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2.5px solid rgba(255,255,255,0.5)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)' }} />
                   <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px' }}>
                     <div className="absolute top-0 left-0 w-8 h-8 border-amber-400 rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
                     <div className="absolute top-0 right-0 w-8 h-8 border-amber-400 rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
