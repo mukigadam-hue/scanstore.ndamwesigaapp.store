@@ -504,9 +504,9 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
                 <Sparkles className="h-4 w-4 mr-2" />
                 AI Clean
               </Button>
-            </div>
               <Button
                 onClick={saveAsImage}
+                disabled={aiCleaning}
                 className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
               >
                 <ImageIcon className="h-4 w-4 mr-2" />
@@ -514,6 +514,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               </Button>
               <Button
                 onClick={saveAsDocument}
+                disabled={aiCleaning}
                 className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
               >
                 <FileText className="h-4 w-4 mr-2" />
@@ -524,6 +525,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
+                disabled={aiCleaning}
                 onClick={() => {
                   setCaptured(null);
                   startCamera(facingMode);
@@ -535,6 +537,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
+                disabled={aiCleaning}
                 onClick={handleClose}
               >
                 Cancel
