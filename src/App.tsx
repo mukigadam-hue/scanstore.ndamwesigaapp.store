@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Locker from "./pages/Locker";
 import ResetPassword from "./pages/ResetPassword";
+import OpenFile from "./pages/OpenFile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/locker" element={<Locker />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/open" element={<OpenFile />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -56,7 +56,7 @@ const isWordFile = (name: string, fileType: string) => {
     fileType.includes("word") || fileType.includes("msword") || fileType.includes("opendocument.text");
 };
 
-const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePreviewDialogProps) => {
+const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
@@ -78,7 +78,15 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePre
       return;
     }
 
-    let revoked = false;
+      // If local props are provided, use them directly
+      if (localPreviewUrl !== undefined) {
+        setPreviewUrl(localPreviewUrl);
+        if (localOfficeHtml !== undefined) setOfficeHtml(localOfficeHtml);
+        if (localTextContent !== undefined) setTextContent(localTextContent);
+        setLoading(false);
+        return;
+      }
+      
     const loadPreview = async () => {
       setLoading(true);
       try {
