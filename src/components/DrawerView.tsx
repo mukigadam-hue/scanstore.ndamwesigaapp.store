@@ -512,8 +512,9 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
       <CameraCapture
         open={showCamera}
-        onClose={() => setShowCamera(false)}
-        onCapture={handleCameraCapture}
+        onClose={() => { setShowCamera(false); onScanEnd?.(); }}
+        onCapture={(file) => { onScanEnd?.(); handleCameraCapture(file); }}
+        onScanStart={onScanStart}
       />
 
       {compressionFile && (

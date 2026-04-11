@@ -332,6 +332,8 @@ const Locker = () => {
                 drawerName={selectedDrawer}
                 documents={getDrawerDocs(selectedDrawer)}
                 onBack={() => setSelectedDrawer(null)}
+                onScanStart={pauseAutoLock}
+                onScanEnd={resumeAutoLock}
               />
             ) : (
               <motion.div
