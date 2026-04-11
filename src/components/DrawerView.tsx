@@ -34,6 +34,8 @@ interface DrawerViewProps {
   drawerName: string;
   documents: Document[];
   onBack: () => void;
+  onScanStart?: () => void;
+  onScanEnd?: () => void;
 }
 
 const getFileIcon = (type: string) => {
