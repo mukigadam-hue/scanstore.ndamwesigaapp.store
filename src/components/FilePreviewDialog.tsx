@@ -521,23 +521,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
             )}
 
             {isPdf && (
-              <object
-                data={previewUrl + "#toolbar=1&view=FitH"}
-                type="application/pdf"
-                className="w-full h-full border-none bg-white"
-                title={doc.name}
-              >
-                <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
-                  <FileText className="h-16 w-16 text-white/30" />
-                  <p className="text-white text-lg">{doc.name}</p>
-                  <p className="text-sm text-white/60 text-center max-w-sm">
-                    Your browser cannot display this PDF inline. Tap below to download and view it.
-                  </p>
-                  <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                    <Download className="h-4 w-4 mr-2" /> Download PDF
-                  </Button>
-                </div>
-              </object>
+              <PdfCanvasViewer url={previewUrl} zoom={zoom} />
             )}
 
             {isVideo && (
