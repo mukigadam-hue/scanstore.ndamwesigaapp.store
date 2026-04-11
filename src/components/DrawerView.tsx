@@ -1,8 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
-  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music,
+  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ import CompressionChoiceDialog from "@/components/CompressionChoiceDialog";
 import DownloadQualityDialog from "@/components/DownloadQualityDialog";
 import { compressImage, canCompress } from "@/lib/compressImage";
 import { enhanceImageBlob } from "@/lib/enhanceImage";
+import DocumentUpgradeDialog, { needsUpgrade } from "@/components/DocumentUpgradeDialog";
 
 interface Document {
   id: string;
@@ -26,6 +27,7 @@ interface Document {
   file_size: number;
   file_type: string;
   created_at: string;
+  last_upgraded_at?: string | null;
 }
 
 interface DrawerViewProps {
@@ -66,6 +68,9 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
   const [showCamera, setShowCamera] = useState(false);
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+
+  const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
 
   const refreshDocs = () =>
     queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
@@ -346,6 +351,17 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           <Button
             variant="ghost"
             size="icon"
+            onClick={() => setShowUpgrade(true)}
+            className={`hover:text-primary hover:bg-secondary ${
+              outdatedCount > 0 ? "text-destructive animate-pulse" : "text-muted-foreground"
+            }`}
+            title={outdatedCount > 0 ? `${outdatedCount} files need upgrading` : "Check file versions"}
+          >
+            <RefreshCw className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setShowCamera(true)}
             disabled={!canUpload}
             className="text-muted-foreground hover:text-primary hover:bg-secondary"
@@ -369,6 +385,29 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
           </Button>
         </div>
       </div>
+
+      {/* Upgrade reminder banner */}
+      {outdatedCount > 0 && documents.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <RefreshCw className="h-4 w-4 text-destructive shrink-0" />
+            <p className="text-xs text-foreground">
+              <span className="font-semibold">{outdatedCount}</span> file{outdatedCount !== 1 ? "s" : ""} may need a format upgrade for future device compatibility.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setShowUpgrade(true)}
+            className="brass-gradient text-primary-foreground text-xs shrink-0"
+          >
+            Upgrade
+          </Button>
+        </motion.div>
+      )}
 
       {/* Document list */}
       {documents.length === 0 ? (
@@ -495,6 +534,12 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
         fileName={downloadDoc?.name || ""}
         onChoice={handleDownloadChoice}
         onClose={() => setDownloadDoc(null)}
+      />
+
+      <DocumentUpgradeDialog
+        open={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        documents={documents}
       />
     </motion.div>
   );

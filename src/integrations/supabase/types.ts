@@ -22,6 +22,7 @@ export type Database = {
           file_size: number
           file_type: string
           id: string
+          last_upgraded_at: string | null
           name: string
           updated_at: string
           user_id: string
@@ -33,6 +34,7 @@ export type Database = {
           file_size?: number
           file_type?: string
           id?: string
+          last_upgraded_at?: string | null
           name: string
           updated_at?: string
           user_id: string
@@ -44,6 +46,7 @@ export type Database = {
           file_size?: number
           file_type?: string
           id?: string
+          last_upgraded_at?: string | null
           name?: string
           updated_at?: string
           user_id?: string

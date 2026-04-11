@@ -1,0 +1,1 @@
+ALTER TABLE public.documents ADD COLUMN last_upgraded_at timestamp with time zone DEFAULT NULL;
