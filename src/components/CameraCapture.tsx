@@ -27,6 +27,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   const [scanProgress, setScanProgress] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [aiCleaning, setAiCleaning] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
