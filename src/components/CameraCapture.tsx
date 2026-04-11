@@ -410,11 +410,21 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             )}
           </>
         ) : (
-          <img
-            src={captured}
-            alt="Captured"
-            className="max-w-full max-h-full object-contain"
-          />
+          <div className="relative">
+            <img
+              src={captured}
+              alt="Captured"
+              className={`max-w-full max-h-full object-contain ${aiCleaning ? "opacity-50" : ""}`}
+            />
+            {aiCleaning && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <Sparkles className="h-10 w-10 text-primary animate-pulse" />
+                <p className="text-white text-sm font-medium mt-2 bg-black/60 px-3 py-1 rounded-full">
+                  AI cleaning document...
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
