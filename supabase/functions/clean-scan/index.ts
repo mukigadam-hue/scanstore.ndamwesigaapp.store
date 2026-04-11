@@ -55,7 +55,10 @@ serve(async (req) => {
       }
       const t = await response.text();
       console.error("AI error:", response.status, t);
-      throw new Error("AI processing failed");
+      // Return original as fallback instead of crashing
+      return new Response(JSON.stringify({ cleanedImage: image, fallback: true, error: "AI processing failed" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await response.json();
