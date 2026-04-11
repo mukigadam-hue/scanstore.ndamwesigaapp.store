@@ -181,7 +181,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     let targetW = cropW;
     let targetH = cropH;
     if (isIdScan) {
-      const maxIdDim = 1200;
+      const maxIdDim = 900;
       if (targetW > maxIdDim || targetH > maxIdDim) {
         const scale = maxIdDim / Math.max(targetW, targetH);
         targetW = Math.round(targetW * scale);
@@ -258,7 +258,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             mainCtx.globalCompositeOperation = "source-over";
           }
 
-          const jpegQuality = isIdScan ? 0.85 : 0.92;
+          const jpegQuality = isIdScan ? 0.75 : 0.92;
           const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
           stopCamera();
           setScanning(false);
@@ -674,11 +674,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               {isIdMode ? (
                 /* ID card frame: only the card area is visible, rest is dark overlay */
-                <>
-                  {/* Dark overlay masks - cover everything OUTSIDE the card */}
-                  <div className="absolute inset-0 bg-black/70" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, calc(50% - min(45%, 190px)) calc(50% - min(45%, 190px)/1.586/2), calc(50% - min(45%, 190px)) calc(50% + min(45%, 190px)/1.586/2), calc(50% + min(45%, 190px)) calc(50% + min(45%, 190px)/1.586/2), calc(50% + min(45%, 190px)) calc(50% - min(45%, 190px)/1.586/2), calc(50% - min(45%, 190px)) calc(50% - min(45%, 190px)/1.586/2))' }} />
-                  {/* Visible card cutout with border */}
-                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2.5px solid rgba(255,255,255,0.5)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.6)' }} />
+              <>
+                  {/* Card cutout: box-shadow darkens everything outside */}
+                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
                   <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px' }}>
                     <div className="absolute top-0 left-0 w-8 h-8 border-amber-400 rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
                     <div className="absolute top-0 right-0 w-8 h-8 border-amber-400 rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
