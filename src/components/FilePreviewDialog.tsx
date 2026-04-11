@@ -304,7 +304,6 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
                     fontFamily: "'Segoe UI', Arial, sans-serif",
                   }}
                 />
-                />
               </div>
             )}
 
