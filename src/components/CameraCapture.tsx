@@ -118,7 +118,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     stopCamera();
   };
 
-  const scanDocument = () => {
+  const scanDocument = async () => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return;
     setScanning(true);
     setScanProgress(0);
