@@ -258,35 +258,46 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   };
 
   const saveAsDocument = () => {
-    if (!captured || !canvasRef.current) return;
+    if (!captured) return;
 
     try {
-      const canvas = canvasRef.current;
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
+      // Load the captured image to get dimensions
+      const img = new Image();
+      img.onload = () => {
+        const imgWidth = img.width;
+        const imgHeight = img.height;
 
-      // Use high-quality JPEG for PDF to keep file size manageable while preserving colors
-      const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        const pdf = new jsPDF({
+          orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+          unit: "mm",
+        });
 
-      const pdf = new jsPDF({
-        orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
-        unit: "mm",
-      });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 5;
+        const availableWidth = pageWidth - margin * 2;
+        const availableHeight = pageHeight - margin * 2;
+        const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+        const scaledWidth = imgWidth * ratio;
+        const scaledHeight = imgHeight * ratio;
 
-      const margin = 5;
-      const availableWidth = pageWidth - margin * 2;
-      const availableHeight = pageHeight - margin * 2;
-      const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
-      const scaledWidth = imgWidth * ratio;
-      const scaledHeight = imgHeight * ratio;
+        const xOffset = (pageWidth - scaledWidth) / 2;
+        const yOffset = (pageHeight - scaledHeight) / 2;
 
-      const xOffset = (pageWidth - scaledWidth) / 2;
-      const yOffset = (pageHeight - scaledHeight) / 2;
+        const format = captured.includes("image/png") ? "PNG" : "JPEG";
+        pdf.addImage(captured, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
 
-      pdf.addImage(jpegDataUrl, "JPEG", xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
+        const pdfBlob = pdf.output("blob");
+        const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
+          type: "application/pdf",
+        });
+
+        onCapture(pdfFile);
+        toast.success("Document scanned and saved as PDF!");
+        handleClose();
+      };
+      img.src = captured;
 
       const pdfBlob = pdf.output("blob");
       const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
