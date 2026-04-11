@@ -13,6 +13,7 @@ interface CameraCaptureProps {
 }
 
 const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
+  useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanCanvasRef = useRef<HTMLCanvasElement>(null);
