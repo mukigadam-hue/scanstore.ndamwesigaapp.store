@@ -152,11 +152,28 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const offsetX = (videoW - visibleW) / 2;
     const offsetY = (videoH - visibleH) / 2;
 
-    const insetPx = 24;
-    const cropX = offsetX + insetPx * coverScale;
-    const cropY = offsetY + insetPx * coverScale;
-    const cropW = visibleW - insetPx * 2 * coverScale;
-    const cropH = visibleH - insetPx * 2 * coverScale;
+    const isIdScan = scanMode === "id-front" || scanMode === "id-back";
+
+    let cropX: number, cropY: number, cropW: number, cropH: number;
+
+    if (isIdScan) {
+      // Crop to the ID card frame (landscape rectangle centered on screen)
+      const cardDisplayW = Math.min(displayW * 0.9, 380);
+      const cardDisplayH = cardDisplayW / 1.586; // ID card aspect ratio
+      const cardCenterX = displayW / 2;
+      const cardCenterY = displayH / 2;
+
+      cropX = offsetX + (cardCenterX - cardDisplayW / 2) * coverScale;
+      cropY = offsetY + (cardCenterY - cardDisplayH / 2) * coverScale;
+      cropW = cardDisplayW * coverScale;
+      cropH = cardDisplayH * coverScale;
+    } else {
+      const insetPx = 24;
+      cropX = offsetX + insetPx * coverScale;
+      cropY = offsetY + insetPx * coverScale;
+      cropW = visibleW - insetPx * 2 * coverScale;
+      cropH = visibleH - insetPx * 2 * coverScale;
+    }
 
     scanCanvas.width = cropW;
     scanCanvas.height = cropH;
