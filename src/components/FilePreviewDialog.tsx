@@ -78,6 +78,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
   useEffect(() => {
     if (!open || !doc) {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
       setPreviewUrl(null);
       setTextContent(null);
       setOfficeHtml(null);
