@@ -78,6 +78,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
   useEffect(() => {
     if (!open || !doc) {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
       setPreviewUrl(null);
       setTextContent(null);
       setOfficeHtml(null);
@@ -110,7 +113,27 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           return;
         }
         if (revoked) return;
-        setPreviewUrl(data.signedUrl);
+
+        // For PDFs and images, fetch as blob to avoid Chrome blocking cross-origin iframes
+        const isPdfFile = doc.file_type.includes("pdf");
+        const isImageFile = doc.file_type.startsWith("image/");
+        const isVideoFile = doc.file_type.startsWith("video/");
+        const isAudioFile = doc.file_type.startsWith("audio/");
+
+        if (isPdfFile || isImageFile || isVideoFile || isAudioFile) {
+          try {
+            const resp = await fetch(data.signedUrl);
+            const blob = await resp.blob();
+            if (revoked) return;
+            const blobUrl = URL.createObjectURL(blob);
+            setPreviewUrl(blobUrl);
+          } catch {
+            // Fallback to signed URL
+            if (!revoked) setPreviewUrl(data.signedUrl);
+          }
+        } else {
+          setPreviewUrl(data.signedUrl);
+        }
 
         if (isExcelFile(doc.name, doc.file_type)) {
           try {
