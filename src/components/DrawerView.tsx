@@ -385,6 +385,29 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
         </div>
       </div>
 
+      {/* Upgrade reminder banner */}
+      {outdatedCount > 0 && documents.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <RefreshCw className="h-4 w-4 text-destructive shrink-0" />
+            <p className="text-xs text-foreground">
+              <span className="font-semibold">{outdatedCount}</span> file{outdatedCount !== 1 ? "s" : ""} may need a format upgrade for future device compatibility.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setShowUpgrade(true)}
+            className="brass-gradient text-primary-foreground text-xs shrink-0"
+          >
+            Upgrade
+          </Button>
+        </motion.div>
+      )}
+
       {/* Document list */}
       {documents.length === 0 ? (
         <motion.div
