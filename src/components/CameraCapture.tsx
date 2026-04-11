@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff } from "lucide-react";
@@ -12,6 +13,7 @@ interface CameraCaptureProps {
 }
 
 const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
+  useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanCanvasRef = useRef<HTMLCanvasElement>(null);

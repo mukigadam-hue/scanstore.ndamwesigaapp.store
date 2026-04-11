@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut } from "lucide-react";
@@ -19,6 +20,7 @@ interface FilePreviewDialogProps {
 }
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload }: FilePreviewDialogProps) => {
+  useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

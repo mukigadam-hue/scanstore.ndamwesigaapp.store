@@ -10,6 +10,7 @@ import {
   GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
   KeyRound, AlertTriangle, Mail, Loader2,
 } from "lucide-react";
+import NativeAdSlot from "@/components/NativeAdSlot";
 
 interface SecuritySettingsRow {
   pin_code: string | null;
@@ -266,7 +267,8 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const remainingMethods = availableMethods.filter((m) => !verifiedMethods.has(m.id));
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      <NativeAdSlot slotId="verify-top" size="medium" className="mb-4 max-w-md w-full" />
       <motion.div
         initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -608,6 +610,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <div className="brass-gradient h-1" />
         </div>
       </motion.div>
+      <NativeAdSlot slotId="verify-bottom" size="medium" className="mt-4 max-w-md w-full" />
     </div>
   );
 };
