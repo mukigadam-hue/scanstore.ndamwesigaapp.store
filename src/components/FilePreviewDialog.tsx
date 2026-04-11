@@ -294,9 +294,21 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
             {isOffice && hasClientRendered && (
               <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
+                <style>{`
+                  .office-rendered table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+                  .office-rendered th, .office-rendered td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; }
+                  .office-rendered th { background: #f3f4f6; font-weight: 600; }
+                  .office-rendered tr:nth-child(even) { background: #f9fafb; }
+                  .office-rendered h1, .office-rendered h2, .office-rendered h3 { color: #111; font-weight: 700; margin: 16px 0 8px; }
+                  .office-rendered h1 { font-size: 24px; } .office-rendered h2 { font-size: 20px; } .office-rendered h3 { font-size: 17px; }
+                  .office-rendered p { margin: 6px 0; }
+                  .office-rendered img { max-width: 100%; height: auto; }
+                  .office-rendered ul, .office-rendered ol { padding-left: 24px; margin: 8px 0; }
+                  .office-rendered li { margin: 4px 0; }
+                `}</style>
                 <div
-                  className="max-w-4xl mx-auto"
-                  dangerouslySetInnerHTML={{ __html: officeHtml }}
+                  className="office-rendered max-w-4xl mx-auto"
+                  dangerouslySetInnerHTML={{ __html: officeHtml! }}
                   style={{
                     fontSize: "15px",
                     lineHeight: "1.7",
