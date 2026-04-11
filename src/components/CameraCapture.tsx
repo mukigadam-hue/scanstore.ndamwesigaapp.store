@@ -160,7 +160,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const startTime = Date.now();
     let lastRow = 0;
 
-    const animateScanning = () => {
+    const animateScanning = async () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       setScanProgress(progress);
