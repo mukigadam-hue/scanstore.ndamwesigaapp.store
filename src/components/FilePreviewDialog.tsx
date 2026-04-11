@@ -59,6 +59,71 @@ const canEdit = (name: string, fileType: string) => {
   return isTextFile(name, fileType) || isWordFile(name, fileType) || isExcelFile(name, fileType);
 };
 
+const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [numPages, setNumPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPdf = async () => {
+      try {
+        const doc = await pdfjsLib.getDocument(url).promise;
+        if (!cancelled) {
+          setPdfDoc(doc);
+          setNumPages(doc.numPages);
+          setCurrentPage(1);
+        }
+      } catch (e) {
+        console.error("PDF load error", e);
+      }
+    };
+    loadPdf();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
+    let cancelled = false;
+    const renderPage = async () => {
+      const page = await pdfDoc.getPage(currentPage);
+      const container = containerRef.current;
+      if (!container || cancelled) return;
+      const containerWidth = container.clientWidth;
+      const unscaledViewport = page.getViewport({ scale: 1 });
+      const baseScale = containerWidth / unscaledViewport.width;
+      const viewport = page.getViewport({ scale: baseScale * zoom });
+      const canvas = canvasRef.current!;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext("2d")!;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    };
+    renderPage();
+    return () => { cancelled = true; };
+  }, [pdfDoc, currentPage, zoom]);
+
+  return (
+    <div ref={containerRef} className="w-full h-full flex flex-col items-center overflow-auto bg-white">
+      <canvas ref={canvasRef} className="max-w-full" />
+      {numPages > 1 && (
+        <div className="sticky bottom-2 flex items-center gap-3 bg-black/70 rounded-full px-4 py-2 mt-2">
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-white text-sm">{currentPage} / {numPages}</span>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage >= numPages}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
