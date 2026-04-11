@@ -11,11 +11,12 @@ interface CameraCaptureProps {
   open: boolean;
   onClose: () => void;
   onCapture: (file: File) => void;
+  onScanStart?: () => void;
 }
 
 type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview";
 
-const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
+const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
