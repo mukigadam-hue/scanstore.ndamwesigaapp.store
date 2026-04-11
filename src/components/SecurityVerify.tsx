@@ -10,6 +10,7 @@ import {
   GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
   KeyRound, AlertTriangle, Mail, Loader2,
 } from "lucide-react";
+import NativeAdSlot from "@/components/NativeAdSlot";
 
 interface SecuritySettingsRow {
   pin_code: string | null;

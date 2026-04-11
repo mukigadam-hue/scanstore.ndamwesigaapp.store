@@ -5,6 +5,7 @@ import { KeyRound, Shield, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
+import NativeAdSlot from "@/components/NativeAdSlot";
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -35,6 +36,11 @@ const Index = () => {
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto px-4 py-24 text-center">
+          {/* Top ad for free-tier users */}
+          <div className="mb-4">
+            <NativeAdSlot slotId="landing-top" size="banner" />
+          </div>
+
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
