@@ -99,70 +99,81 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       const challenge = new Uint8Array(32);
       crypto.getRandomValues(challenge);
 
-      const userId = new TextEncoder().encode(user?.id || "user");
-
-      // Try to get stored credential from DB first, then localStorage fallback
-      let storedCredId = localStorage.getItem(`webauthn_cred_${user?.id}`);
-
-      if (storedCredId) {
-        const credIdArray = Uint8Array.from(atob(storedCredId), c => c.charCodeAt(0));
+      // Try to authenticate with existing discoverable credential first
+      try {
         const assertionOptions: PublicKeyCredentialRequestOptions = {
           challenge,
           timeout: 60000,
           userVerification: "required",
-          allowCredentials: [{
-            id: credIdArray,
-            type: "public-key",
-            transports: ["internal"],
-          }],
+          rpId: window.location.hostname,
         };
 
         await navigator.credentials.get({ publicKey: assertionOptions });
         setFingerprintScanning(false);
         markVerified("fingerprint");
-      } else {
-        // First time on this device: register the biometric credential
-        const createOptions: PublicKeyCredentialCreationOptions = {
-          challenge,
-          rp: { name: "DocLocker", id: window.location.hostname },
-          user: {
-            id: userId,
-            name: user?.email || "user",
-            displayName: user?.email || "User",
-          },
-          pubKeyCredParams: [
-            { alg: -7, type: "public-key" },
-            { alg: -257, type: "public-key" },
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: "platform",
-            userVerification: "required",
-            residentKey: "preferred",
-          },
-          timeout: 60000,
-        };
-
-        const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
-
-        // Store credential ID persistently
-        const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
-        localStorage.setItem(`webauthn_cred_${user?.id}`, credId);
-
-        // Also store in DB for cross-session persistence
-        if (user?.id) {
-          await supabase.from("security_settings").update({
-            fingerprint_enabled: true,
-          }).eq("user_id", user.id);
-        }
-
-        setFingerprintScanning(false);
-        toast.success("Biometric registered to your device!");
-        markVerified("fingerprint");
+        return;
+      } catch {
+        // No discoverable credential found, try with stored credential ID
       }
+
+      const storedCredId = localStorage.getItem(`webauthn_cred_${user?.id}`);
+      if (storedCredId) {
+        try {
+          const credIdArray = Uint8Array.from(atob(storedCredId), c => c.charCodeAt(0));
+          const assertionOptions: PublicKeyCredentialRequestOptions = {
+            challenge,
+            timeout: 60000,
+            userVerification: "required",
+            allowCredentials: [{
+              id: credIdArray,
+              type: "public-key",
+              transports: ["internal"],
+            }],
+          };
+
+          await navigator.credentials.get({ publicKey: assertionOptions });
+          setFingerprintScanning(false);
+          markVerified("fingerprint");
+          return;
+        } catch {
+          // Stored credential failed, re-register below
+        }
+      }
+
+      // No valid credential found — register a new one using device biometric
+      const userId = new TextEncoder().encode(user?.id || "user");
+      const createOptions: PublicKeyCredentialCreationOptions = {
+        challenge,
+        rp: { name: "DocLocker", id: window.location.hostname },
+        user: {
+          id: userId,
+          name: user?.email || "user",
+          displayName: user?.email || "User",
+        },
+        pubKeyCredParams: [
+          { alg: -7, type: "public-key" },
+          { alg: -257, type: "public-key" },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: "platform",
+          userVerification: "required",
+          residentKey: "required",
+          requireResidentKey: true,
+        },
+        timeout: 60000,
+      };
+
+      const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
+      const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+      localStorage.setItem(`webauthn_cred_${user?.id}`, credId);
+
+      setFingerprintScanning(false);
+      toast.success("Biometric linked to your device fingerprint!");
+      markVerified("fingerprint");
     } catch (err: any) {
       setFingerprintScanning(false);
       if (err.name === "NotAllowedError") {
-        toast.error("Biometric verification cancelled or failed. Only your registered fingerprint/face can unlock.");
+        toast.error("Fingerprint not recognized or cancelled. Only the device owner's fingerprint can unlock.");
       } else {
         toast.error("Biometric verification failed. Try another method.");
       }
