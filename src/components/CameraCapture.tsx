@@ -2,9 +2,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff } from "lucide-react";
+import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -26,6 +27,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   const [scanProgress, setScanProgress] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [aiCleaning, setAiCleaning] = useState(false);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -116,7 +118,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     stopCamera();
   };
 
-  const scanDocument = () => {
+  const scanDocument = async () => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return;
     setScanning(true);
     setScanProgress(0);
@@ -158,7 +160,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
     const startTime = Date.now();
     let lastRow = 0;
 
-    const animateScanning = () => {
+    const animateScanning = async () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       setScanProgress(progress);
@@ -186,7 +188,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           );
         }
 
-        // Apply light color-preserving enhancement
+        // Apply light local enhancement first
         const mainCtx = mainCanvas.getContext("2d");
         if (mainCtx) {
           mainCtx.filter = "contrast(1.12) brightness(1.02) saturate(1.05)";
@@ -194,12 +196,33 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           mainCtx.filter = "none";
         }
 
-        const dataUrl = mainCanvas.toDataURL("image/png", 1.0);
-        setCaptured(dataUrl);
+        const rawDataUrl = mainCanvas.toDataURL("image/jpeg", 0.92);
+        setCaptured(rawDataUrl);
         stopCamera();
         setScanning(false);
         setScanProgress(0);
-        toast.success("Scan complete!");
+
+        // Now run AI cleaning automatically
+        setAiCleaning(true);
+        toast.info("AI is cleaning your scan...");
+        try {
+          const { data, error } = await supabase.functions.invoke("clean-scan", {
+            body: { image: rawDataUrl },
+          });
+          if (error) throw error;
+          if (data?.cleanedImage) {
+            setCaptured(data.cleanedImage);
+            toast.success("AI cleaned your document!");
+          } else if (data?.error) {
+            console.warn("AI clean warning:", data.error);
+            toast.warning("AI cleaning unavailable. Using enhanced scan.");
+          }
+        } catch (err) {
+          console.error("AI clean error:", err);
+          toast.warning("AI cleaning failed. Using enhanced scan.");
+        } finally {
+          setAiCleaning(false);
+        }
       }
     };
 
@@ -235,44 +258,46 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
   };
 
   const saveAsDocument = () => {
-    if (!captured || !canvasRef.current) return;
+    if (!captured) return;
 
     try {
-      const canvas = canvasRef.current;
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
+      // Load the captured image to get dimensions
+      const img = new Image();
+      img.onload = () => {
+        const imgWidth = img.width;
+        const imgHeight = img.height;
 
-      // Use high-quality JPEG for PDF to keep file size manageable while preserving colors
-      const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        const pdf = new jsPDF({
+          orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+          unit: "mm",
+        });
 
-      const pdf = new jsPDF({
-        orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
-        unit: "mm",
-      });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 5;
+        const availableWidth = pageWidth - margin * 2;
+        const availableHeight = pageHeight - margin * 2;
+        const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
+        const scaledWidth = imgWidth * ratio;
+        const scaledHeight = imgHeight * ratio;
 
-      const margin = 5;
-      const availableWidth = pageWidth - margin * 2;
-      const availableHeight = pageHeight - margin * 2;
-      const ratio = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
-      const scaledWidth = imgWidth * ratio;
-      const scaledHeight = imgHeight * ratio;
+        const xOffset = (pageWidth - scaledWidth) / 2;
+        const yOffset = (pageHeight - scaledHeight) / 2;
 
-      const xOffset = (pageWidth - scaledWidth) / 2;
-      const yOffset = (pageHeight - scaledHeight) / 2;
+        const format = captured.includes("image/png") ? "PNG" : "JPEG";
+        pdf.addImage(captured, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
 
-      pdf.addImage(jpegDataUrl, "JPEG", xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
+        const pdfBlob = pdf.output("blob");
+        const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
+          type: "application/pdf",
+        });
 
-      const pdfBlob = pdf.output("blob");
-      const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, {
-        type: "application/pdf",
-      });
-
-      onCapture(pdfFile);
-      toast.success("Document scanned and saved as PDF!");
-      handleClose();
+        onCapture(pdfFile);
+        toast.success("Document scanned and saved as PDF!");
+        handleClose();
+      };
+      img.src = captured;
     } catch (err) {
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
@@ -387,11 +412,21 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
             )}
           </>
         ) : (
-          <img
-            src={captured}
-            alt="Captured"
-            className="max-w-full max-h-full object-contain"
-          />
+          <div className="relative">
+            <img
+              src={captured}
+              alt="Captured"
+              className={`max-w-full max-h-full object-contain ${aiCleaning ? "opacity-50" : ""}`}
+            />
+            {aiCleaning && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <Sparkles className="h-10 w-10 text-primary animate-pulse" />
+                <p className="text-white text-sm font-medium mt-2 bg-black/60 px-3 py-1 rounded-full">
+                  AI cleaning document...
+                </p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -445,7 +480,35 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
           <div className="space-y-2 max-w-sm mx-auto">
             <div className="flex gap-2">
               <Button
+                onClick={async () => {
+                  if (!captured) return;
+                  setAiCleaning(true);
+                  toast.info("AI is re-cleaning your scan...");
+                  try {
+                    const { data, error } = await supabase.functions.invoke("clean-scan", {
+                      body: { image: captured },
+                    });
+                    if (error) throw error;
+                    if (data?.cleanedImage) {
+                      setCaptured(data.cleanedImage);
+                      toast.success("Document re-cleaned!");
+                    }
+                  } catch {
+                    toast.error("AI cleaning failed");
+                  } finally {
+                    setAiCleaning(false);
+                  }
+                }}
+                disabled={aiCleaning}
+                variant="outline"
+                className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                AI Clean
+              </Button>
+              <Button
                 onClick={saveAsImage}
+                disabled={aiCleaning}
                 className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
               >
                 <ImageIcon className="h-4 w-4 mr-2" />
@@ -453,6 +516,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               </Button>
               <Button
                 onClick={saveAsDocument}
+                disabled={aiCleaning}
                 className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
               >
                 <FileText className="h-4 w-4 mr-2" />
@@ -463,6 +527,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
+                disabled={aiCleaning}
                 onClick={() => {
                   setCaptured(null);
                   startCamera(facingMode);
@@ -474,6 +539,7 @@ const CameraCapture = ({ open, onClose, onCapture }: CameraCaptureProps) => {
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
+                disabled={aiCleaning}
                 onClick={handleClose}
               >
                 Cancel
