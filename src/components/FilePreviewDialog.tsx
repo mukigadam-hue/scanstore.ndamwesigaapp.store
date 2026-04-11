@@ -17,6 +17,10 @@ interface FilePreviewDialogProps {
     file_type: string;
   } | null;
   onDownload: () => void;
+  /** For local file opening (not from storage) */
+  localPreviewUrl?: string | null;
+  localOfficeHtml?: string | null;
+  localTextContent?: string | null;
 }
 
 const TEXT_EXTENSIONS = [".txt", ".csv", ".json", ".xml", ".md", ".rtf", ".log", ".html", ".htm", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env", ".sh", ".bat", ".ps1", ".py", ".js", ".ts", ".jsx", ".tsx", ".css", ".scss", ".sql", ".r", ".rb", ".php", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".go", ".rs", ".swift", ".kt"];
