@@ -78,15 +78,16 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       return;
     }
 
-      // If local props are provided, use them directly
-      if (localPreviewUrl !== undefined) {
-        setPreviewUrl(localPreviewUrl);
-        if (localOfficeHtml !== undefined) setOfficeHtml(localOfficeHtml);
-        if (localTextContent !== undefined) setTextContent(localTextContent);
-        setLoading(false);
-        return;
-      }
-      
+    // If local props are provided, use them directly
+    if (localPreviewUrl !== undefined) {
+      setPreviewUrl(localPreviewUrl);
+      if (localOfficeHtml !== undefined) setOfficeHtml(localOfficeHtml);
+      if (localTextContent !== undefined) setTextContent(localTextContent);
+      setLoading(false);
+      return;
+    }
+
+    let revoked = false;
     const loadPreview = async () => {
       setLoading(true);
       try {
