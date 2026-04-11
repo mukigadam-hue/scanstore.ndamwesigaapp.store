@@ -9,11 +9,17 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { image } = await req.json();
+    const { image, isIdScan } = await req.json();
     if (!image) throw new Error("No image provided");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const prompt = isIdScan
+      ? "Clean this ID card scan. Make the background pure white. Sharpen all text, photos, and printed elements. Remove dirt and shadows. Keep exact layout. Output only the cleaned image."
+      : "Clean this scanned document image professionally. Remove all dirt, stains, creases, shadows, and background noise. Make the paper background pure clean white. Keep all text, logos, stamps, lines, and printed content perfectly sharp, clear and black. Preserve the exact layout, formatting, and structure. The result should look like a fresh, professionally printed document - as if it came straight from a printer. Do not add any text or watermarks. Output only the cleaned image.";
+
+    const model = isIdScan ? "google/gemini-2.5-flash-lite" : "google/gemini-3.1-flash-image-preview";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -22,19 +28,13 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
+        model,
         messages: [
           {
             role: "user",
             content: [
-              {
-                type: "text",
-                text: "Clean this scanned document image professionally. Remove all dirt, stains, creases, shadows, and background noise. Make the paper background pure clean white. Keep all text, logos, stamps, lines, and printed content perfectly sharp, clear and black. Preserve the exact layout, formatting, and structure. The result should look like a fresh, professionally printed document - as if it came straight from a printer. Do not add any text or watermarks. Output only the cleaned image."
-              },
-              {
-                type: "image_url",
-                image_url: { url: image }
-              }
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: image } }
             ]
           }
         ],
