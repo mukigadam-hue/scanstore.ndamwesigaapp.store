@@ -9,13 +9,17 @@ interface UseAutoLockOptions {
 export function useAutoLock({ enabled, timeoutMs, onLock }: UseAutoLockOptions) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onLockRef = useRef(onLock);
+  const pausedRef = useRef(false);
   onLockRef.current = onLock;
 
+  const pause = useCallback(() => { pausedRef.current = true; if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  const resume = useCallback(() => { pausedRef.current = false; resetTimer(); }, []);
+
   const resetTimer = useCallback(() => {
-    if (!enabled) return;
+    if (!enabled || pausedRef.current) return;
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      onLockRef.current();
+      if (!pausedRef.current) onLockRef.current();
     }, Math.min(timeoutMs, 120000));
   }, [enabled, timeoutMs]);
 
@@ -33,4 +37,6 @@ export function useAutoLock({ enabled, timeoutMs, onLock }: UseAutoLockOptions) 
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [enabled, resetTimer]);
+
+  return { pause, resume };
 }

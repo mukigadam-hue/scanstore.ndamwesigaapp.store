@@ -34,6 +34,8 @@ interface DrawerViewProps {
   drawerName: string;
   documents: Document[];
   onBack: () => void;
+  onScanStart?: () => void;
+  onScanEnd?: () => void;
 }
 
 const getFileIcon = (type: string) => {
@@ -51,7 +53,7 @@ const formatSize = (bytes: number) => {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 };
 
-const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
+const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: DrawerViewProps) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
@@ -510,8 +512,9 @@ const DrawerView = ({ drawerName, documents, onBack }: DrawerViewProps) => {
 
       <CameraCapture
         open={showCamera}
-        onClose={() => setShowCamera(false)}
-        onCapture={handleCameraCapture}
+        onClose={() => { setShowCamera(false); onScanEnd?.(); }}
+        onCapture={(file) => { onScanEnd?.(); handleCameraCapture(file); }}
+        onScanStart={onScanStart}
       />
 
       {compressionFile && (
