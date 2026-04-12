@@ -263,8 +263,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           setScanning(false);
           setScanProgress(0);
 
-          // Skip automatic AI cleaning for speed — user can tap "AI Clean" manually
           resolve(rawDataUrl);
+
+          // Background AI cleaning — runs after save, updates the preview silently
+          (async () => {
+            try {
+              const { data } = await supabase.functions.invoke("clean-scan", {
+                body: { image: rawDataUrl, isIdScan },
+              });
+              if (data?.cleanedImage && !data?.fallback) {
+                // Update captured image in the background if still on preview
+                setCaptured((prev) => (prev === rawDataUrl ? data.cleanedImage : prev));
+              }
+            } catch {
+              // Silently fail — user already has the raw scan
+            }
+          })();
         }
       };
 

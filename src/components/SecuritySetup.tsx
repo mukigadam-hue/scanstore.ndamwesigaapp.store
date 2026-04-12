@@ -106,11 +106,10 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
         ],
         authenticatorSelection: {
           authenticatorAttachment: "platform",
-          userVerification: "required",
-          residentKey: "required",
-          requireResidentKey: true,
+          userVerification: "preferred",
+          residentKey: "preferred",
         },
-        timeout: 60000,
+        timeout: 120000,
       };
 
       const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
