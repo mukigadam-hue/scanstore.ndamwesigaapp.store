@@ -12,10 +12,10 @@ const WEB_AUTHN_ALGORITHMS: PublicKeyCredentialParameters[] = [
   { alg: -257, type: "public-key" },
 ];
 
-const createChallenge = () => {
-  const challenge = new Uint8Array(32);
-  crypto.getRandomValues(challenge);
-  return challenge;
+const createChallenge = (): ArrayBuffer => {
+  const buffer = new ArrayBuffer(32);
+  crypto.getRandomValues(new Uint8Array(buffer));
+  return buffer;
 };
 
 const encodeCredentialId = (rawId: ArrayBuffer) => {
@@ -27,12 +27,24 @@ const encodeCredentialId = (rawId: ArrayBuffer) => {
   return btoa(binary);
 };
 
-const decodeCredentialId = (encodedId: string) =>
-  Uint8Array.from(atob(encodedId), (char) => char.charCodeAt(0));
+const decodeCredentialId = (encodedId: string): ArrayBuffer => {
+  const binary = atob(encodedId);
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
 
-const createUserHandle = (userId?: string | null) => {
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return buffer;
+};
+
+const createUserHandle = (userId?: string | null): ArrayBuffer => {
   const encoded = new TextEncoder().encode(userId?.trim() || crypto.randomUUID());
-  return encoded.byteLength <= 64 ? encoded : encoded.slice(0, 64);
+  const trimmed = encoded.byteLength <= 64 ? encoded : encoded.slice(0, 64);
+  const buffer = new ArrayBuffer(trimmed.byteLength);
+  new Uint8Array(buffer).set(trimmed);
+  return buffer;
 };
 
 const ensureBiometricSupport = async () => {
@@ -47,7 +59,7 @@ const ensureBiometricSupport = async () => {
 };
 
 const buildRequestOptions = (
-  challenge: Uint8Array,
+  challenge: ArrayBuffer,
   storedCredentialId?: string | null,
 ): PublicKeyCredentialRequestOptions => ({
   challenge,
