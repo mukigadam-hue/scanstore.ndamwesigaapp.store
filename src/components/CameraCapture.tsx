@@ -55,8 +55,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facing,
-          width: { ideal: 2560 },
-          height: { ideal: 1920 },
+          width: { ideal: 1920 },
+          height: { ideal: 1440 },
         },
       });
       streamRef.current = stream;
@@ -177,17 +177,18 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       cropH = visibleH - insetPx * 2 * coverScale;
     }
 
-    // For ID scans, cap resolution to speed up AI processing
+    // Cap scan resolution to keep saving and AI cleaning fast on phones.
     let targetW = cropW;
     let targetH = cropH;
-    if (isIdScan) {
-      const maxIdDim = 900;
-      if (targetW > maxIdDim || targetH > maxIdDim) {
-        const scale = maxIdDim / Math.max(targetW, targetH);
-        targetW = Math.round(targetW * scale);
-        targetH = Math.round(targetH * scale);
-      }
+    const maxDimension = isIdScan ? 820 : 1600;
+    if (targetW > maxDimension || targetH > maxDimension) {
+      const scale = maxDimension / Math.max(targetW, targetH);
+      targetW = Math.round(targetW * scale);
+      targetH = Math.round(targetH * scale);
     }
+
+    targetW = Math.max(1, Math.round(targetW));
+    targetH = Math.max(1, Math.round(targetH));
 
     scanCanvas.width = targetW;
     scanCanvas.height = targetH;
@@ -198,7 +199,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!scanCtx) return null;
 
     return new Promise<string | null>((resolve) => {
-      const duration = isIdScan ? 800 : 1500; // Faster scan animation for ID
+      const duration = isIdScan ? 420 : 560;
       const startTime = Date.now();
       let lastRow = 0;
 
@@ -232,32 +233,31 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
           const mainCtx = mainCanvas.getContext("2d");
           if (mainCtx) {
-            // No color-altering filters — preserve original document colors
-            mainCtx.drawImage(scanCanvas, 0, 0);
+            if (isIdScan) {
+              const radius = Math.max(14, Math.round(Math.min(targetW, targetH) * 0.06));
+              mainCtx.fillStyle = "#ffffff";
+              mainCtx.fillRect(0, 0, targetW, targetH);
+              mainCtx.save();
+              mainCtx.beginPath();
+              mainCtx.moveTo(radius, 0);
+              mainCtx.lineTo(targetW - radius, 0);
+              mainCtx.arcTo(targetW, 0, targetW, radius, radius);
+              mainCtx.lineTo(targetW, targetH - radius);
+              mainCtx.arcTo(targetW, targetH, targetW - radius, targetH, radius);
+              mainCtx.lineTo(radius, targetH);
+              mainCtx.arcTo(0, targetH, 0, targetH - radius, radius);
+              mainCtx.lineTo(0, radius);
+              mainCtx.arcTo(0, 0, radius, 0, radius);
+              mainCtx.closePath();
+              mainCtx.clip();
+              mainCtx.drawImage(scanCanvas, 0, 0);
+              mainCtx.restore();
+            } else {
+              mainCtx.drawImage(scanCanvas, 0, 0);
+            }
           }
 
-          // For ID scans: mask everything outside a rounded-rect card shape to white
-          if (isIdScan && mainCtx) {
-            // Draw white over areas outside the card with rounded corners
-            mainCtx.globalCompositeOperation = "destination-in";
-            const r = 16; // corner radius
-            mainCtx.beginPath();
-            mainCtx.moveTo(r, 0);
-            mainCtx.lineTo(targetW - r, 0);
-            mainCtx.arcTo(targetW, 0, targetW, r, r);
-            mainCtx.lineTo(targetW, targetH - r);
-            mainCtx.arcTo(targetW, targetH, targetW - r, targetH, r);
-            mainCtx.lineTo(r, targetH);
-            mainCtx.arcTo(0, targetH, 0, targetH - r, r);
-            mainCtx.lineTo(0, r);
-            mainCtx.arcTo(0, 0, r, 0, r);
-            mainCtx.closePath();
-            mainCtx.fillStyle = "#fff";
-            mainCtx.fill();
-            mainCtx.globalCompositeOperation = "source-over";
-          }
-
-          const jpegQuality = isIdScan ? 0.80 : 0.92;
+          const jpegQuality = isIdScan ? 0.74 : 0.86;
           const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
           stopCamera();
           setScanning(false);
@@ -318,8 +318,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!ctx) return null;
 
     // A4 proportions at high res (portrait) - we'll place both ID images stacked
-    const canvasW = 2480; // ~A4 at 300dpi
-    const canvasH = 3508;
+    const canvasW = 1748;
+    const canvasH = 2480;
+    const scale = canvasW / 2480;
     canvas.width = canvasW;
     canvas.height = canvasH;
 
@@ -329,18 +330,18 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
     // Title text
     ctx.fillStyle = "#333333";
-    ctx.font = "bold 64px Arial, sans-serif";
+    ctx.font = `bold ${Math.round(64 * scale)}px Arial, sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText("ID Document Scan", canvasW / 2, 120);
+    ctx.fillText("ID Document Scan", canvasW / 2, Math.round(120 * scale));
 
     // Draw labels and images
     const drawSide = (img: HTMLImageElement, label: string, yStart: number, maxH: number) => {
       ctx.fillStyle = "#555555";
-      ctx.font = "bold 48px Arial, sans-serif";
+      ctx.font = `bold ${Math.round(48 * scale)}px Arial, sans-serif`;
       ctx.textAlign = "center";
       ctx.fillText(label, canvasW / 2, yStart);
 
-      const margin = 120;
+      const margin = Math.round(120 * scale);
       const availW = canvasW - margin * 2;
       const ratio = Math.min(availW / img.width, maxH / img.height);
       const w = img.width * ratio;
@@ -350,17 +351,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
       // Card shadow
       ctx.shadowColor = "rgba(0,0,0,0.15)";
-      ctx.shadowBlur = 30;
+      ctx.shadowBlur = Math.round(24 * scale);
       ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 8;
+      ctx.shadowOffsetY = Math.max(4, Math.round(8 * scale));
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x - 10, y - 10, w + 20, h + 20);
+      ctx.fillRect(x - 8, y - 8, w + 16, h + 16);
       ctx.shadowColor = "transparent";
 
       // Border
       ctx.strokeStyle = "#cccccc";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x - 10, y - 10, w + 20, h + 20);
+      ctx.lineWidth = Math.max(2, Math.round(3 * scale));
+      ctx.strokeRect(x - 8, y - 8, w + 16, h + 16);
 
       ctx.drawImage(img, x, y, w, h);
     };
@@ -370,9 +371,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       frontImg.onload = () => {
         const backImg = new Image();
         backImg.onload = () => {
-          drawSide(frontImg, "— FRONT SIDE —", 220, 1350);
-          drawSide(backImg, "— BACK SIDE —", 1750, 1350);
-          resolve(canvas.toDataURL("image/jpeg", 0.95));
+          drawSide(frontImg, "— FRONT SIDE —", Math.round(220 * scale), Math.round(1350 * scale));
+          drawSide(backImg, "— BACK SIDE —", Math.round(1750 * scale), Math.round(1350 * scale));
+          resolve(canvas.toDataURL("image/jpeg", 0.84));
         };
         backImg.src = idBackImage!;
       };
@@ -387,7 +388,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     try {
       const img = new Image();
       img.onload = () => {
-        const pdf = new jsPDF({ orientation: "portrait", unit: "mm" });
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", compress: true });
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
         const margin = 5;
@@ -458,6 +459,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const pdf = new jsPDF({
           orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
           unit: "mm",
+          compress: true,
         });
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();

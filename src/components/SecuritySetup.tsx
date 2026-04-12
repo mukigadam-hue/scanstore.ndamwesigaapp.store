@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getBiometricErrorMessage, registerDeviceBiometric } from "@/lib/webauthn";
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, Check,
@@ -73,61 +74,31 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   };
 
   const handleFingerprintScan = async () => {
-    // Use real WebAuthn for persistent biometric registration
-    if (!window.PublicKeyCredential) {
-      toast.error("Biometric authentication is not supported on this device");
-      return;
-    }
-
     try {
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      if (!available) {
-        toast.error("No biometric sensor found on this device.");
-        return;
-      }
-
       setFingerprintScanning(true);
 
-      const challenge = new Uint8Array(32);
-      crypto.getRandomValues(challenge);
-      const userId = new TextEncoder().encode(user?.id || "user");
+      const storedCredentialId = user?.id
+        ? localStorage.getItem(`webauthn_cred_${user.id}`)
+        : null;
+      const { credentialId, reusedExisting } = await registerDeviceBiometric(
+        { id: user?.id, email: user?.email },
+        storedCredentialId,
+      );
 
-      const createOptions: PublicKeyCredentialCreationOptions = {
-        challenge,
-        rp: { name: "DocLocker", id: window.location.hostname },
-        user: {
-          id: userId,
-          name: user?.email || "user",
-          displayName: user?.email || "User",
-        },
-        pubKeyCredParams: [
-          { alg: -7, type: "public-key" },
-          { alg: -257, type: "public-key" },
-        ],
-        authenticatorSelection: {
-          authenticatorAttachment: "platform",
-          userVerification: "preferred",
-          residentKey: "preferred",
-        },
-        timeout: 120000,
-      };
-
-      const credential = await navigator.credentials.create({ publicKey: createOptions }) as PublicKeyCredential;
-
-      // Store credential ID persistently in localStorage
-      const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
-      localStorage.setItem(`webauthn_cred_${user?.id}`, credId);
+      if (user?.id) {
+        localStorage.setItem(`webauthn_cred_${user.id}`, credentialId);
+      }
 
       setFingerprintScanning(false);
       markDone("fingerprint", true);
-      toast.success("Fingerprint registered ✓ — Your device will remember this!");
-    } catch (err: any) {
+      toast.success(
+        reusedExisting
+          ? "Fingerprint already linked on this device ✓"
+          : "Fingerprint registered ✓ — Your device will remember this!",
+      );
+    } catch (err) {
       setFingerprintScanning(false);
-      if (err.name === "NotAllowedError") {
-        toast.error("Biometric registration cancelled.");
-      } else {
-        toast.error("Biometric registration failed: " + err.message);
-      }
+      toast.error(getBiometricErrorMessage(err, "register"));
     }
   };
 

@@ -58,6 +58,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraUploadInFlightRef = useRef(false);
   const { canUpload, isFrozen, isRetrievalActive, storageUsed, storageLimit, storagePercent, currentPlan } =
     useSubscription();
 
@@ -184,13 +185,20 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   };
 
   const handleCameraCapture = async (file: File) => {
-    if (!user || !canUpload) return;
+    if (!user || !canUpload) {
+      cameraUploadInFlightRef.current = false;
+      onScanEnd?.();
+      return;
+    }
+
     setUploading(true);
     try {
       await uploadSingleFile(file, storageUsed);
       refreshDocs();
     } finally {
+      cameraUploadInFlightRef.current = false;
       setUploading(false);
+      onScanEnd?.();
     }
   };
 
@@ -512,8 +520,16 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
       <CameraCapture
         open={showCamera}
-        onClose={() => { setShowCamera(false); onScanEnd?.(); }}
-        onCapture={(file) => { onScanEnd?.(); handleCameraCapture(file); }}
+        onClose={() => {
+          setShowCamera(false);
+          if (!cameraUploadInFlightRef.current) {
+            onScanEnd?.();
+          }
+        }}
+        onCapture={(file) => {
+          cameraUploadInFlightRef.current = true;
+          void handleCameraCapture(file);
+        }}
         onScanStart={onScanStart}
       />
 

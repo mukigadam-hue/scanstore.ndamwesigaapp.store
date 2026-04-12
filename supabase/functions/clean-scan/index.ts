@@ -19,7 +19,7 @@ serve(async (req) => {
       ? "Clean this ID card scan. Make the background pure white. Sharpen all text, photos, and printed elements. Remove dirt and shadows. Preserve ALL original colors exactly — do not desaturate, shift, or alter any colors. Keep exact layout. Output only the cleaned image."
       : "Clean this scanned document image professionally. Remove all dirt, stains, creases, shadows, and background noise. Make the paper background pure clean white. Keep all text, logos, stamps, lines, and printed content perfectly sharp and clear. IMPORTANT: Preserve ALL original colors exactly as they are — do not change, desaturate, or shift any colors. Keep the exact layout, formatting, and structure. The result should look like a fresh, professionally printed document. Do not add any text or watermarks. Output only the cleaned image.";
 
-    const model = isIdScan ? "google/gemini-2.5-flash-lite" : "google/gemini-3.1-flash-image-preview";
+    const model = "google/gemini-3.1-flash-image-preview";
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -63,24 +63,6 @@ serve(async (req) => {
 
     const data = await response.json();
     
-    // Log the response structure for debugging
-    console.log("AI response keys:", JSON.stringify(Object.keys(data)));
-    if (data.choices?.[0]) {
-      const msg = data.choices[0].message;
-      console.log("Message keys:", JSON.stringify(Object.keys(msg || {})));
-      if (msg?.content) {
-        const contentType = typeof msg.content;
-        if (contentType === "string") {
-          console.log("Content is string, length:", msg.content.length);
-        } else {
-          console.log("Content type:", contentType);
-          if (Array.isArray(msg.content)) {
-            console.log("Content array types:", JSON.stringify(msg.content.map((c: any) => c.type)));
-          }
-        }
-      }
-    }
-
     // Try multiple possible response formats
     let cleanedImage: string | undefined;
 
