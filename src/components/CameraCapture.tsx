@@ -257,31 +257,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             mainCtx.globalCompositeOperation = "source-over";
           }
 
-          const jpegQuality = isIdScan ? 0.75 : 0.92;
+          const jpegQuality = isIdScan ? 0.80 : 0.92;
           const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
           stopCamera();
           setScanning(false);
           setScanProgress(0);
 
-          // AI clean
-          setAiCleaning(true);
-          toast.info("AI is cleaning your scan...");
-          try {
-            const { data, error } = await supabase.functions.invoke("clean-scan", {
-              body: { image: rawDataUrl, isIdScan },
-            });
-            if (error) throw error;
-            if (data?.cleanedImage) {
-              toast.success("AI cleaned your document!");
-              resolve(data.cleanedImage);
-              return;
-            }
-          } catch (err) {
-            console.error("AI clean error:", err);
-            toast.warning("AI cleaning failed. Using enhanced scan.");
-          } finally {
-            setAiCleaning(false);
-          }
+          // Skip automatic AI cleaning for speed — user can tap "AI Clean" manually
           resolve(rawDataUrl);
         }
       };

@@ -16,8 +16,8 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const prompt = isIdScan
-      ? "Clean this ID card scan. Make the background pure white. Sharpen all text, photos, and printed elements. Remove dirt and shadows. Keep exact layout. Output only the cleaned image."
-      : "Clean this scanned document image professionally. Remove all dirt, stains, creases, shadows, and background noise. Make the paper background pure clean white. Keep all text, logos, stamps, lines, and printed content perfectly sharp, clear and black. Preserve the exact layout, formatting, and structure. The result should look like a fresh, professionally printed document - as if it came straight from a printer. Do not add any text or watermarks. Output only the cleaned image.";
+      ? "Clean this ID card scan. Make the background pure white. Sharpen all text, photos, and printed elements. Remove dirt and shadows. Preserve ALL original colors exactly — do not desaturate, shift, or alter any colors. Keep exact layout. Output only the cleaned image."
+      : "Clean this scanned document image professionally. Remove all dirt, stains, creases, shadows, and background noise. Make the paper background pure clean white. Keep all text, logos, stamps, lines, and printed content perfectly sharp and clear. IMPORTANT: Preserve ALL original colors exactly as they are — do not change, desaturate, or shift any colors. Keep the exact layout, formatting, and structure. The result should look like a fresh, professionally printed document. Do not add any text or watermarks. Output only the cleaned image.";
 
     const model = isIdScan ? "google/gemini-2.5-flash-lite" : "google/gemini-3.1-flash-image-preview";
 
