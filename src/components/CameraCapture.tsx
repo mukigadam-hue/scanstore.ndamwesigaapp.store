@@ -232,9 +232,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
           const mainCtx = mainCanvas.getContext("2d");
           if (mainCtx) {
-            mainCtx.filter = "contrast(1.12) brightness(1.02) saturate(1.05)";
+            // No color-altering filters — preserve original document colors
             mainCtx.drawImage(scanCanvas, 0, 0);
-            mainCtx.filter = "none";
           }
 
           // For ID scans: mask everything outside a rounded-rect card shape to white
