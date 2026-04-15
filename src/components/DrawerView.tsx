@@ -86,6 +86,72 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     [documents]
   );
 
+  const toggleCleanSelect = useCallback((id: string) => {
+    setSelectedForClean((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllForClean = useCallback(() => {
+    if (selectedForClean.size === cleanableDocIds.length) {
+      setSelectedForClean(new Set());
+    } else {
+      setSelectedForClean(new Set(cleanableDocIds));
+    }
+  }, [cleanableDocIds, selectedForClean.size]);
+
+  const handleBatchClean = useCallback(async () => {
+    if (selectedForClean.size === 0) return;
+    setCleaning(true);
+    const toClean = documents.filter((d) => selectedForClean.has(d.id) && d.file_type.startsWith("image/"));
+    setCleanProgress({ done: 0, total: toClean.length });
+
+    let successCount = 0;
+    for (const doc of toClean) {
+      try {
+        // Download current file
+        const { data: blob, error } = await supabase.storage.from("documents").download(doc.file_path);
+        if (error || !blob) throw error;
+
+        // Convert to base64
+        const buf = await blob.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const mimeType = blob.type || "image/jpeg";
+
+        // Call AI clean
+        const { data: fnData, error: fnError } = await supabase.functions.invoke("clean-scan", {
+          body: { image: `data:${mimeType};base64,${base64}`, mode: "document" },
+        });
+        if (fnError || !fnData?.image) throw fnError || new Error("No image returned");
+
+        // Convert response to blob and upload
+        const cleanedB64 = fnData.image.replace(/^data:[^;]+;base64,/, "");
+        const binaryStr = atob(cleanedB64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const cleanedBlob = new Blob([bytes], { type: "image/png" });
+
+        await supabase.storage.from("documents").upload(doc.file_path, cleanedBlob, { upsert: true });
+        successCount++;
+      } catch (e) {
+        console.warn(`Failed to clean ${doc.name}:`, e);
+      }
+      setCleanProgress((prev) => ({ ...prev, done: prev.done + 1 }));
+    }
+
+    setCleaning(false);
+    setCleanMode(false);
+    setSelectedForClean(new Set());
+    if (successCount > 0) {
+      toast.success(`${successCount} document${successCount > 1 ? "s" : ""} cleaned successfully!`);
+      refreshDocs();
+    } else {
+      toast.error("Could not clean any documents. Only images can be cleaned.");
+    }
+  }, [selectedForClean, documents, user]);
+
   const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
 
   const refreshDocs = () =>
