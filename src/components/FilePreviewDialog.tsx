@@ -140,6 +140,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const editorRef = useRef<HTMLDivElement>(null);
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState(1);
+  const [aiCleaning, setAiCleaning] = useState(false);
 
   // Store original arrayBuffer for Excel re-save
   const excelBufferRef = useRef<ArrayBuffer | null>(null);
