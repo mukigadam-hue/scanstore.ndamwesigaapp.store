@@ -75,6 +75,17 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
 
+  // AI Clean selection mode
+  const [cleanMode, setCleanMode] = useState(false);
+  const [selectedForClean, setSelectedForClean] = useState<Set<string>>(new Set());
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanProgress, setCleanProgress] = useState({ done: 0, total: 0 });
+
+  const cleanableDocIds = useMemo(
+    () => documents.filter((d) => d.file_type.startsWith("image/")).map((d) => d.id),
+    [documents]
+  );
+
   const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
 
   const refreshDocs = () =>
