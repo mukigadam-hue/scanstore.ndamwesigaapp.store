@@ -1,9 +1,11 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
   Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw,
+  Sparkles, CheckSquare, X,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -72,6 +74,83 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+
+  // AI Clean selection mode
+  const [cleanMode, setCleanMode] = useState(false);
+  const [selectedForClean, setSelectedForClean] = useState<Set<string>>(new Set());
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanProgress, setCleanProgress] = useState({ done: 0, total: 0 });
+
+  const cleanableDocIds = useMemo(
+    () => documents.filter((d) => d.file_type.startsWith("image/")).map((d) => d.id),
+    [documents]
+  );
+
+  const toggleCleanSelect = useCallback((id: string) => {
+    setSelectedForClean((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllForClean = useCallback(() => {
+    if (selectedForClean.size === cleanableDocIds.length) {
+      setSelectedForClean(new Set());
+    } else {
+      setSelectedForClean(new Set(cleanableDocIds));
+    }
+  }, [cleanableDocIds, selectedForClean.size]);
+
+  const handleBatchClean = useCallback(async () => {
+    if (selectedForClean.size === 0) return;
+    setCleaning(true);
+    const toClean = documents.filter((d) => selectedForClean.has(d.id) && d.file_type.startsWith("image/"));
+    setCleanProgress({ done: 0, total: toClean.length });
+
+    let successCount = 0;
+    for (const doc of toClean) {
+      try {
+        // Download current file
+        const { data: blob, error } = await supabase.storage.from("documents").download(doc.file_path);
+        if (error || !blob) throw error;
+
+        // Convert to base64
+        const buf = await blob.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const mimeType = blob.type || "image/jpeg";
+
+        // Call AI clean
+        const { data: fnData, error: fnError } = await supabase.functions.invoke("clean-scan", {
+          body: { image: `data:${mimeType};base64,${base64}`, mode: "document" },
+        });
+        if (fnError || !fnData?.image) throw fnError || new Error("No image returned");
+
+        // Convert response to blob and upload
+        const cleanedB64 = fnData.image.replace(/^data:[^;]+;base64,/, "");
+        const binaryStr = atob(cleanedB64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const cleanedBlob = new Blob([bytes], { type: "image/png" });
+
+        await supabase.storage.from("documents").upload(doc.file_path, cleanedBlob, { upsert: true });
+        successCount++;
+      } catch (e) {
+        console.warn(`Failed to clean ${doc.name}:`, e);
+      }
+      setCleanProgress((prev) => ({ ...prev, done: prev.done + 1 }));
+    }
+
+    setCleaning(false);
+    setCleanMode(false);
+    setSelectedForClean(new Set());
+    if (successCount > 0) {
+      toast.success(`${successCount} document${successCount > 1 ? "s" : ""} cleaned successfully!`);
+      refreshDocs();
+    } else {
+      toast.error("Could not clean any documents. Only images can be cleaned.");
+    }
+  }, [selectedForClean, documents, user]);
 
   const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
 
@@ -369,6 +448,18 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           >
             <RefreshCw className="h-5 w-5" />
           </Button>
+          {/* AI Clean button - always visible when there are image documents */}
+          {canAccess && cleanableDocIds.length > 0 && !cleanMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => { setCleanMode(true); setSelectedForClean(new Set()); }}
+              className="text-primary hover:text-primary hover:bg-secondary"
+              title="AI Clean documents"
+            >
+              <Sparkles className="h-5 w-5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -396,8 +487,60 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         </div>
       </div>
 
+      {/* AI Clean mode toolbar */}
+      {cleanMode && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-primary/30 bg-primary/10 p-3 flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Sparkles className="h-4 w-4 text-primary shrink-0" />
+            {cleaning ? (
+              <p className="text-xs text-foreground">
+                Cleaning {cleanProgress.done}/{cleanProgress.total}…
+              </p>
+            ) : (
+              <p className="text-xs text-foreground">
+                Tap images to select, then clean them with AI
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={selectAllForClean}
+              disabled={cleaning}
+              className="text-xs border-primary/40 text-foreground"
+            >
+              <CheckSquare className="h-3.5 w-3.5 mr-1" />
+              {selectedForClean.size === cleanableDocIds.length ? "Deselect All" : "Select All"}
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleBatchClean}
+              disabled={cleaning || selectedForClean.size === 0}
+              className="brass-gradient text-primary-foreground text-xs"
+            >
+              <Sparkles className="h-3.5 w-3.5 mr-1" />
+              {cleaning ? "Cleaning…" : `Clean (${selectedForClean.size})`}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setCleanMode(false); setSelectedForClean(new Set()); }}
+              disabled={cleaning}
+              className="text-xs text-muted-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Upgrade reminder banner */}
-      {outdatedCount > 0 && documents.length > 0 && (
+      {outdatedCount > 0 && documents.length > 0 && !cleanMode && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -436,19 +579,40 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         </motion.div>
       ) : (
         <div className="space-y-2">
-          {documents.map((doc, i) => (
+          {documents.map((doc, i) => {
+            const isCleanable = doc.file_type.startsWith("image/");
+            const isSelected = selectedForClean.has(doc.id);
+            return (
             <motion.div
               key={doc.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ delay: i * 0.04 }}
-              className={`wood-panel rounded-lg border border-border p-4 flex items-center justify-between gap-4 group transition-colors cursor-pointer ${
-                canAccess ? "hover:border-brass/30" : "opacity-60"
+              className={`wood-panel rounded-lg border p-4 flex items-center justify-between gap-4 group transition-colors cursor-pointer ${
+                cleanMode && isSelected ? "border-primary/50 bg-primary/5" :
+                canAccess ? "border-border hover:border-brass/30" : "border-border opacity-60"
               }`}
-              onClick={() => canAccess && setPreviewDoc(doc)}
+              onClick={() => {
+                if (cleanMode) {
+                  if (isCleanable) toggleCleanSelect(doc.id);
+                } else {
+                  canAccess && setPreviewDoc(doc);
+                }
+              }}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
+                {cleanMode && isCleanable && (
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={() => toggleCleanSelect(doc.id)}
+                    className="shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                )}
+                {cleanMode && !isCleanable && (
+                  <div className="h-4 w-4 shrink-0" />
+                )}
                 {getFileIcon(doc.file_type)}
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
@@ -457,11 +621,14 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                   <p className="text-xs text-muted-foreground">
                     {formatSize(doc.file_size)} ·{" "}
                     {format(new Date(doc.created_at), "MMM d, yyyy")}
+                    {cleanMode && !isCleanable && (
+                      <span className="text-muted-foreground/50 ml-1">· Not an image</span>
+                    )}
                   </p>
                 </div>
               </div>
 
-              {canAccess ? (
+              {!cleanMode && canAccess ? (
                 <div className="flex items-center gap-1 shrink-0"
                   onClick={(e) => e.stopPropagation()}>
                   <Button
@@ -495,11 +662,12 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                     <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
-              ) : (
+              ) : !cleanMode ? (
                 <Lock className="h-4 w-4 text-destructive/50 shrink-0" />
-              )}
+              ) : null}
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       )}
 
