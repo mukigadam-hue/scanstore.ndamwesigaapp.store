@@ -82,7 +82,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const [cleanProgress, setCleanProgress] = useState({ done: 0, total: 0 });
 
   const cleanableDocIds = useMemo(
-    () => documents.filter((d) => d.file_type.startsWith("image/")).map((d) => d.id),
+    () => documents.filter((d) => d.file_type.startsWith("image/") || d.file_type.includes("pdf")).map((d) => d.id),
     [documents]
   );
 

@@ -328,42 +328,32 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Title text
-    ctx.fillStyle = "#333333";
-    ctx.font = `bold ${Math.round(64 * scale)}px Arial, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.fillText("ID Document Scan", canvasW / 2, Math.round(120 * scale));
-
-    // Draw labels and images
-    const drawSide = (img: HTMLImageElement, label: string, yStart: number, maxH: number) => {
-      ctx.fillStyle = "#555555";
-      ctx.font = `bold ${Math.round(48 * scale)}px Arial, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.fillText(label, canvasW / 2, yStart);
-
-      const margin = Math.round(120 * scale);
+    // Draw ID images without any text labels — just the scanned sides
+    const drawSide = (img: HTMLImageElement, yStart: number, maxH: number) => {
+      const margin = Math.round(80 * scale);
       const availW = canvasW - margin * 2;
       const ratio = Math.min(availW / img.width, maxH / img.height);
       const w = img.width * ratio;
       const h = img.height * ratio;
       const x = (canvasW - w) / 2;
-      const y = yStart + 30;
+      const y = yStart;
 
       // Card shadow
-      ctx.shadowColor = "rgba(0,0,0,0.15)";
-      ctx.shadowBlur = Math.round(24 * scale);
+      ctx.shadowColor = "rgba(0,0,0,0.12)";
+      ctx.shadowBlur = Math.round(20 * scale);
       ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = Math.max(4, Math.round(8 * scale));
+      ctx.shadowOffsetY = Math.max(3, Math.round(6 * scale));
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x - 8, y - 8, w + 16, h + 16);
+      ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
       ctx.shadowColor = "transparent";
 
       // Border
       ctx.strokeStyle = "#cccccc";
-      ctx.lineWidth = Math.max(2, Math.round(3 * scale));
-      ctx.strokeRect(x - 8, y - 8, w + 16, h + 16);
+      ctx.lineWidth = Math.max(1, Math.round(2 * scale));
+      ctx.strokeRect(x - 6, y - 6, w + 12, h + 12);
 
       ctx.drawImage(img, x, y, w, h);
+      return y + h;
     };
 
     return new Promise<string | null>((resolve) => {
@@ -371,8 +361,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       frontImg.onload = () => {
         const backImg = new Image();
         backImg.onload = () => {
-          drawSide(frontImg, "— FRONT SIDE —", Math.round(220 * scale), Math.round(1350 * scale));
-          drawSide(backImg, "— BACK SIDE —", Math.round(1750 * scale), Math.round(1350 * scale));
+          // Place front side in upper half, back side in lower half with a gap
+          const gap = Math.round(80 * scale);
+          const topMargin = Math.round(80 * scale);
+          const availH = (canvasH - topMargin - gap) / 2;
+          drawSide(frontImg, topMargin, availH);
+          drawSide(backImg, topMargin + availH + gap, availH);
           resolve(canvas.toDataURL("image/jpeg", 0.84));
         };
         backImg.src = idBackImage!;
