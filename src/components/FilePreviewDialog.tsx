@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
@@ -140,6 +140,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const editorRef = useRef<HTMLDivElement>(null);
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState(1);
+  const [aiCleaning, setAiCleaning] = useState(false);
 
   // Store original arrayBuffer for Excel re-save
   const excelBufferRef = useRef<ArrayBuffer | null>(null);
@@ -480,6 +481,53 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
     }
   };
 
+  const handleAiClean = async () => {
+    if (!doc || !previewUrl || aiCleaning) return;
+    const isImg = doc.file_type.startsWith("image/");
+    if (!isImg) return;
+
+    setAiCleaning(true);
+    try {
+      // Convert preview to base64
+      const resp = await fetch(previewUrl);
+      const blob = await resp.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+
+      const { data, error } = await supabase.functions.invoke("clean-scan", {
+        body: { image: base64, isIdScan: false },
+      });
+
+      if (error) throw error;
+      if (data?.cleanedImage && !data.fallback) {
+        // Convert base64 back to blob URL
+        const cleanResp = await fetch(data.cleanedImage);
+        const cleanBlob = await cleanResp.blob();
+        const newUrl = URL.createObjectURL(cleanBlob);
+        if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(newUrl);
+
+        // Also update in storage if it's a stored document
+        if (doc.file_path && localPreviewUrl === undefined) {
+          await supabase.storage
+            .from("documents")
+            .update(doc.file_path, cleanBlob, { upsert: true });
+        }
+        toast.success("Document cleaned with AI!");
+      } else {
+        toast("AI couldn't improve this image further");
+      }
+    } catch (err: any) {
+      console.error("AI clean error:", err);
+      toast.error("AI cleaning failed");
+    } finally {
+      setAiCleaning(false);
+    }
+  };
+
   if (!open || !doc) return null;
 
   const isImage = doc.file_type.startsWith("image/");
@@ -541,6 +589,24 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
                   )}
                 </Button>
               </>
+            )}
+
+            {/* AI Clean button for images */}
+            {isImage && !editing && (
+              <Button
+                size="sm"
+                onClick={handleAiClean}
+                disabled={aiCleaning}
+                variant="ghost"
+                className="h-8 px-2 text-white/80 hover:text-white hover:bg-white/10"
+              >
+                {aiCleaning ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-1" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-1" />
+                )}
+                {aiCleaning ? "Cleaning..." : "AI Clean"}
+              </Button>
             )}
 
             <Button size="sm" onClick={onDownload} className="brass-gradient text-primary-foreground hover:opacity-90 h-8 px-3">
