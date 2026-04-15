@@ -622,7 +622,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       ) : (
         <div className="space-y-2">
           {documents.map((doc, i) => {
-            const isCleanable = doc.file_type.startsWith("image/");
+            const isCleanable = doc.file_type.startsWith("image/") || doc.file_type.includes("pdf");
             const isSelected = selectedForClean.has(doc.id);
             return (
             <motion.div
