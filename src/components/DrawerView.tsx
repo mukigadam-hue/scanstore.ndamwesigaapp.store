@@ -664,7 +664,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                     {formatSize(doc.file_size)} ·{" "}
                     {format(new Date(doc.created_at), "MMM d, yyyy")}
                     {cleanMode && !isCleanable && (
-                      <span className="text-muted-foreground/50 ml-1">· Not an image</span>
+                      <span className="text-muted-foreground/50 ml-1">· Not cleanable</span>
                     )}
                   </p>
                 </div>
