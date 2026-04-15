@@ -481,6 +481,53 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
     }
   };
 
+  const handleAiClean = async () => {
+    if (!doc || !previewUrl || aiCleaning) return;
+    const isImg = doc.file_type.startsWith("image/");
+    if (!isImg) return;
+
+    setAiCleaning(true);
+    try {
+      // Convert preview to base64
+      const resp = await fetch(previewUrl);
+      const blob = await resp.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+
+      const { data, error } = await supabase.functions.invoke("clean-scan", {
+        body: { image: base64, isIdScan: false },
+      });
+
+      if (error) throw error;
+      if (data?.cleanedImage && !data.fallback) {
+        // Convert base64 back to blob URL
+        const cleanResp = await fetch(data.cleanedImage);
+        const cleanBlob = await cleanResp.blob();
+        const newUrl = URL.createObjectURL(cleanBlob);
+        if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(newUrl);
+
+        // Also update in storage if it's a stored document
+        if (doc.file_path && localPreviewUrl === undefined) {
+          await supabase.storage
+            .from("documents")
+            .update(doc.file_path, cleanBlob, { upsert: true });
+        }
+        toast.success("Document cleaned with AI!");
+      } else {
+        toast("AI couldn't improve this image further");
+      }
+    } catch (err: any) {
+      console.error("AI clean error:", err);
+      toast.error("AI cleaning failed");
+    } finally {
+      setAiCleaning(false);
+    }
+  };
+
   if (!open || !doc) return null;
 
   const isImage = doc.file_type.startsWith("image/");
