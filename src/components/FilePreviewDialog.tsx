@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
