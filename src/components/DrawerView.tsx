@@ -628,7 +628,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                 </div>
               </div>
 
-              {canAccess ? (
+              {!cleanMode && canAccess ? (
                 <div className="flex items-center gap-1 shrink-0"
                   onClick={(e) => e.stopPropagation()}>
                   <Button
@@ -662,11 +662,12 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                     <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
-              ) : (
+              ) : !cleanMode ? (
                 <Lock className="h-4 w-4 text-destructive/50 shrink-0" />
-              )}
+              ) : null}
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       )}
 
