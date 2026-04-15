@@ -448,6 +448,18 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           >
             <RefreshCw className="h-5 w-5" />
           </Button>
+          {/* AI Clean button - always visible when there are image documents */}
+          {canAccess && cleanableDocIds.length > 0 && !cleanMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => { setCleanMode(true); setSelectedForClean(new Set()); }}
+              className="text-primary hover:text-primary hover:bg-secondary"
+              title="AI Clean documents"
+            >
+              <Sparkles className="h-5 w-5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
