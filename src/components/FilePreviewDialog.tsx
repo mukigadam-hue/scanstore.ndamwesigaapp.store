@@ -642,13 +642,30 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
         ) : previewUrl ? (
           <>
             {isImage && (
-              <img
-                src={previewUrl}
-                alt={doc.name}
-                className="max-w-full max-h-full object-contain select-none"
-                style={{ transform: `scale(${zoom})`, transformOrigin: "center center", transition: pinchStartDist ? "none" : "transform 0.15s ease" }}
-                draggable={false}
-              />
+              <div
+                style={{
+                  width: zoom > 1 ? `${zoom * 100}%` : "100%",
+                  height: zoom > 1 ? `${zoom * 100}%` : "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: "100%",
+                  minHeight: "100%",
+                }}
+              >
+                <img
+                  src={previewUrl}
+                  alt={doc.name}
+                  className="select-none"
+                  style={{
+                    maxWidth: `${zoom * 100}%`,
+                    maxHeight: `${zoom * 100}%`,
+                    objectFit: "contain",
+                    transition: pinchStartDist ? "none" : "max-width 0.15s ease, max-height 0.15s ease",
+                  }}
+                  draggable={false}
+                />
+              </div>
             )}
 
             {isPdf && (

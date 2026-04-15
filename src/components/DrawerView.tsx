@@ -82,7 +82,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const [cleanProgress, setCleanProgress] = useState({ done: 0, total: 0 });
 
   const cleanableDocIds = useMemo(
-    () => documents.filter((d) => d.file_type.startsWith("image/")).map((d) => d.id),
+    () => documents.filter((d) => d.file_type.startsWith("image/") || d.file_type.includes("pdf")).map((d) => d.id),
     [documents]
   );
 
@@ -105,36 +105,78 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const handleBatchClean = useCallback(async () => {
     if (selectedForClean.size === 0) return;
     setCleaning(true);
-    const toClean = documents.filter((d) => selectedForClean.has(d.id) && d.file_type.startsWith("image/"));
+    const toClean = documents.filter((d) => selectedForClean.has(d.id) && (d.file_type.startsWith("image/") || d.file_type.includes("pdf")));
     setCleanProgress({ done: 0, total: toClean.length });
 
     let successCount = 0;
     for (const doc of toClean) {
       try {
-        // Download current file
         const { data: blob, error } = await supabase.storage.from("documents").download(doc.file_path);
         if (error || !blob) throw error;
 
-        // Convert to base64
-        const buf = await blob.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        const mimeType = blob.type || "image/jpeg";
+        if (doc.file_type.startsWith("image/")) {
+          // Image cleaning
+          const buf = await blob.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+          const mimeType = blob.type || "image/jpeg";
+          const { data: fnData, error: fnError } = await supabase.functions.invoke("clean-scan", {
+            body: { image: `data:${mimeType};base64,${base64}`, mode: "document" },
+          });
+          if (fnError || !fnData?.cleanedImage) throw fnError || new Error("No image returned");
+          const cleanedB64 = fnData.cleanedImage.replace(/^data:[^;]+;base64,/, "");
+          const binaryStr = atob(cleanedB64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+          const cleanedBlob = new Blob([bytes], { type: "image/png" });
+          await supabase.storage.from("documents").upload(doc.file_path, cleanedBlob, { upsert: true });
+          successCount++;
+        } else if (doc.file_type.includes("pdf")) {
+          // PDF cleaning: render each page → clean → rebuild PDF
+          const pdfjsLib = await import("pdfjs-dist");
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
+          const { jsPDF: JsPDF } = await import("jspdf");
+          const arrayBuffer = await blob.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const numPages = pdfDoc.numPages;
+          let newPdf: any = null;
 
-        // Call AI clean
-        const { data: fnData, error: fnError } = await supabase.functions.invoke("clean-scan", {
-          body: { image: `data:${mimeType};base64,${base64}`, mode: "document" },
-        });
-        if (fnError || !fnData?.image) throw fnError || new Error("No image returned");
+          for (let p = 1; p <= numPages; p++) {
+            const page = await pdfDoc.getPage(p);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement("canvas");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext("2d")!;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            const pageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
-        // Convert response to blob and upload
-        const cleanedB64 = fnData.image.replace(/^data:[^;]+;base64,/, "");
-        const binaryStr = atob(cleanedB64);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-        const cleanedBlob = new Blob([bytes], { type: "image/png" });
+            // AI clean this page
+            let cleanedDataUrl = pageDataUrl;
+            try {
+              const { data: fnData } = await supabase.functions.invoke("clean-scan", {
+                body: { image: pageDataUrl, isIdScan: false },
+              });
+              if (fnData?.cleanedImage && !fnData.fallback) {
+                cleanedDataUrl = fnData.cleanedImage;
+              }
+            } catch { /* use original page */ }
 
-        await supabase.storage.from("documents").upload(doc.file_path, cleanedBlob, { upsert: true });
-        successCount++;
+            // Add to new PDF
+            const orient = viewport.width > viewport.height ? "landscape" : "portrait";
+            if (p === 1) {
+              newPdf = new JsPDF({ orientation: orient, unit: "px", format: [viewport.width, viewport.height], compress: true });
+            } else {
+              newPdf.addPage([viewport.width, viewport.height], orient);
+            }
+            newPdf.addImage(cleanedDataUrl, "JPEG", 0, 0, viewport.width, viewport.height, undefined, "FAST");
+          }
+
+          if (newPdf) {
+            const pdfBlob = newPdf.output("blob");
+            await supabase.storage.from("documents").upload(doc.file_path, pdfBlob, { upsert: true });
+            successCount++;
+          }
+        }
       } catch (e) {
         console.warn(`Failed to clean ${doc.name}:`, e);
       }
@@ -148,7 +190,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       toast.success(`${successCount} document${successCount > 1 ? "s" : ""} cleaned successfully!`);
       refreshDocs();
     } else {
-      toast.error("Could not clean any documents. Only images can be cleaned.");
+      toast.error("Could not clean any documents.");
     }
   }, [selectedForClean, documents, user]);
 
@@ -580,7 +622,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       ) : (
         <div className="space-y-2">
           {documents.map((doc, i) => {
-            const isCleanable = doc.file_type.startsWith("image/");
+            const isCleanable = doc.file_type.startsWith("image/") || doc.file_type.includes("pdf");
             const isSelected = selectedForClean.has(doc.id);
             return (
             <motion.div
@@ -622,7 +664,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                     {formatSize(doc.file_size)} ·{" "}
                     {format(new Date(doc.created_at), "MMM d, yyyy")}
                     {cleanMode && !isCleanable && (
-                      <span className="text-muted-foreground/50 ml-1">· Not an image</span>
+                      <span className="text-muted-foreground/50 ml-1">· Not cleanable</span>
                     )}
                   </p>
                 </div>
