@@ -44,13 +44,25 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limited, please try again shortly." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        // Return 200 with fallback so client doesn't throw
+        return new Response(JSON.stringify({
+          cleanedImage: image,
+          fallback: true,
+          rateLimited: true,
+          error: "Rate limited, please try again shortly.",
+        }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        // Return 200 with fallback so client doesn't throw
+        return new Response(JSON.stringify({
+          cleanedImage: image,
+          fallback: true,
+          creditsExhausted: true,
+          error: "AI credits exhausted. Please add funds to continue using AI Clean.",
+        }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
