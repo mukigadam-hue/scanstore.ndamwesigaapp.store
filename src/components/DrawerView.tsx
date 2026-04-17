@@ -369,18 +369,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           >
             <RefreshCw className="h-5 w-5" />
           </Button>
-          {/* AI Clean button - always visible when there are image documents */}
-          {canAccess && cleanableDocIds.length > 0 && !cleanMode && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => { setCleanMode(true); setSelectedForClean(new Set()); }}
-              className="text-primary hover:text-primary hover:bg-secondary"
-              title="AI Clean documents"
-            >
-              <Sparkles className="h-5 w-5" />
-            </Button>
-          )}
+          {/* Camera & upload buttons follow */}
           <Button
             variant="ghost"
             size="icon"
@@ -408,60 +397,8 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         </div>
       </div>
 
-      {/* AI Clean mode toolbar */}
-      {cleanMode && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-lg border border-primary/30 bg-primary/10 p-3 flex items-center justify-between gap-3"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="h-4 w-4 text-primary shrink-0" />
-            {cleaning ? (
-              <p className="text-xs text-foreground">
-                Cleaning {cleanProgress.done}/{cleanProgress.total}…
-              </p>
-            ) : (
-              <p className="text-xs text-foreground">
-                Tap images to select, then clean them with AI
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={selectAllForClean}
-              disabled={cleaning}
-              className="text-xs border-primary/40 text-foreground"
-            >
-              <CheckSquare className="h-3.5 w-3.5 mr-1" />
-              {selectedForClean.size === cleanableDocIds.length ? "Deselect All" : "Select All"}
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleBatchClean}
-              disabled={cleaning || selectedForClean.size === 0}
-              className="brass-gradient text-primary-foreground text-xs"
-            >
-              <Sparkles className="h-3.5 w-3.5 mr-1" />
-              {cleaning ? "Cleaning…" : `Clean (${selectedForClean.size})`}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => { setCleanMode(false); setSelectedForClean(new Set()); }}
-              disabled={cleaning}
-              className="text-xs text-muted-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </motion.div>
-      )}
-
       {/* Upgrade reminder banner */}
-      {outdatedCount > 0 && documents.length > 0 && !cleanMode && (
+      {outdatedCount > 0 && documents.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
