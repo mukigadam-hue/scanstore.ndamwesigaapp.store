@@ -2,10 +2,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, Sparkles, CreditCard, ScanLine, ArrowRight } from "lucide-react";
+import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
-import { supabase } from "@/integrations/supabase/client";
+import { enhanceScanCanvas } from "@/lib/enhanceScan";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -30,7 +30,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanProgress, setScanProgress] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
-  const [aiCleaning, setAiCleaning] = useState(false);
 
   // ID scanning state
   const [scanMode, setScanMode] = useState<ScanMode>("select");
@@ -257,28 +256,21 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             }
           }
 
-          const jpegQuality = isIdScan ? 0.74 : 0.86;
+          // Apply fast in-browser enhancement: white balance, shadow removal,
+          // contrast stretch and sharpening — no AI / no network needed.
+          try {
+            enhanceScanCanvas(mainCanvas, { isIdScan });
+          } catch {
+            // If enhancement fails for any reason, keep raw scan
+          }
+
+          const jpegQuality = isIdScan ? 0.78 : 0.88;
           const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
           stopCamera();
           setScanning(false);
           setScanProgress(0);
 
           resolve(rawDataUrl);
-
-          // Background AI cleaning — runs after save, updates the preview silently
-          (async () => {
-            try {
-              const { data } = await supabase.functions.invoke("clean-scan", {
-                body: { image: rawDataUrl, isIdScan },
-              });
-              if (data?.cleanedImage && !data?.fallback) {
-                // Update captured image in the background if still on preview
-                setCaptured((prev) => (prev === rawDataUrl ? data.cleanedImage : prev));
-              }
-            } catch {
-              // Silently fail — user already has the raw scan
-            }
-          })();
         }
       };
 
@@ -719,13 +711,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           </>
         ) : (
           <div className="relative">
-            <img src={captured} alt="Captured" className={`max-w-full max-h-full object-contain ${aiCleaning ? "opacity-50" : ""}`} />
-            {aiCleaning && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <Sparkles className="h-10 w-10 text-primary animate-pulse" />
-                <p className="text-white text-sm font-medium mt-2 bg-black/60 px-3 py-1 rounded-full">AI cleaning document...</p>
-              </div>
-            )}
+            <img src={captured} alt="Captured" className="max-w-full max-h-full object-contain" />
           </div>
         )}
       </div>
@@ -775,43 +761,21 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         ) : (
           <div className="space-y-2 max-w-sm mx-auto">
             <div className="flex gap-2">
-              <Button
-                onClick={async () => {
-                  if (!captured) return;
-                  setAiCleaning(true);
-                  toast.info("AI is re-cleaning your scan...");
-                  try {
-                    const { data, error } = await supabase.functions.invoke("clean-scan", { body: { image: captured } });
-                    if (error) throw error;
-                    if (data?.cleanedImage) {
-                      setCaptured(data.cleanedImage);
-                      toast.success("Document re-cleaned!");
-                    }
-                  } catch { toast.error("AI cleaning failed"); }
-                  finally { setAiCleaning(false); }
-                }}
-                disabled={aiCleaning}
-                variant="outline"
-                className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                AI Clean
-              </Button>
-              <Button onClick={saveAsImage} disabled={aiCleaning} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
+              <Button onClick={saveAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <ImageIcon className="h-4 w-4 mr-2" />
                 Save Photo
               </Button>
-              <Button onClick={saveAsDocument} disabled={aiCleaning} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
+              <Button onClick={saveAsDocument} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <FileText className="h-4 w-4 mr-2" />
                 Save as PDF
               </Button>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" disabled={aiCleaning} onClick={() => { setCaptured(null); startCamera(facingMode); }}>
+              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { setCaptured(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake
               </Button>
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" disabled={aiCleaning} onClick={handleClose}>
+              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
                 Cancel
               </Button>
             </div>
