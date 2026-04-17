@@ -711,13 +711,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           </>
         ) : (
           <div className="relative">
-            <img src={captured} alt="Captured" className={`max-w-full max-h-full object-contain ${aiCleaning ? "opacity-50" : ""}`} />
-            {aiCleaning && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <Sparkles className="h-10 w-10 text-primary animate-pulse" />
-                <p className="text-white text-sm font-medium mt-2 bg-black/60 px-3 py-1 rounded-full">AI cleaning document...</p>
-              </div>
-            )}
+            <img src={captured} alt="Captured" className="max-w-full max-h-full object-contain" />
           </div>
         )}
       </div>
@@ -767,43 +761,21 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         ) : (
           <div className="space-y-2 max-w-sm mx-auto">
             <div className="flex gap-2">
-              <Button
-                onClick={async () => {
-                  if (!captured) return;
-                  setAiCleaning(true);
-                  toast.info("AI is re-cleaning your scan...");
-                  try {
-                    const { data, error } = await supabase.functions.invoke("clean-scan", { body: { image: captured } });
-                    if (error) throw error;
-                    if (data?.cleanedImage) {
-                      setCaptured(data.cleanedImage);
-                      toast.success("Document re-cleaned!");
-                    }
-                  } catch { toast.error("AI cleaning failed"); }
-                  finally { setAiCleaning(false); }
-                }}
-                disabled={aiCleaning}
-                variant="outline"
-                className="flex-1 border-primary/50 text-primary hover:bg-primary/10"
-              >
-                <Sparkles className="h-4 w-4 mr-2" />
-                AI Clean
-              </Button>
-              <Button onClick={saveAsImage} disabled={aiCleaning} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
+              <Button onClick={saveAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <ImageIcon className="h-4 w-4 mr-2" />
                 Save Photo
               </Button>
-              <Button onClick={saveAsDocument} disabled={aiCleaning} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
+              <Button onClick={saveAsDocument} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <FileText className="h-4 w-4 mr-2" />
                 Save as PDF
               </Button>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" disabled={aiCleaning} onClick={() => { setCaptured(null); startCamera(facingMode); }}>
+              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { setCaptured(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake
               </Button>
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" disabled={aiCleaning} onClick={handleClose}>
+              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
                 Cancel
               </Button>
             </div>
