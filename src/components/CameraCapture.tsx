@@ -2,10 +2,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, Check, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, Sparkles, CreditCard, ScanLine, ArrowRight } from "lucide-react";
+import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
-import { supabase } from "@/integrations/supabase/client";
+import { enhanceScanCanvas } from "@/lib/enhanceScan";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -30,7 +30,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanProgress, setScanProgress] = useState(0);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
-  const [aiCleaning, setAiCleaning] = useState(false);
 
   // ID scanning state
   const [scanMode, setScanMode] = useState<ScanMode>("select");
