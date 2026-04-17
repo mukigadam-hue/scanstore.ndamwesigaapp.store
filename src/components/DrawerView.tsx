@@ -1,11 +1,9 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
   Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw,
-  Sparkles, CheckSquare, X,
 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -74,130 +72,6 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
-
-  // AI Clean selection mode
-  const [cleanMode, setCleanMode] = useState(false);
-  const [selectedForClean, setSelectedForClean] = useState<Set<string>>(new Set());
-  const [cleaning, setCleaning] = useState(false);
-  const [cleanProgress, setCleanProgress] = useState({ done: 0, total: 0 });
-
-  const cleanableDocIds = useMemo(
-    () => documents.filter((d) => d.file_type.startsWith("image/") || d.file_type.includes("pdf")).map((d) => d.id),
-    [documents]
-  );
-
-  const toggleCleanSelect = useCallback((id: string) => {
-    setSelectedForClean((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const selectAllForClean = useCallback(() => {
-    if (selectedForClean.size === cleanableDocIds.length) {
-      setSelectedForClean(new Set());
-    } else {
-      setSelectedForClean(new Set(cleanableDocIds));
-    }
-  }, [cleanableDocIds, selectedForClean.size]);
-
-  const handleBatchClean = useCallback(async () => {
-    if (selectedForClean.size === 0) return;
-    setCleaning(true);
-    const toClean = documents.filter((d) => selectedForClean.has(d.id) && (d.file_type.startsWith("image/") || d.file_type.includes("pdf")));
-    setCleanProgress({ done: 0, total: toClean.length });
-
-    let successCount = 0;
-    let creditsExhausted = false;
-    for (const doc of toClean) {
-      if (creditsExhausted) break;
-      try {
-        const { data: blob, error } = await supabase.storage.from("documents").download(doc.file_path);
-        if (error || !blob) throw error;
-
-        if (doc.file_type.startsWith("image/")) {
-          const buf = await blob.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-          const mimeType = blob.type || "image/jpeg";
-          const { data: fnData, error: fnError } = await supabase.functions.invoke("clean-scan", {
-            body: { image: `data:${mimeType};base64,${base64}`, mode: "document" },
-          });
-          if (fnError) throw fnError;
-          if (fnData?.creditsExhausted) { creditsExhausted = true; break; }
-          if (!fnData?.cleanedImage || fnData?.fallback) throw new Error("No image returned");
-          const cleanedB64 = fnData.cleanedImage.replace(/^data:[^;]+;base64,/, "");
-          const binaryStr = atob(cleanedB64);
-          const bytes = new Uint8Array(binaryStr.length);
-          for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-          const cleanedBlob = new Blob([bytes], { type: "image/png" });
-          await supabase.storage.from("documents").upload(doc.file_path, cleanedBlob, { upsert: true });
-          successCount++;
-        } else if (doc.file_type.includes("pdf")) {
-          const pdfjsLib = await import("pdfjs-dist");
-          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
-          const { jsPDF: JsPDF } = await import("jspdf");
-          const arrayBuffer = await blob.arrayBuffer();
-          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          const numPages = pdfDoc.numPages;
-          let newPdf: any = null;
-
-          for (let p = 1; p <= numPages; p++) {
-            const page = await pdfDoc.getPage(p);
-            const viewport = page.getViewport({ scale: 1.5 });
-            const canvas = document.createElement("canvas");
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            const ctx = canvas.getContext("2d")!;
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            const pageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
-
-            let cleanedDataUrl = pageDataUrl;
-            try {
-              const { data: fnData } = await supabase.functions.invoke("clean-scan", {
-                body: { image: pageDataUrl, isIdScan: false },
-              });
-              if (fnData?.creditsExhausted) { creditsExhausted = true; break; }
-              if (fnData?.cleanedImage && !fnData.fallback) {
-                cleanedDataUrl = fnData.cleanedImage;
-              }
-            } catch { /* use original page */ }
-
-            const orient = viewport.width > viewport.height ? "landscape" : "portrait";
-            if (p === 1) {
-              newPdf = new JsPDF({ orientation: orient, unit: "px", format: [viewport.width, viewport.height], compress: true });
-            } else {
-              newPdf.addPage([viewport.width, viewport.height], orient);
-            }
-            newPdf.addImage(cleanedDataUrl, "JPEG", 0, 0, viewport.width, viewport.height, undefined, "FAST");
-          }
-
-          if (creditsExhausted) break;
-          if (newPdf) {
-            const pdfBlob = newPdf.output("blob");
-            await supabase.storage.from("documents").upload(doc.file_path, pdfBlob, { upsert: true });
-            successCount++;
-          }
-        }
-      } catch (e) {
-        console.warn(`Failed to clean ${doc.name}:`, e);
-      }
-      setCleanProgress((prev) => ({ ...prev, done: prev.done + 1 }));
-    }
-
-    setCleaning(false);
-    setCleanMode(false);
-    setSelectedForClean(new Set());
-    if (creditsExhausted) {
-      toast.error("AI credits exhausted. Please add funds to continue using AI Clean.", { duration: 6000 });
-      if (successCount > 0) refreshDocs();
-    } else if (successCount > 0) {
-      toast.success(`${successCount} document${successCount > 1 ? "s" : ""} cleaned successfully!`);
-      refreshDocs();
-    } else {
-      toast.error("Could not clean any documents.");
-    }
-  }, [selectedForClean, documents, user]);
 
   const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
 
