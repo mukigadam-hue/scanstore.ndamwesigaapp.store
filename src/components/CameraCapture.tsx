@@ -276,7 +276,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
       requestAnimationFrame(animateScanning);
     });
-  });
   };
 
   const scanDocument = async () => {
