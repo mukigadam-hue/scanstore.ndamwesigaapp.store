@@ -502,7 +502,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       });
 
       if (error) throw error;
-      if (data?.cleanedImage && !data.fallback) {
+      if (data?.creditsExhausted) {
+        toast.error("AI credits exhausted. Please add funds to continue using AI Clean.", { duration: 6000 });
+      } else if (data?.cleanedImage && !data.fallback) {
         // Convert base64 back to blob URL
         const cleanResp = await fetch(data.cleanedImage);
         const cleanBlob = await cleanResp.blob();

@@ -109,20 +109,23 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     setCleanProgress({ done: 0, total: toClean.length });
 
     let successCount = 0;
+    let creditsExhausted = false;
     for (const doc of toClean) {
+      if (creditsExhausted) break;
       try {
         const { data: blob, error } = await supabase.storage.from("documents").download(doc.file_path);
         if (error || !blob) throw error;
 
         if (doc.file_type.startsWith("image/")) {
-          // Image cleaning
           const buf = await blob.arrayBuffer();
           const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
           const mimeType = blob.type || "image/jpeg";
           const { data: fnData, error: fnError } = await supabase.functions.invoke("clean-scan", {
             body: { image: `data:${mimeType};base64,${base64}`, mode: "document" },
           });
-          if (fnError || !fnData?.cleanedImage) throw fnError || new Error("No image returned");
+          if (fnError) throw fnError;
+          if (fnData?.creditsExhausted) { creditsExhausted = true; break; }
+          if (!fnData?.cleanedImage || fnData?.fallback) throw new Error("No image returned");
           const cleanedB64 = fnData.cleanedImage.replace(/^data:[^;]+;base64,/, "");
           const binaryStr = atob(cleanedB64);
           const bytes = new Uint8Array(binaryStr.length);
@@ -131,7 +134,6 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           await supabase.storage.from("documents").upload(doc.file_path, cleanedBlob, { upsert: true });
           successCount++;
         } else if (doc.file_type.includes("pdf")) {
-          // PDF cleaning: render each page → clean → rebuild PDF
           const pdfjsLib = await import("pdfjs-dist");
           pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
           const { jsPDF: JsPDF } = await import("jspdf");
@@ -150,18 +152,17 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             await page.render({ canvasContext: ctx, viewport }).promise;
             const pageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
 
-            // AI clean this page
             let cleanedDataUrl = pageDataUrl;
             try {
               const { data: fnData } = await supabase.functions.invoke("clean-scan", {
                 body: { image: pageDataUrl, isIdScan: false },
               });
+              if (fnData?.creditsExhausted) { creditsExhausted = true; break; }
               if (fnData?.cleanedImage && !fnData.fallback) {
                 cleanedDataUrl = fnData.cleanedImage;
               }
             } catch { /* use original page */ }
 
-            // Add to new PDF
             const orient = viewport.width > viewport.height ? "landscape" : "portrait";
             if (p === 1) {
               newPdf = new JsPDF({ orientation: orient, unit: "px", format: [viewport.width, viewport.height], compress: true });
@@ -171,6 +172,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             newPdf.addImage(cleanedDataUrl, "JPEG", 0, 0, viewport.width, viewport.height, undefined, "FAST");
           }
 
+          if (creditsExhausted) break;
           if (newPdf) {
             const pdfBlob = newPdf.output("blob");
             await supabase.storage.from("documents").upload(doc.file_path, pdfBlob, { upsert: true });
@@ -186,7 +188,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     setCleaning(false);
     setCleanMode(false);
     setSelectedForClean(new Set());
-    if (successCount > 0) {
+    if (creditsExhausted) {
+      toast.error("AI credits exhausted. Please add funds to continue using AI Clean.", { duration: 6000 });
+      if (successCount > 0) refreshDocs();
+    } else if (successCount > 0) {
       toast.success(`${successCount} document${successCount > 1 ? "s" : ""} cleaned successfully!`);
       refreshDocs();
     } else {
