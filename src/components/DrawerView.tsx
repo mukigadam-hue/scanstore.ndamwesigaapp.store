@@ -437,10 +437,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         </motion.div>
       ) : (
         <div className="space-y-2">
-          {documents.map((doc, i) => {
-            const isCleanable = doc.file_type.startsWith("image/") || doc.file_type.includes("pdf");
-            const isSelected = selectedForClean.has(doc.id);
-            return (
+          {documents.map((doc, i) => (
             <motion.div
               key={doc.id}
               initial={{ opacity: 0, y: 10 }}
@@ -448,29 +445,11 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
               exit={{ opacity: 0, x: -20 }}
               transition={{ delay: i * 0.04 }}
               className={`wood-panel rounded-lg border p-4 flex items-center justify-between gap-4 group transition-colors cursor-pointer ${
-                cleanMode && isSelected ? "border-primary/50 bg-primary/5" :
                 canAccess ? "border-border hover:border-brass/30" : "border-border opacity-60"
               }`}
-              onClick={() => {
-                if (cleanMode) {
-                  if (isCleanable) toggleCleanSelect(doc.id);
-                } else {
-                  canAccess && setPreviewDoc(doc);
-                }
-              }}
+              onClick={() => canAccess && setPreviewDoc(doc)}
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                {cleanMode && isCleanable && (
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => toggleCleanSelect(doc.id)}
-                    className="shrink-0"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                )}
-                {cleanMode && !isCleanable && (
-                  <div className="h-4 w-4 shrink-0" />
-                )}
                 {getFileIcon(doc.file_type)}
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">
@@ -479,14 +458,11 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                   <p className="text-xs text-muted-foreground">
                     {formatSize(doc.file_size)} ·{" "}
                     {format(new Date(doc.created_at), "MMM d, yyyy")}
-                    {cleanMode && !isCleanable && (
-                      <span className="text-muted-foreground/50 ml-1">· Not cleanable</span>
-                    )}
                   </p>
                 </div>
               </div>
 
-              {!cleanMode && canAccess ? (
+              {canAccess ? (
                 <div className="flex items-center gap-1 shrink-0"
                   onClick={(e) => e.stopPropagation()}>
                   <Button
@@ -520,12 +496,11 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                     <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
-              ) : !cleanMode ? (
+              ) : (
                 <Lock className="h-4 w-4 text-destructive/50 shrink-0" />
-              ) : null}
+              )}
             </motion.div>
-            );
-          })}
+          ))}
         </div>
       )}
 
