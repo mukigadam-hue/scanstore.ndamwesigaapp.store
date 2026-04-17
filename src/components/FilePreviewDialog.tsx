@@ -545,23 +545,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
               </>
             )}
 
-            {/* AI Clean button for images */}
-            {isImage && !editing && (
-              <Button
-                size="sm"
-                onClick={handleAiClean}
-                disabled={aiCleaning}
-                variant="ghost"
-                className="h-8 px-2 text-white/80 hover:text-white hover:bg-white/10"
-              >
-                {aiCleaning ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-1" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-1" />
-                )}
-                {aiCleaning ? "Cleaning..." : "AI Clean"}
-              </Button>
-            )}
+
 
             <Button size="sm" onClick={onDownload} className="brass-gradient text-primary-foreground hover:opacity-90 h-8 px-3">
               <Download className="h-4 w-4 mr-1" /> {isLocalFile ? "Save" : "Download"}
