@@ -256,33 +256,27 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             }
           }
 
-          const jpegQuality = isIdScan ? 0.74 : 0.86;
+          // Apply fast in-browser enhancement: white balance, shadow removal,
+          // contrast stretch and sharpening — no AI / no network needed.
+          try {
+            enhanceScanCanvas(mainCanvas, { isIdScan });
+          } catch {
+            // If enhancement fails for any reason, keep raw scan
+          }
+
+          const jpegQuality = isIdScan ? 0.78 : 0.88;
           const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
           stopCamera();
           setScanning(false);
           setScanProgress(0);
 
           resolve(rawDataUrl);
-
-          // Background AI cleaning — runs after save, updates the preview silently
-          (async () => {
-            try {
-              const { data } = await supabase.functions.invoke("clean-scan", {
-                body: { image: rawDataUrl, isIdScan },
-              });
-              if (data?.cleanedImage && !data?.fallback) {
-                // Update captured image in the background if still on preview
-                setCaptured((prev) => (prev === rawDataUrl ? data.cleanedImage : prev));
-              }
-            } catch {
-              // Silently fail — user already has the raw scan
-            }
-          })();
         }
       };
 
       requestAnimationFrame(animateScanning);
     });
+  });
   };
 
   const scanDocument = async () => {
