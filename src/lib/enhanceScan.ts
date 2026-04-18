@@ -26,9 +26,11 @@ export function enhanceScanCanvas(
   canvas: HTMLCanvasElement,
   options: EnhanceOptions = {}
 ): HTMLCanvasElement {
+  const { isIdScan = false } = options;
+  // Use much gentler settings for IDs to preserve original colors (photo, holograms, stamps).
   const {
-    backgroundWhiteness = 0.85,
-    sharpenAmount = 0.35,
+    backgroundWhiteness = isIdScan ? 0.25 : 0.85,
+    sharpenAmount = isIdScan ? 0.12 : 0.35,
   } = options;
 
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
