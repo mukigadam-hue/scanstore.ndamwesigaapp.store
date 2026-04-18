@@ -9,7 +9,7 @@ import { getBiometricErrorMessage, registerDeviceBiometric } from "@/lib/webauth
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, Check,
-  ChevronDown, ChevronUp, KeyRound, X,
+  ChevronDown, ChevronUp, KeyRound, X, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
