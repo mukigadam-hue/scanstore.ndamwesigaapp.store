@@ -385,6 +385,28 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
           <div className="brass-gradient h-1" />
         </div>
       </motion.div>
+
+      <AlertDialog open={showBackConfirm} onOpenChange={setShowBackConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out and go back?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You haven't finished securing your locker. If you go back now, you'll be signed out and will need to complete security setup the next time you sign in.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay here</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setShowBackConfirm(false);
+                await signOut();
+              }}
+            >
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
