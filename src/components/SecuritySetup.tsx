@@ -9,7 +9,7 @@ import { getBiometricErrorMessage, registerDeviceBiometric } from "@/lib/webauth
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, Check,
-  ChevronDown, ChevronUp, KeyRound, X,
+  ChevronDown, ChevronUp, KeyRound, X, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +37,7 @@ const METHODS = [
 ];
 
 const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [completed, setCompleted] = useState<CompletedMethods>({});
   const [expanded, setExpanded] = useState<string | null>("pin");
   const [saving, setSaving] = useState(false);
@@ -198,7 +198,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                   </p>
                 </div>
               </div>
-              {onCancel && (
+              {onCancel ? (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -207,6 +207,22 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                 >
                   <X className="h-4 w-4 mr-1" />
                   Close
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    const ok = window.confirm(
+                      "Go back and sign out? You'll need to complete security setup next time you sign in.",
+                    );
+                    if (!ok) return;
+                    await signOut();
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <LogOut className="h-4 w-4 mr-1" />
+                  Back
                 </Button>
               )}
             </div>
