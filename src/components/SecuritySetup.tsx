@@ -5,6 +5,10 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getBiometricErrorMessage, registerDeviceBiometric } from "@/lib/webauthn";
 import {
   Shield, Hash, Fingerprint, Camera,
@@ -41,6 +45,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   const [completed, setCompleted] = useState<CompletedMethods>({});
   const [expanded, setExpanded] = useState<string | null>("pin");
   const [saving, setSaving] = useState(false);
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
 
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
