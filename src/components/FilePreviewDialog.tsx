@@ -65,6 +65,7 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const renderTaskRef = useRef<any>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,38 +88,69 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
     let cancelled = false;
+
     const renderPage = async () => {
-      const page = await pdfDoc.getPage(currentPage);
-      const container = containerRef.current;
-      if (!container || cancelled) return;
-      const containerWidth = container.clientWidth;
-      const unscaledViewport = page.getViewport({ scale: 1 });
-      const baseScale = containerWidth / unscaledViewport.width;
-      const viewport = page.getViewport({ scale: baseScale * zoom });
-      const canvas = canvasRef.current!;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext("2d")!;
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      // Cancel any in-flight render before starting a new one — fixes
+      // "Cannot use the same canvas during multiple render() operations"
+      // when zooming/paging quickly.
+      if (renderTaskRef.current) {
+        try { renderTaskRef.current.cancel(); } catch { /* ignore */ }
+        renderTaskRef.current = null;
+      }
+
+      try {
+        const page = await pdfDoc.getPage(currentPage);
+        const container = containerRef.current;
+        if (!container || cancelled) return;
+        const containerWidth = container.clientWidth;
+        const unscaledViewport = page.getViewport({ scale: 1 });
+        const baseScale = containerWidth / unscaledViewport.width;
+        const viewport = page.getViewport({ scale: baseScale * zoom });
+        const canvas = canvasRef.current!;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        // Set CSS size so the canvas actually grows visually past container width
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        const ctx = canvas.getContext("2d")!;
+        const task = page.render({ canvasContext: ctx, viewport });
+        renderTaskRef.current = task;
+        await task.promise;
+        if (renderTaskRef.current === task) renderTaskRef.current = null;
+      } catch (err: any) {
+        // pdf.js throws "RenderingCancelledException" when we cancel — ignore.
+        if (err?.name !== "RenderingCancelledException") {
+          console.error("PDF render error", err);
+        }
+      }
     };
+
     renderPage();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (renderTaskRef.current) {
+        try { renderTaskRef.current.cancel(); } catch { /* ignore */ }
+        renderTaskRef.current = null;
+      }
+    };
   }, [pdfDoc, currentPage, zoom]);
 
   return (
-    <div ref={containerRef} className="w-full h-full flex flex-col items-center overflow-auto bg-white">
-      <canvas ref={canvasRef} className="max-w-full" />
-      {numPages > 1 && (
-        <div className="sticky bottom-2 flex items-center gap-3 bg-black/70 rounded-full px-4 py-2 mt-2">
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-white text-sm">{currentPage} / {numPages}</span>
-          <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage >= numPages}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+    <div ref={containerRef} className="w-full h-full overflow-auto bg-white">
+      <div className="min-w-full min-h-full flex flex-col items-center p-2">
+        <canvas ref={canvasRef} style={{ display: "block" }} />
+        {numPages > 1 && (
+          <div className="sticky bottom-2 flex items-center gap-3 bg-black/70 rounded-full px-4 py-2 mt-2 z-10">
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-white text-sm">{currentPage} / {numPages}</span>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage >= numPages}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
