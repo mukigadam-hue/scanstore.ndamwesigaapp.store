@@ -130,15 +130,19 @@ export function enhanceScanCanvas(
   }
 
   // ---------- 3. Contrast stretch (percentile based, per channel) ----------
-  // Find 2nd and 98th percentile to remap to [0,255]
+  // Find low/high percentile to remap. Use gentler cuts on IDs to keep colors.
+  const lowPct = isIdScan ? 0.005 : 0.02;
+  const highPct = isIdScan ? 0.995 : 0.98;
+  // For IDs, blend stretched result with original so colors are preserved.
+  const stretchMix = isIdScan ? 0.4 : 1.0;
   for (let c = 0; c < 3; c++) {
     const hist = new Uint32Array(256);
     for (let i = c; i < data.length; i += 4) {
       hist[data[i]]++;
     }
     const total = w * h;
-    const lowCut = total * 0.02;
-    const highCut = total * 0.98;
+    const lowCut = total * lowPct;
+    const highCut = total * highPct;
     let lo = 0, hi = 255;
     let acc = 0;
     for (let v = 0; v < 256; v++) {
@@ -153,8 +157,10 @@ export function enhanceScanCanvas(
     if (hi - lo < 20) continue; // skip if range is tiny (avoid amplifying noise)
     const scale = 255 / (hi - lo);
     for (let i = c; i < data.length; i += 4) {
-      const v = (data[i] - lo) * scale;
-      data[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+      const orig = data[i];
+      const v = (orig - lo) * scale;
+      const clamped = v < 0 ? 0 : v > 255 ? 255 : v;
+      data[i] = clamped * stretchMix + orig * (1 - stretchMix);
     }
   }
 
