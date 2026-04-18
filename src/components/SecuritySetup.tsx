@@ -217,13 +217,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={async () => {
-                    const ok = window.confirm(
-                      "Go back and sign out? You'll need to complete security setup next time you sign in.",
-                    );
-                    if (!ok) return;
-                    await signOut();
-                  }}
+                  onClick={() => setShowBackConfirm(true)}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <LogOut className="h-4 w-4 mr-1" />
