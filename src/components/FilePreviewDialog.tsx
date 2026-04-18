@@ -582,13 +582,12 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
             {isImage && (
               <div
                 style={{
-                  width: zoom > 1 ? `${zoom * 100}%` : "100%",
-                  height: zoom > 1 ? `${zoom * 100}%` : "100%",
+                  minWidth: "100%",
+                  minHeight: "100%",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  minWidth: "100%",
-                  minHeight: "100%",
+                  padding: zoom > 1 ? "16px" : "0",
                 }}
               >
                 <img
@@ -596,10 +595,12 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
                   alt={doc.name}
                   className="select-none"
                   style={{
-                    maxWidth: `${zoom * 100}%`,
-                    maxHeight: `${zoom * 100}%`,
+                    width: `${zoom * 100}%`,
+                    height: "auto",
+                    maxWidth: zoom <= 1 ? "100%" : "none",
+                    maxHeight: zoom <= 1 ? "100%" : "none",
                     objectFit: "contain",
-                    transition: pinchStartDist ? "none" : "max-width 0.15s ease, max-height 0.15s ease",
+                    transition: pinchStartDist ? "none" : "width 0.15s ease",
                   }}
                   draggable={false}
                 />
