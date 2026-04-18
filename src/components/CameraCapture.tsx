@@ -304,48 +304,42 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const combineIdSides = (): string | null => {
     if (!idFrontImage || !idBackImage) return null;
 
-    // Create a canvas to combine both sides
+    // A4 canvas at ~300 DPI (8.2667 px / mm)
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    // A4 proportions at high res (portrait) - we'll place both ID images stacked
-    const canvasW = 1748;
-    const canvasH = 2480;
-    const scale = canvasW / 2480;
+    const PX_PER_MM = 1748 / 210; // ≈ 8.32
+    const canvasW = 1748;          // 210 mm
+    const canvasH = 2480;          // 297 mm
     canvas.width = canvasW;
     canvas.height = canvasH;
 
-    // White background
+    // White A4 background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Draw ID images without any text labels — just the scanned sides
-    const drawSide = (img: HTMLImageElement, yStart: number, maxH: number) => {
-      const margin = Math.round(80 * scale);
-      const availW = canvasW - margin * 2;
-      const ratio = Math.min(availW / img.width, maxH / img.height);
-      const w = img.width * ratio;
-      const h = img.height * ratio;
-      const x = (canvasW - w) / 2;
-      const y = yStart;
+    // Render ID at its real physical size (ISO/IEC 7810 ID-1: 85.6 × 53.98 mm)
+    const ID_W_MM = 85.6;
+    const ID_H_MM = 53.98;
+    const idW = Math.round(ID_W_MM * PX_PER_MM);
+    const idH = Math.round(ID_H_MM * PX_PER_MM);
 
-      // Card shadow
-      ctx.shadowColor = "rgba(0,0,0,0.12)";
-      ctx.shadowBlur = Math.round(20 * scale);
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = Math.max(3, Math.round(6 * scale));
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x - 6, y - 6, w + 12, h + 12);
-      ctx.shadowColor = "transparent";
+    const topMarginMm = 15;        // top of paper
+    const gapMm = 10;              // separation between front and back
+    const topMargin = Math.round(topMarginMm * PX_PER_MM);
+    const gap = Math.round(gapMm * PX_PER_MM);
 
-      // Border
-      ctx.strokeStyle = "#cccccc";
-      ctx.lineWidth = Math.max(1, Math.round(2 * scale));
-      ctx.strokeRect(x - 6, y - 6, w + 12, h + 12);
+    const xCenter = Math.round((canvasW - idW) / 2);
+    const yFront = topMargin;
+    const yBack = topMargin + idH + gap;
 
-      ctx.drawImage(img, x, y, w, h);
-      return y + h;
+    const drawSide = (img: HTMLImageElement, x: number, y: number) => {
+      // Subtle border for the printed copy effect (no shadow — looks more natural on A4)
+      ctx.drawImage(img, x, y, idW, idH);
+      ctx.strokeStyle = "#d0d0d0";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, idW - 1, idH - 1);
     };
 
     return new Promise<string | null>((resolve) => {
@@ -353,13 +347,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       frontImg.onload = () => {
         const backImg = new Image();
         backImg.onload = () => {
-          // Place front side in upper half, back side in lower half with a gap
-          const gap = Math.round(80 * scale);
-          const topMargin = Math.round(80 * scale);
-          const availH = (canvasH - topMargin - gap) / 2;
-          drawSide(frontImg, topMargin, availH);
-          drawSide(backImg, topMargin + availH + gap, availH);
-          resolve(canvas.toDataURL("image/jpeg", 0.84));
+          drawSide(frontImg, xCenter, yFront);
+          drawSide(backImg, xCenter, yBack);
+          resolve(canvas.toDataURL("image/jpeg", 0.88));
         };
         backImg.src = idBackImage!;
       };
