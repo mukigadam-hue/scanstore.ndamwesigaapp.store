@@ -301,17 +301,33 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
   };
 
-  const combineIdSides = (): string | null => {
+  // Decode a data URL into an ImageBitmap (much faster than new Image()).
+  const decodeImage = async (dataUrl: string): Promise<ImageBitmap | HTMLImageElement> => {
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      return await createImageBitmap(blob);
+    } catch {
+      return await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+    }
+  };
+
+  const combineIdSides = async (): Promise<string | null> => {
     if (!idFrontImage || !idBackImage) return null;
 
-    // A4 canvas at ~300 DPI (8.2667 px / mm)
+    // A4 canvas at ~200 DPI (lighter than 300 DPI → much faster encode, still print-quality)
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    const PX_PER_MM = 1748 / 210; // ≈ 8.32
-    const canvasW = 1748;          // 210 mm
-    const canvasH = 2480;          // 297 mm
+    const PX_PER_MM = 1240 / 210; // ≈ 5.9 (≈ 200 DPI)
+    const canvasW = 1240;          // 210 mm
+    const canvasH = 1754;          // 297 mm
     canvas.width = canvasW;
     canvas.height = canvasH;
 
@@ -319,9 +335,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Render ID at its real physical size (ISO/IEC 7810 ID-1: 85.6 × 53.98 mm)
-    const ID_W_MM = 85.6;
-    const ID_H_MM = 53.98;
+    // Render ID slightly larger than real physical size to match copier output.
+    // Real ISO/IEC 7810 ID-1 is 85.6 × 53.98 mm — bump ~28% so prints feel like a copy.
+    const ID_W_MM = 110;
+    const ID_H_MM = 110 / (85.6 / 53.98); // keep aspect ratio ≈ 69.4 mm
     const idW = Math.round(ID_W_MM * PX_PER_MM);
     const idH = Math.round(ID_H_MM * PX_PER_MM);
 
@@ -334,56 +351,38 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     const yFront = topMargin;
     const yBack = topMargin + idH + gap;
 
-    const drawSide = (img: HTMLImageElement, x: number, y: number) => {
-      // Subtle border for the printed copy effect (no shadow — looks more natural on A4)
-      ctx.drawImage(img, x, y, idW, idH);
+    const drawSide = (img: ImageBitmap | HTMLImageElement, x: number, y: number) => {
+      ctx.drawImage(img as CanvasImageSource, x, y, idW, idH);
       ctx.strokeStyle = "#d0d0d0";
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 0.5, y + 0.5, idW - 1, idH - 1);
     };
 
-    return new Promise<string | null>((resolve) => {
-      const frontImg = new Image();
-      frontImg.onload = () => {
-        const backImg = new Image();
-        backImg.onload = () => {
-          drawSide(frontImg, xCenter, yFront);
-          drawSide(backImg, xCenter, yBack);
-          resolve(canvas.toDataURL("image/jpeg", 0.88));
-        };
-        backImg.src = idBackImage!;
-      };
-      frontImg.src = idFrontImage!;
-    }) as any;
+    // Decode both sides in parallel for speed
+    const [frontImg, backImg] = await Promise.all([
+      decodeImage(idFrontImage),
+      decodeImage(idBackImage),
+    ]);
+    drawSide(frontImg, xCenter, yFront);
+    drawSide(backImg, xCenter, yBack);
+    return canvas.toDataURL("image/jpeg", 0.82);
   };
 
   const saveIdAsPdf = async () => {
-    const combined = await combineIdSides();
-    if (!combined) return;
-
     try {
-      const img = new Image();
-      img.onload = () => {
-        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", compress: true });
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const margin = 5;
-        const availW = pageW - margin * 2;
-        const availH = pageH - margin * 2;
-        const ratio = Math.min(availW / img.width, availH / img.height);
-        const w = img.width * ratio;
-        const h = img.height * ratio;
-        const x = (pageW - w) / 2;
-        const y = (pageH - h) / 2;
+      const combined = await combineIdSides();
+      if (!combined) return;
 
-        pdf.addImage(combined, "JPEG", x, y, w, h, undefined, "FAST");
-        const pdfBlob = pdf.output("blob");
-        const pdfFile = new File([pdfBlob], `id_scan_${Date.now()}.pdf`, { type: "application/pdf" });
-        onCapture(pdfFile);
-        toast.success("ID scanned and saved as PDF!");
-        handleClose();
-      };
-      img.src = combined;
+      // Composite was rendered at exact A4 size — map 1:1 to the PDF page.
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+      const pageW = pdf.internal.pageSize.getWidth();   // 210
+      const pageH = pdf.internal.pageSize.getHeight();  // 297
+      pdf.addImage(combined, "JPEG", 0, 0, pageW, pageH, undefined, "FAST");
+      const pdfBlob = pdf.output("blob");
+      const pdfFile = new File([pdfBlob], `id_scan_${Date.now()}.pdf`, { type: "application/pdf" });
+      onCapture(pdfFile);
+      toast.success("ID scanned and saved as PDF!");
+      handleClose();
     } catch (err) {
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF.");
