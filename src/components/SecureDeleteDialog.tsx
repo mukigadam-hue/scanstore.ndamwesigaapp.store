@@ -116,7 +116,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
               <Button
                 className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={handleProceed}
-                disabled={!reason.trim()}
+                disabled={reason.trim().length < 6}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Continue to verification
