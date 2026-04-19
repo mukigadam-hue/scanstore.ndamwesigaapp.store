@@ -280,44 +280,49 @@ const Locker = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-1 justify-end">
+            <div className="flex items-center gap-1.5 flex-wrap flex-1 justify-end">
               <StorageBar />
               <Button
                 variant="ghost"
-                size="icon"
+                size="sm"
                 onClick={() => setShowSecuritySetup(true)}
-                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
                 title="Security settings"
               >
-                <Shield className="h-4 w-4" />
+                <Shield className="h-4 w-4 mr-1.5" />
+                <span className="text-xs">Security</span>
               </Button>
               <Button
                 variant="ghost"
-                size="icon"
+                size="sm"
                 onClick={() => setShowAutoLock(true)}
-                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
-                title="Auto-lock settings"
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
+                title="Auto-lock timer"
               >
-                <Timer className="h-4 w-4" />
+                <Timer className="h-4 w-4 mr-1.5" />
+                <span className="text-xs">Auto-lock</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowPricing(true)}
-                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
+                title="Subscription plans"
               >
                 <Crown className="h-4 w-4 mr-1.5" />
-                <span className="hidden sm:inline">
+                <span className="text-xs">
                   {currentPlan.name === "Free" ? "Upgrade" : currentPlan.name}
                 </span>
               </Button>
               <Button
                 variant="ghost"
+                size="sm"
                 onClick={signOut}
-                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0"
+                className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
+                title="Sign out and lock vault"
               >
-                <LogOut className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Lock & Leave</span>
+                <LogOut className="h-4 w-4 mr-1.5" />
+                <span className="text-xs">Lock & Leave</span>
               </Button>
             </div>
           </div>
