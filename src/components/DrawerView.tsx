@@ -360,25 +360,26 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           />
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
             onClick={() => setShowUpgrade(true)}
-            className={`hover:text-primary hover:bg-secondary ${
+            className={`hover:text-primary hover:bg-secondary px-2 ${
               outdatedCount > 0 ? "text-destructive animate-pulse" : "text-muted-foreground"
             }`}
             title={outdatedCount > 0 ? `${outdatedCount} files need upgrading` : "Check file versions"}
           >
-            <RefreshCw className="h-5 w-5" />
+            <RefreshCw className="h-4 w-4 mr-1.5" />
+            <span className="text-xs">Update</span>
           </Button>
-          {/* Camera & upload buttons follow */}
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
             onClick={() => setShowCamera(true)}
             disabled={!canUpload}
-            className="text-muted-foreground hover:text-primary hover:bg-secondary"
+            className="text-muted-foreground hover:text-primary hover:bg-secondary px-2"
             title="Camera & Scanner"
           >
-            <Camera className="h-5 w-5" />
+            <Camera className="h-4 w-4 mr-1.5" />
+            <span className="text-xs">Scan</span>
           </Button>
           <Button
             onClick={() => fileInputRef.current?.click()}
