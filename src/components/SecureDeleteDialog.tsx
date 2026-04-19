@@ -37,8 +37,9 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
   });
 
   const handleProceed = () => {
-    if (!reason.trim()) {
-      toast.error("Please provide a reason for deletion");
+    const trimmed = reason.trim();
+    if (trimmed.length < 6) {
+      toast.error("Reason must be at least 6 characters (e.g., 'Useless')");
       return;
     }
     setStep("verify");
@@ -111,11 +112,14 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   rows={3}
                   autoFocus
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Minimum 6 characters ({reason.trim().length}/6)
+                </p>
               </div>
               <Button
                 className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={handleProceed}
-                disabled={!reason.trim()}
+                disabled={reason.trim().length < 6}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Continue to verification
