@@ -37,8 +37,9 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
   });
 
   const handleProceed = () => {
-    if (!reason.trim()) {
-      toast.error("Please provide a reason for deletion");
+    const trimmed = reason.trim();
+    if (trimmed.length < 6) {
+      toast.error("Reason must be at least 6 characters (e.g., 'Useless')");
       return;
     }
     setStep("verify");
