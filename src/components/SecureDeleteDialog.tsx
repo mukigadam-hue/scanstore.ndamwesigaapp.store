@@ -112,6 +112,9 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   rows={3}
                   autoFocus
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Minimum 6 characters ({reason.trim().length}/6)
+                </p>
               </div>
               <Button
                 className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
