@@ -52,6 +52,26 @@ const ensureBiometricSupport = async () => {
     throw new Error("Biometric authentication is not supported on this device");
   }
 
+  if (!window.isSecureContext) {
+    throw new Error("Biometrics require a secure (HTTPS) context.");
+  }
+
+  // Inside a cross-origin iframe (e.g. Lovable preview), WebAuthn is blocked
+  // unless explicitly allowed via Permissions Policy. Detect & inform the user.
+  try {
+    if (window.self !== window.top) {
+      throw new Error(
+        "Biometrics can't run inside the in-app preview. Open this site in your phone's browser (tap the URL bar) and try again.",
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("Biometrics can't run")) throw e;
+    // SecurityError when accessing window.top from cross-origin = we're framed
+    throw new Error(
+      "Biometrics can't run inside the in-app preview. Open this site in your phone's browser and try again.",
+    );
+  }
+
   const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   if (!available) {
     throw new Error("No biometric sensor found on this device.");
@@ -78,22 +98,21 @@ const buildRequestOptions = (
 });
 
 const tryAuthenticateExistingCredential = async (storedCredentialId?: string | null) => {
-  const attempts = [null, storedCredentialId].filter(
-    (value, index, values) => value !== undefined && values.indexOf(value) === index,
-  );
+  // Only attempt to reuse if we actually have a stored credential ID.
+  // Calling get() with no allowCredentials shows a passkey picker that
+  // users may dismiss → NotAllowedError, breaking the flow on fresh devices.
+  if (!storedCredentialId) return null;
 
-  for (const attempt of attempts) {
-    try {
-      const credential = await navigator.credentials.get({
-        publicKey: buildRequestOptions(createChallenge(), attempt),
-      });
+  try {
+    const credential = await navigator.credentials.get({
+      publicKey: buildRequestOptions(createChallenge(), storedCredentialId),
+    });
 
-      if (credential instanceof PublicKeyCredential) {
-        return encodeCredentialId(credential.rawId);
-      }
-    } catch {
-      // Try the next strategy.
+    if (credential instanceof PublicKeyCredential) {
+      return encodeCredentialId(credential.rawId);
     }
+  } catch {
+    // Fall through — caller will register a new credential.
   }
 
   return null;
@@ -105,9 +124,13 @@ export const registerDeviceBiometric = async (
 ) => {
   await ensureBiometricSupport();
 
-  const existingCredentialId = await tryAuthenticateExistingCredential(storedCredentialId);
-  if (existingCredentialId) {
-    return { credentialId: existingCredentialId, reusedExisting: true };
+  // Only reuse if we have a stored credential. Don't prompt the user with
+  // a picker on first-time registration.
+  if (storedCredentialId) {
+    const existingCredentialId = await tryAuthenticateExistingCredential(storedCredentialId);
+    if (existingCredentialId) {
+      return { credentialId: existingCredentialId, reusedExisting: true };
+    }
   }
 
   const credential = await navigator.credentials.create({
@@ -122,7 +145,7 @@ export const registerDeviceBiometric = async (
       pubKeyCredParams: WEB_AUTHN_ALGORITHMS,
       authenticatorSelection: {
         authenticatorAttachment: "platform",
-        userVerification: "preferred",
+        userVerification: "required",
         residentKey: "preferred",
       },
       timeout: BIOMETRIC_TIMEOUT_MS,
