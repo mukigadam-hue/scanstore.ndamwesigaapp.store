@@ -52,6 +52,26 @@ const ensureBiometricSupport = async () => {
     throw new Error("Biometric authentication is not supported on this device");
   }
 
+  if (!window.isSecureContext) {
+    throw new Error("Biometrics require a secure (HTTPS) context.");
+  }
+
+  // Inside a cross-origin iframe (e.g. Lovable preview), WebAuthn is blocked
+  // unless explicitly allowed via Permissions Policy. Detect & inform the user.
+  try {
+    if (window.self !== window.top) {
+      throw new Error(
+        "Biometrics can't run inside the in-app preview. Open this site in your phone's browser (tap the URL bar) and try again.",
+      );
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("Biometrics can't run")) throw e;
+    // SecurityError when accessing window.top from cross-origin = we're framed
+    throw new Error(
+      "Biometrics can't run inside the in-app preview. Open this site in your phone's browser and try again.",
+    );
+  }
+
   const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   if (!available) {
     throw new Error("No biometric sensor found on this device.");
