@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { motion } from "framer-motion";
-import { Lock, Mail, Eye, EyeOff, KeyRound } from "lucide-react";
+import { Lock, Mail, Eye, EyeOff, KeyRound, Phone, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -10,15 +10,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import brassLock from "@/assets/brass-lock.png";
 
+type Mode =
+  | "login"
+  | "signup"
+  | "recover-choice"
+  | "forgot-password"
+  | "forgot-email";
+
 const Auth = () => {
-  const { user, loading, signIn, signUp } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
-  const [isForgot, setIsForgot] = useState(false);
+  const { user, loading, signIn } = useAuth();
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [revealedEmail, setRevealedEmail] = useState<{
+    masked: string;
+    full: string;
+  } | null>(null);
 
   if (loading) {
     return (
@@ -34,6 +45,9 @@ const Auth = () => {
   }
 
   if (user) return <Navigate to="/locker" replace />;
+
+  const isLogin = mode === "login";
+  const isSignup = mode === "signup";
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -51,6 +65,18 @@ const Auth = () => {
     }
   };
 
+  const sendPasswordReset = async (targetEmail: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) {
+      toast.error(error.message);
+      return false;
+    }
+    toast.success("Password reset link sent! Check your email inbox.");
+    return true;
+  };
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
@@ -59,13 +85,49 @@ const Auth = () => {
     }
     setSubmitting(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+      const ok = await sendPasswordReset(email);
+      if (ok) setMode("login");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePhoneLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!phone || phone.replace(/\D/g, "").length < 6) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "recover-email-by-phone",
+        { body: { phone } },
+      );
       if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("Password reset link sent! Check your email inbox.");
+        toast.error("Lookup failed. Please try again.");
+        return;
+      }
+      if (!data?.found) {
+        toast.error("No account found for that phone number.");
+        setRevealedEmail(null);
+        return;
+      }
+      setRevealedEmail({ masked: data.maskedEmail, full: data.email });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSendResetForRevealed = async () => {
+    if (!revealedEmail) return;
+    setSubmitting(true);
+    try {
+      const ok = await sendPasswordReset(revealedEmail.full);
+      if (ok) {
+        setRevealedEmail(null);
+        setPhone("");
+        setMode("login");
       }
     } finally {
       setSubmitting(false);
@@ -84,11 +146,27 @@ const Auth = () => {
           toast.success("Welcome back to your locker!");
         }
       } else {
-        const { error } = await signUp(email, password);
+        // Sign up — phone required, stored in user_metadata so the trigger
+        // copies it into profiles.phone for future recovery.
+        if (!phone || phone.replace(/\D/g, "").length < 6) {
+          toast.error("Please enter a valid phone number for account recovery");
+          return;
+        }
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: { phone: phone.trim() },
+          },
+        });
         if (error) {
           toast.error(error.message);
         } else {
-          toast.success("Account created! Check your email to verify before signing in.");
+          toast.success(
+            "Account created! Check your email to verify before signing in.",
+          );
+          setMode("login");
         }
       }
     } catch (err: any) {
@@ -101,6 +179,36 @@ const Auth = () => {
       setSubmitting(false);
     }
   };
+
+  const headerTitle = (() => {
+    switch (mode) {
+      case "signup":
+        return "Create Your Locker";
+      case "recover-choice":
+        return "Recover Your Account";
+      case "forgot-password":
+        return "Reset Password";
+      case "forgot-email":
+        return "Find My Email";
+      default:
+        return "Unlock Your Locker";
+    }
+  })();
+
+  const headerSubtitle = (() => {
+    switch (mode) {
+      case "signup":
+        return "Set up your secure document locker (email verification required)";
+      case "recover-choice":
+        return "Choose how you'd like to recover your account";
+      case "forgot-password":
+        return "Enter your email to receive a password reset link";
+      case "forgot-email":
+        return "Enter the phone number you used at sign-up to find your account";
+      default:
+        return "Enter your credentials to access your documents";
+    }
+  })();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -126,18 +234,14 @@ const Auth = () => {
             </motion.div>
 
             <h1 className="text-2xl font-display font-bold text-center mb-1 brass-text">
-              {isForgot ? "Reset Password" : isLogin ? "Unlock Your Locker" : "Create Your Locker"}
+              {headerTitle}
             </h1>
             <p className="text-center text-muted-foreground text-sm mb-6">
-              {isForgot
-                ? "Enter your email to receive a password reset link"
-                : isLogin
-                  ? "Enter your credentials to access your documents"
-                  : "Set up your secure document locker (email verification required)"}
+              {headerSubtitle}
             </p>
 
-            {/* Google Sign-In button - shown on login/signup, not forgot */}
-            {!isForgot && (
+            {/* Google Sign-In — only on login/signup */}
+            {(isLogin || isSignup) && (
               <div className="mb-4">
                 <Button
                   type="button"
@@ -166,7 +270,48 @@ const Auth = () => {
               </div>
             )}
 
-            {isForgot ? (
+            {/* Recovery choice screen */}
+            {mode === "recover-choice" && (
+              <div className="space-y-3">
+                <Button
+                  type="button"
+                  className="w-full h-auto py-4 brass-gradient text-primary-foreground font-semibold flex flex-col items-start hover:opacity-90"
+                  onClick={() => setMode("forgot-password")}
+                >
+                  <span className="flex items-center gap-2 text-base">
+                    <Mail className="h-4 w-4" /> I remember my email
+                  </span>
+                  <span className="text-xs font-normal opacity-90 mt-1 ml-6">
+                    Send a password reset link to my email
+                  </span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-auto py-4 border-border text-foreground flex flex-col items-start hover:bg-secondary"
+                  onClick={() => setMode("forgot-email")}
+                >
+                  <span className="flex items-center gap-2 text-base">
+                    <Phone className="h-4 w-4" /> I forgot my email
+                  </span>
+                  <span className="text-xs font-normal opacity-80 mt-1 ml-6">
+                    Find my account using my phone number
+                  </span>
+                </Button>
+
+                <button
+                  type="button"
+                  onClick={() => setMode("login")}
+                  className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1 mt-2"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Back to sign in
+                </button>
+              </div>
+            )}
+
+            {/* Forgot password — by email */}
+            {mode === "forgot-password" && (
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -187,17 +332,76 @@ const Auth = () => {
                 >
                   {submitting ? "Sending…" : "Send Reset Link"}
                 </Button>
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => setIsForgot(false)}
-                    className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                  >
-                    Back to sign in
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setMode("recover-choice")}
+                  className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Back
+                </button>
               </form>
-            ) : (
+            )}
+
+            {/* Forgot email — by phone */}
+            {mode === "forgot-email" && (
+              <div className="space-y-4">
+                {!revealedEmail ? (
+                  <form onSubmit={handlePhoneLookup} className="space-y-4">
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="tel"
+                        placeholder="Phone number (e.g. +256 700 000 000)"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="pl-10 bg-input border-border text-foreground placeholder:text-muted-foreground"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      disabled={submitting}
+                      className="w-full brass-gradient text-primary-foreground font-semibold hover:opacity-90"
+                    >
+                      {submitting ? "Searching…" : "Find My Account"}
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-md border border-border bg-input p-4 text-center">
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Account found! Your email is:
+                      </p>
+                      <p className="text-lg font-mono font-semibold brass-text">
+                        {revealedEmail.masked}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleSendResetForRevealed}
+                      disabled={submitting}
+                      className="w-full brass-gradient text-primary-foreground font-semibold hover:opacity-90"
+                    >
+                      {submitting ? "Sending…" : "Send Reset Link to This Email"}
+                    </Button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevealedEmail(null);
+                    setMode("recover-choice");
+                  }}
+                  className="w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
+                >
+                  <ArrowLeft className="h-3 w-3" /> Back
+                </button>
+              </div>
+            )}
+
+            {/* Login / Sign up form */}
+            {(isLogin || isSignup) && (
               <>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="relative">
@@ -211,6 +415,20 @@ const Auth = () => {
                       required
                     />
                   </div>
+
+                  {isSignup && (
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="tel"
+                        placeholder="Phone number (for account recovery)"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="pl-10 bg-input border-border text-foreground placeholder:text-muted-foreground"
+                        required
+                      />
+                    </div>
+                  )}
 
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -248,17 +466,19 @@ const Auth = () => {
                 <div className="mt-4 flex flex-col items-center gap-2">
                   {isLogin && (
                     <button
-                      onClick={() => setIsForgot(true)}
+                      onClick={() => setMode("recover-choice")}
                       className="text-sm text-primary/80 hover:text-primary transition-colors"
                     >
-                      Forgot your password?
+                      Forgot email or password?
                     </button>
                   )}
                   <button
-                    onClick={() => setIsLogin(!isLogin)}
+                    onClick={() => setMode(isLogin ? "signup" : "login")}
                     className="text-sm text-muted-foreground hover:text-primary transition-colors"
                   >
-                    {isLogin ? "Don't have a locker? Create one" : "Already have a locker? Unlock it"}
+                    {isLogin
+                      ? "Don't have a locker? Create one"
+                      : "Already have a locker? Unlock it"}
                   </button>
                 </div>
               </>
