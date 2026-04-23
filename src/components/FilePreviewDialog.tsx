@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye, ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
 import * as pdfjsLib from "pdfjs-dist";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
@@ -158,6 +160,8 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [officeHtml, setOfficeHtml] = useState<string | null>(null);
@@ -172,6 +176,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const editorRef = useRef<HTMLDivElement>(null);
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState(1);
+  // Bumped after every successful save to bust browser/CDN cache for the signed URL
+  const [reloadKey, setReloadKey] = useState(0);
   
 
   // Store original arrayBuffer for Excel re-save
@@ -213,6 +219,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           toast.error("Failed to load preview");
           return;
         }
+        // Append cache-buster so freshly saved files don't return stale CDN/browser cache
+        const bustedUrl = `${data.signedUrl}${data.signedUrl.includes("?") ? "&" : "?"}_cb=${reloadKey}_${Date.now()}`;
         if (revoked) return;
 
         // For PDFs and images, fetch as blob to avoid Chrome blocking cross-origin iframes
@@ -223,22 +231,22 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
         if (isPdfFile || isImageFile || isVideoFile || isAudioFile) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const blob = await resp.blob();
             if (revoked) return;
             const blobUrl = URL.createObjectURL(blob);
             setPreviewUrl(blobUrl);
           } catch {
             // Fallback to signed URL
-            if (!revoked) setPreviewUrl(data.signedUrl);
+            if (!revoked) setPreviewUrl(bustedUrl);
           }
         } else {
-          setPreviewUrl(data.signedUrl);
+          setPreviewUrl(bustedUrl);
         }
 
         if (isExcelFile(doc.name, doc.file_type)) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const arrayBuffer = await resp.arrayBuffer();
             excelBufferRef.current = arrayBuffer.slice(0);
             const XLSX = await import("xlsx");
@@ -255,7 +263,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           }
         } else if (isWordFile(doc.name, doc.file_type)) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const arrayBuffer = await resp.arrayBuffer();
             const mammoth = await import("mammoth");
             const result = await mammoth.convertToHtml({ arrayBuffer });
@@ -267,7 +275,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
         if (isTextFile(doc.name, doc.file_type)) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const text = await resp.text();
             if (!revoked) {
               setTextContent(text);
@@ -286,7 +294,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
     loadPreview();
     return () => { revoked = true; };
-  }, [open, doc?.id]);
+  }, [open, doc?.id, reloadKey]);
 
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
@@ -339,15 +347,43 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   };
 
   // === SAVE LOGIC ===
+  // Persists a Blob to storage with no-cache headers, refreshes DB row metadata,
+  // invalidates the documents list, and bumps reloadKey so the next render
+  // re-fetches the freshly saved bytes (bypassing CDN/browser cache).
+  const persistBlob = async (blob: Blob, contentType: string) => {
+    if (!doc) throw new Error("No document");
+    // Upload with cacheControl '0' so CDN/browsers always re-validate.
+    const { error: upErr } = await supabase.storage
+      .from("documents")
+      .update(doc.file_path, blob, {
+        upsert: true,
+        cacheControl: "0",
+        contentType,
+      });
+    if (upErr) throw upErr;
+
+    // Update DB row so file_size and updated_at reflect reality
+    if (user) {
+      await supabase
+        .from("documents")
+        .update({ file_size: blob.size, updated_at: new Date().toISOString() })
+        .eq("id", doc.id)
+        .eq("user_id", user.id);
+    }
+
+    // Refresh the cached list everywhere
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    // Force preview to re-fetch the new bytes
+    setReloadKey((k) => k + 1);
+  };
+
   const handleSaveText = async () => {
     if (!doc || !doc.file_path || localPreviewUrl !== undefined) return;
     setSaving(true);
     try {
-      const blob = new Blob([editedText], { type: doc.file_type || "text/plain" });
-      const { error } = await supabase.storage
-        .from("documents")
-        .update(doc.file_path, blob, { upsert: true });
-      if (error) throw error;
+      const contentType = doc.file_type || "text/plain";
+      const blob = new Blob([editedText], { type: contentType });
+      await persistBlob(blob, contentType);
 
       setTextContent(editedText);
       setHasChanges(false);
@@ -442,12 +478,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
         const bufferResult = await Packer.toBuffer(docFile);
         const uint8 = new Uint8Array(bufferResult);
-        const blob = new Blob([uint8], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+        const contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        const blob = new Blob([uint8], { type: contentType });
 
-        const { error } = await supabase.storage
-          .from("documents")
-          .update(doc.file_path, blob, { upsert: true });
-        if (error) throw error;
+        await persistBlob(blob, contentType);
       } else if (isExcelFile(doc.name, doc.file_type)) {
         // Parse edited HTML table back to XLSX
         const XLSX = await import("xlsx");
@@ -462,7 +496,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
             if (prev && prev.tagName === "H3") {
               sheetName = prev.textContent || sheetName;
             }
-            const ws = XLSX.utils.table_to_sheet(table);
+            const ws = XLSX.utils.table_to_sheet(table as HTMLTableElement);
             XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
           });
         } else {
@@ -472,12 +506,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
         }
 
         const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbOut], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const blob = new Blob([wbOut], { type: contentType });
 
-        const { error } = await supabase.storage
-          .from("documents")
-          .update(doc.file_path, blob, { upsert: true });
-        if (error) throw error;
+        await persistBlob(blob, contentType);
       }
 
       setHasChanges(false);
