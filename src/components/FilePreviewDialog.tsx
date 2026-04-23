@@ -294,7 +294,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
     loadPreview();
     return () => { revoked = true; };
-  }, [open, doc?.id]);
+  }, [open, doc?.id, reloadKey]);
 
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
