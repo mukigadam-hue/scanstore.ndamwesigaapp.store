@@ -347,15 +347,43 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   };
 
   // === SAVE LOGIC ===
+  // Persists a Blob to storage with no-cache headers, refreshes DB row metadata,
+  // invalidates the documents list, and bumps reloadKey so the next render
+  // re-fetches the freshly saved bytes (bypassing CDN/browser cache).
+  const persistBlob = async (blob: Blob, contentType: string) => {
+    if (!doc) throw new Error("No document");
+    // Upload with cacheControl '0' so CDN/browsers always re-validate.
+    const { error: upErr } = await supabase.storage
+      .from("documents")
+      .update(doc.file_path, blob, {
+        upsert: true,
+        cacheControl: "0",
+        contentType,
+      });
+    if (upErr) throw upErr;
+
+    // Update DB row so file_size and updated_at reflect reality
+    if (user) {
+      await supabase
+        .from("documents")
+        .update({ file_size: blob.size, updated_at: new Date().toISOString() })
+        .eq("id", doc.id)
+        .eq("user_id", user.id);
+    }
+
+    // Refresh the cached list everywhere
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    // Force preview to re-fetch the new bytes
+    setReloadKey((k) => k + 1);
+  };
+
   const handleSaveText = async () => {
     if (!doc || !doc.file_path || localPreviewUrl !== undefined) return;
     setSaving(true);
     try {
-      const blob = new Blob([editedText], { type: doc.file_type || "text/plain" });
-      const { error } = await supabase.storage
-        .from("documents")
-        .update(doc.file_path, blob, { upsert: true });
-      if (error) throw error;
+      const contentType = doc.file_type || "text/plain";
+      const blob = new Blob([editedText], { type: contentType });
+      await persistBlob(blob, contentType);
 
       setTextContent(editedText);
       setHasChanges(false);
@@ -450,12 +478,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
         const bufferResult = await Packer.toBuffer(docFile);
         const uint8 = new Uint8Array(bufferResult);
-        const blob = new Blob([uint8], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+        const contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        const blob = new Blob([uint8], { type: contentType });
 
-        const { error } = await supabase.storage
-          .from("documents")
-          .update(doc.file_path, blob, { upsert: true });
-        if (error) throw error;
+        await persistBlob(blob, contentType);
       } else if (isExcelFile(doc.name, doc.file_type)) {
         // Parse edited HTML table back to XLSX
         const XLSX = await import("xlsx");
@@ -470,7 +496,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
             if (prev && prev.tagName === "H3") {
               sheetName = prev.textContent || sheetName;
             }
-            const ws = XLSX.utils.table_to_sheet(table);
+            const ws = XLSX.utils.table_to_sheet(table as HTMLTableElement);
             XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
           });
         } else {
@@ -480,12 +506,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
         }
 
         const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([wbOut], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        const blob = new Blob([wbOut], { type: contentType });
 
-        const { error } = await supabase.storage
-          .from("documents")
-          .update(doc.file_path, blob, { upsert: true });
-        if (error) throw error;
+        await persistBlob(blob, contentType);
       }
 
       setHasChanges(false);
