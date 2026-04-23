@@ -160,6 +160,8 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [officeHtml, setOfficeHtml] = useState<string | null>(null);
@@ -174,6 +176,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const editorRef = useRef<HTMLDivElement>(null);
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
   const [pinchStartZoom, setPinchStartZoom] = useState(1);
+  // Bumped after every successful save to bust browser/CDN cache for the signed URL
+  const [reloadKey, setReloadKey] = useState(0);
   
 
   // Store original arrayBuffer for Excel re-save
