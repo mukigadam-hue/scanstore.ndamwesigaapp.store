@@ -219,6 +219,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           toast.error("Failed to load preview");
           return;
         }
+        // Append cache-buster so freshly saved files don't return stale CDN/browser cache
+        const bustedUrl = `${data.signedUrl}${data.signedUrl.includes("?") ? "&" : "?"}_cb=${reloadKey}_${Date.now()}`;
         if (revoked) return;
 
         // For PDFs and images, fetch as blob to avoid Chrome blocking cross-origin iframes
