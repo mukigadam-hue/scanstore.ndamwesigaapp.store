@@ -231,22 +231,22 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
         if (isPdfFile || isImageFile || isVideoFile || isAudioFile) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const blob = await resp.blob();
             if (revoked) return;
             const blobUrl = URL.createObjectURL(blob);
             setPreviewUrl(blobUrl);
           } catch {
             // Fallback to signed URL
-            if (!revoked) setPreviewUrl(data.signedUrl);
+            if (!revoked) setPreviewUrl(bustedUrl);
           }
         } else {
-          setPreviewUrl(data.signedUrl);
+          setPreviewUrl(bustedUrl);
         }
 
         if (isExcelFile(doc.name, doc.file_type)) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const arrayBuffer = await resp.arrayBuffer();
             excelBufferRef.current = arrayBuffer.slice(0);
             const XLSX = await import("xlsx");
@@ -263,7 +263,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
           }
         } else if (isWordFile(doc.name, doc.file_type)) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const arrayBuffer = await resp.arrayBuffer();
             const mammoth = await import("mammoth");
             const result = await mammoth.convertToHtml({ arrayBuffer });
@@ -275,7 +275,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
         if (isTextFile(doc.name, doc.file_type)) {
           try {
-            const resp = await fetch(data.signedUrl);
+            const resp = await fetch(bustedUrl, { cache: "no-store" });
             const text = await resp.text();
             if (!revoked) {
               setTextContent(text);
