@@ -61,7 +61,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // Clear any per-user verification + recovery flags so the next user starts fresh.
+    try {
+      const uid = user?.id;
+      if (uid) {
+        localStorage.removeItem(`locker_verified_${uid}`);
+        localStorage.removeItem(`security_otp_${uid}`);
+      }
+      sessionStorage.removeItem("pendingVaultFile");
+      sessionStorage.removeItem("launchAdShown");
+    } catch {}
+
+    // Try a global sign-out, then fall back to local so a missing/expired session
+    // never blocks the UI from logging the user out.
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+    } catch {
+      try { await supabase.auth.signOut({ scope: "local" } as any); } catch {}
+    }
+
+    // Force local state clear even if Supabase didn't fire onAuthStateChange.
+    setSession(null);
+    setUser(null);
+
+    // Hard redirect to the landing page so all in-memory state resets.
+    if (typeof window !== "undefined") {
+      window.location.replace("/");
+    }
   };
 
   return (
