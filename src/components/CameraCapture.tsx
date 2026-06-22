@@ -74,6 +74,33 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
+  // Live scan quality feedback (0-100)
+  const [quality, setQuality] = useState(0);
+  const [qualityHint, setQualityHint] = useState<string>("Hold steady, fill the frame");
+  const qualityCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // ID A4 layout editor state
+  const [idLayout, setIdLayout] = useState<{ front: IdPlacement; back: IdPlacement }>({
+    front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
+    back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
+  });
+  const a4ContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setStreaming(false);
+    setTorchOn(false);
+    setTorchSupported(false);
+  }, []);
+
+  const startCamera = useCallback(async (facing: "user" | "environment") => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: facing,
