@@ -12,6 +12,7 @@ import {
   KeyRound, AlertTriangle, Mail, Loader2,
 } from "lucide-react";
 import NativeAdSlot from "@/components/NativeAdSlot";
+import { showInterstitial } from "@/lib/ads";
 
 interface SecuritySettingsRow {
   pin_code: string | null;
@@ -36,6 +37,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const [pin, setPin] = useState("");
   const [school, setSchool] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
+  const [phase, setPhase] = useState<"verifying" | "playing_ad" | "verification_success">("verifying");
 
   // Forgot / recovery flow
   const [showForgot, setShowForgot] = useState(false);
@@ -57,7 +59,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   const requiredCount = Math.min(REQUIRED_VERIFICATIONS, availableMethods.length);
 
-  const markVerified = (methodId: MethodId) => {
+  const markVerified = async (methodId: MethodId) => {
     const updated = new Set(verifiedMethods);
     updated.add(methodId);
     setVerifiedMethods(updated);
@@ -66,8 +68,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setSchool("");
 
     if (updated.size >= requiredCount) {
-      toast.success("Identity fully verified! Welcome back 🔓");
-      onVerified();
+      // Show interstitial ad first, then reveal the success screen.
+      setPhase("playing_ad");
+      await showInterstitial("identity-verified");
+      setPhase("verification_success");
     } else {
       const remaining = requiredCount - updated.size;
       toast.success(`Method verified ✓ — ${remaining} more needed`);
@@ -199,6 +203,53 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   };
 
   const remainingMethods = availableMethods.filter((m) => !verifiedMethods.has(m.id));
+
+  if (phase === "verification_success") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35 }}
+          className="w-full max-w-sm text-center"
+        >
+          <div className="flex justify-center mb-5">
+            <div className="brass-gradient rounded-full p-5 brass-glow">
+              <CheckCircle2 className="h-12 w-12 text-primary-foreground" />
+            </div>
+          </div>
+          <h2 className="font-display text-3xl font-bold brass-text mb-2">
+            Identity Verified
+          </h2>
+          <p className="text-sm text-muted-foreground mb-8">
+            Welcome back. Your vault is ready.
+          </p>
+          <motion.button
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={onVerified}
+            className="brass-gradient brass-glow rounded-full p-10 inline-flex flex-col items-center justify-center mx-auto hover:opacity-95 transition-opacity"
+          >
+            <KeyRound className="h-16 w-16 text-primary-foreground" />
+          </motion.button>
+          <p className="mt-5 font-display text-lg font-semibold brass-text">
+            Open Your Drawers
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (phase === "playing_ad") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground">Verifying identity…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
