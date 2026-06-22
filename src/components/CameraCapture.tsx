@@ -425,7 +425,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setTimeout(() => startCamera(facingMode), 300);
     } else {
       setIdBackImage(result);
-      setScanMode("id-preview");
+      // Reset placements to defaults each time both sides are freshly captured
+      setIdLayout({
+        front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
+        back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
+      });
+      setScanMode("id-layout");
     }
   };
 
