@@ -149,6 +149,99 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
 
+  // Live quality monitor — samples the video feed periodically and scores
+  // sharpness, brightness and edge symmetry to guide the user.
+  useEffect(() => {
+    if (!open || !streaming || scanning || captured) {
+      setQuality(0);
+      return;
+    }
+    if (!qualityCanvasRef.current) qualityCanvasRef.current = document.createElement("canvas");
+    const sampleCanvas = qualityCanvasRef.current;
+    const SAMPLE_W = 160, SAMPLE_H = 120;
+    sampleCanvas.width = SAMPLE_W;
+    sampleCanvas.height = SAMPLE_H;
+    const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      const v = videoRef.current;
+      if (!v || v.readyState < 2) return;
+      try {
+        ctx.drawImage(v, 0, 0, SAMPLE_W, SAMPLE_H);
+        const { data } = ctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H);
+        // Grayscale buffer
+        const gray = new Float32Array(SAMPLE_W * SAMPLE_H);
+        let sum = 0;
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+          const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          gray[j] = g;
+          sum += g;
+        }
+        const mean = sum / gray.length;
+        // Stdev (contrast)
+        let varSum = 0;
+        for (let j = 0; j < gray.length; j++) varSum += (gray[j] - mean) ** 2;
+        const stdev = Math.sqrt(varSum / gray.length);
+
+        // Laplacian variance (sharpness)
+        let lapSum = 0, lapSqSum = 0, lapN = 0;
+        // Horizontal/vertical gradient sums for tilt symmetry
+        let leftEdge = 0, rightEdge = 0, topEdge = 0, bottomEdge = 0;
+        for (let y = 1; y < SAMPLE_H - 1; y++) {
+          for (let x = 1; x < SAMPLE_W - 1; x++) {
+            const i = y * SAMPLE_W + x;
+            const lap = -4 * gray[i] + gray[i - 1] + gray[i + 1] + gray[i - SAMPLE_W] + gray[i + SAMPLE_W];
+            lapSum += lap;
+            lapSqSum += lap * lap;
+            lapN++;
+            const gx = Math.abs(gray[i + 1] - gray[i - 1]);
+            const gy = Math.abs(gray[i + SAMPLE_W] - gray[i - SAMPLE_W]);
+            if (x < SAMPLE_W * 0.15) leftEdge += gx;
+            else if (x > SAMPLE_W * 0.85) rightEdge += gx;
+            if (y < SAMPLE_H * 0.15) topEdge += gy;
+            else if (y > SAMPLE_H * 0.85) bottomEdge += gy;
+          }
+        }
+        const lapMean = lapSum / lapN;
+        const lapVar = lapSqSum / lapN - lapMean * lapMean;
+
+        // Score components
+        const sharpScore = Math.min(100, (lapVar / 90) * 100); // tuned
+        const brightScore = mean < 40 ? (mean / 40) * 60 : mean > 215 ? Math.max(0, 100 - (mean - 215) * 4) : 100;
+        const contrastScore = Math.min(100, (stdev / 55) * 100);
+        const hSym = 1 - Math.abs(leftEdge - rightEdge) / (leftEdge + rightEdge + 1);
+        const vSym = 1 - Math.abs(topEdge - bottomEdge) / (topEdge + bottomEdge + 1);
+        const alignScore = ((hSym + vSym) / 2) * 100;
+
+        const score = Math.round(
+          sharpScore * 0.4 + contrastScore * 0.2 + brightScore * 0.2 + alignScore * 0.2
+        );
+        const clamped = Math.max(5, Math.min(100, score));
+        setQuality(clamped);
+
+        // Hint
+        let hint = "Looks great — hold still";
+        if (mean < 60) hint = "Too dark — turn on the flashlight or move to better light";
+        else if (mean > 215) hint = "Too bright — reduce glare or shadow";
+        else if (sharpScore < 35) hint = "Blurry — hold the phone steady and tap to focus";
+        else if (contrastScore < 30) hint = "Move closer so the document fills the frame";
+        else if (alignScore < 55) hint = "Straighten the phone — keep it parallel to the page";
+        else if (clamped < 60) hint = "Almost there — adjust angle slightly";
+        setQualityHint(hint);
+      } catch {
+        // ignore frame errors
+      }
+    };
+
+    const id = window.setInterval(tick, 350);
+    tick();
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [open, streaming, scanning, captured, scanMode]);
+
+
   const takePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
