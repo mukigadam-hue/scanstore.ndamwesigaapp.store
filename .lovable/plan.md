@@ -1,114 +1,86 @@
-# Phone-First Fast Entry — Implementation Plan
+# Free Utility & Mobile Integration Layer
 
-## Goal
-Replace the upfront email/password screen with a frictionless phone + 5‑digit PIN sign‑up that logs the user in instantly. Keep all internal vault security (auto-lock, biometric, document MFA, secure delete) untouched. Preserve old email login for existing users.
+Adds a public utility surface on top of the existing locker. Nothing in the current security, locker, drawers, MFA, or auth flow is removed — we only add new public routes, components, and a thin interception hook.
 
----
+## 1. Public vs Secure Routing
 
-## 1. Database changes (migration)
+New public routes (no auth required, security verification bypassed):
+- `/scan` — camera scanner
+- `/view` — document viewer/editor (also handles `/open` already wired for PWA File Handlers)
+- `/utility` — small landing card with "Scan Document", "Open a File", "Go to Vault"
 
-Update `public.profiles`:
-- Make `email` nullable.
-- Add `pin_hash text` (bcrypt-style hash, never plaintext).
-- Add `country_code text`, `phone_e164 text unique` (normalized lookup key).
-- Add `auth_method text default 'phone_pin'` to track legacy vs new users.
-- Backfill `phone_e164` from existing `phone` where possible.
+Existing `/locker` and drawer routes stay gated by the current `SecurityVerify` flow. No changes to `useAuth`, MFA, WebAuthn, auto-lock, or secure delete.
 
-Add a SECURITY DEFINER RPC `verify_phone_pin(p_phone text, p_pin text)` that:
-- Looks up profile by `phone_e164`.
-- Verifies the PIN against `pin_hash` using `crypt()` (pgcrypto).
-- Returns the user's email (synthetic) so the client can call `signInWithPassword`.
+The single interception point: a `SaveToVaultButton` component. When tapped, if the user is not unlocked, it stores the pending file in `sessionStorage` (`pendingVaultFile`) and routes to `/auth` → `/locker`. On successful unlock, `Locker.tsx` checks for `pendingVaultFile`, prompts the user to pick a drawer, and saves it through the existing upload pipeline. If already unlocked, save runs directly.
 
-Enable pgcrypto extension.
+## 2. Mobile File Interception (Open With)
 
-## 2. Auth strategy (no SMS, instant login)
-
-Because Supabase requires an account credential, each phone-first user gets:
-- A **synthetic email** like `vault+<phone_e164>@vaultmail.local` (kept internal, never shown).
-- A **synthetic password** = a random 32-char secret stored only in `pin_hash`-protected form? No — instead: the **password equals a server-derived value** the client cannot guess. Simpler: password = PIN combined with a per-user pepper. Implementation:
-  - On signup, edge function `phone-pin-signup` creates the auth user with synthetic email and a strong password = `hash(pin + server_pepper + phone)`. Stores `pin_hash` (bcrypt of raw PIN) in profile. Returns the session tokens to the client which sets the session — instant login, no email confirm.
-  - On login, edge function `phone-pin-login` recomputes the password from PIN + phone + pepper, then signs in. Returns session. Client sets session.
-- Edge functions use `SUPABASE_SERVICE_ROLE_KEY` (already available on Cloud) + a new `VAULT_PIN_PEPPER` secret.
-
-Auto-confirm: set `auto_confirm_email = true` via `configure_auth` so synthetic emails don't need verification (user already approved this pattern; we'll ask explicitly via the configure_auth call — only affects synthetic accounts since real users get magic links).
-
-> Note on auto-confirm: I'll flag this trade-off — it also auto-confirms real emails. If you'd prefer to keep email verification for the legacy path, we can instead use `admin.createUser({ email_confirm: true })` in the edge function and leave global setting alone. **Default in this plan: keep global setting OFF and have the edge function pass `email_confirm: true` only for phone-first synthetic accounts.**
-
-## 3. New entry screen (`src/pages/Auth.tsx` rewrite)
-
-Layout (mobile-first, matches existing locker aesthetic — mahogany/brass):
+Extend `public/manifest.json` with `file_handlers` so the installed PWA appears in the system "Open With" menu for images, PDFs, and Word docs:
 
 ```text
-┌─────────────────────────────┐
-│       🔐 Open Your Vault    │
-│  Fast, private, no email    │
-│                             │
-│ [🇺🇬 +256 ▼] [ 700 123 456 ]│
-│ [ • • • • • ]  5-digit PIN  │
-│ [ • • • • • ]  Confirm PIN  │
-│ Email (optional)   [ Skip ] │
-│                             │
-│   [   Open My Vault   ]     │
-│                             │
-│   Forgot PIN / Recover ›    │
-│ Logged in before with Email?│
-└─────────────────────────────┘
+images (image/*, .jpg .jpeg .png .webp .heic)
+pdf    (application/pdf, .pdf)
+word   (application/msword, .doc, .docx)
 ```
 
-- Country picker: lightweight static list of ~30 common countries; auto-select via `Intl.DateTimeFormat().resolvedOptions().timeZone` → country map, with a fallback to UG (current default region).
-- PIN inputs: 5 separate boxes, numeric only, auto-advance.
-- "Open My Vault" calls `phone-pin-signup` edge function → sets session → navigates to `/locker`. No SMS, no email step.
-- "Skip" hides the email field entirely.
-- "Logged in before with Email?" toggles a compact email/password form using existing `signIn` flow.
+Handler action points to `/view`. The existing `OpenFile.tsx` LaunchQueue logic is reused inside the new `ViewerScreen` so deep-linked files render immediately without any auth gate.
 
-## 4. Forgot PIN / Recovery flow
+Capacitor users get the same behavior via Android intent filters documented in `README.md` (no native code committed since the project is web-first; PWA file handlers cover both installed-PWA and Android-PWA cases).
 
-New screen state in Auth page (no SMS provider needed — simulated as requested):
-1. Enter phone number → call `phone-recover-start` edge function which checks the phone exists and returns `{ ok: true, code: <6-digit> }` (in dev) OR just `{ ok: true }`. We'll generate the code server-side and store it in a new `pin_recovery_codes` table with 10‑min expiry.
-2. UI shows: spinner "Detecting secure vault SMS code…" for 3s, then auto-fills 6 boxes with the returned code, green checkmark.
-3. User picks new 5-digit PIN → call `phone-pin-reset` edge function which validates the code, updates `pin_hash`, rotates the synthetic password, and returns a fresh session.
-4. Optional "Continue with Google" button on the same screen links a Google identity to the recovered account using existing `lovable.auth.signInWithOAuth("google")` flow (post-login linking).
+## 3. Document Viewer & Editor Screen (`/view`)
 
-> Honest note: auto-filling the code from the server is a simulation, not real SMS verification — anyone who knows a phone number can reset the PIN. I'll add a one-line warning to the security memory. If you later want true security, we plug in a real SMS provider and remove the server echo.
+New component `src/pages/ViewerScreen.tsx` with a top action bar:
+- **Close Document** — clears state, fires Ad Trigger 4, routes back to `/utility`.
+- **Save to Secure Vault** — uses `SaveToVaultButton` interception.
+- **Save Changes** (only for editable .docx/.txt) — persists edits to an in-memory blob, fires Ad Trigger 3.
 
-## 5. Backward compatibility
+Reuses the existing preview/edit stack already in `FilePreviewDialog.tsx` (mammoth for .docx, SheetJS for .xlsx, pdfjs for PDFs, contentEditable for text). Works fully offline.
 
-- Existing email users: bottom link "Logged in before with Email? Tap here" opens the classic form — no changes to their flow.
-- Inside `/locker`, if a logged-in user has no `phone_e164` or no `pin_hash`, show a dismissible banner: "Upgrade your vault identity — add a phone + 5-digit PIN." Tapping opens a small dialog that calls `phone-pin-attach` edge function to attach phone + PIN to the existing auth user without changing their email/password.
+## 4. Camera & Document Scanner (`/scan`)
 
-## 6. Files touched
+New `src/pages/ScanScreen.tsx` wrapping the existing `CameraCapture` component plus the existing `enhanceScan.ts` pipeline (auto-crop + contrast). After capture:
+- Preview thumbnail
+- **Retake** button
+- **Done / Finish Scan** button → fires Ad Trigger 2, then routes to `/view` with the scanned blob so the user can either close it or save to vault.
 
-**New:**
-- `supabase/functions/phone-pin-signup/index.ts`
-- `supabase/functions/phone-pin-login/index.ts`
-- `supabase/functions/phone-recover-start/index.ts`
-- `supabase/functions/phone-pin-reset/index.ts`
-- `supabase/functions/phone-pin-attach/index.ts`
-- `src/components/CountryCodePicker.tsx`
-- `src/components/PinInput.tsx`
-- `src/components/UpgradeVaultBanner.tsx`
+A "Scan Document" button is added to the landing page (`Index.tsx`) and to the new `/utility` page, both publicly accessible.
 
-**Edited:**
-- `src/pages/Auth.tsx` (full rewrite of UI, keep legacy path as collapsed section)
-- `src/pages/Locker.tsx` (mount UpgradeVaultBanner)
-- `src/lib/auth.tsx` (add `signInWithPhonePin`, `signUpWithPhonePin` helpers)
+## 5. Ads + Offline Detection
 
-**Migration:** profiles columns + pgcrypto + `pin_recovery_codes` table + `verify_phone_pin` RPC.
+New `src/lib/ads.ts`:
+- `useOnlineStatus()` hook (navigator.onLine + online/offline events).
+- `showInterstitial(trigger): Promise<void>` — resolves immediately when offline or when no ad slot is filled, otherwise renders a full-screen `InterstitialAdOverlay` (reuses `NativeAdSlot` as the creative) with a 5s skip timer and Close button. Always resolves so the calling workflow never freezes.
+- `prefetchInterstitial()` — silently warms the next ad in the background when online.
 
-**Secrets:** `VAULT_PIN_PEPPER` (auto-generated 32-byte).
+Four trigger points, each `await showInterstitial(...)` before continuing:
+1. **App launch** — in `Index.tsx` `useEffect`, before rendering the hero (shows once per session via `sessionStorage` flag).
+2. **Done / Finish Scan** — in `ScanScreen` before routing to `/view`.
+3. **Save Changes** in editor — in `ViewerScreen` after persisting edits.
+4. **Close Document / switch file** — in `ViewerScreen` close handler and in `OpenFile`/`ViewerScreen` when a new file replaces the current one.
 
-## 7. What stays untouched
-- Document MFA / WebAuthn / auto-lock / secure delete / scan & save pipeline — zero changes.
-- Profiles RLS still scoped to `auth.uid()`.
-- `src/integrations/supabase/client.ts` and types — only regenerated, never hand-edited.
+If `navigator.onLine` is false, `showInterstitial` short-circuits and the action proceeds with zero delay.
 
-## 8. Order of execution
-1. Migration (profiles + recovery table + RPC + pgcrypto).
-2. Add `VAULT_PIN_PEPPER` secret.
-3. Deploy 5 edge functions.
-4. Build `PinInput`, `CountryCodePicker`, `UpgradeVaultBanner`.
-5. Rewrite `Auth.tsx`.
-6. Mount banner in `Locker.tsx`.
-7. Smoke test: new signup → instant `/locker`, forgot PIN → reset → still see same documents, old email user → login + upgrade banner.
+## Files
 
-Reply **"go"** to start, or tell me which parts to tweak (e.g. real SMS via Twilio instead of simulated, or keep email verification on the legacy path).
+Created:
+- `src/pages/ViewerScreen.tsx`
+- `src/pages/ScanScreen.tsx`
+- `src/pages/UtilityHome.tsx`
+- `src/components/SaveToVaultButton.tsx`
+- `src/components/InterstitialAdOverlay.tsx`
+- `src/lib/ads.ts`
+- `src/hooks/useOnlineStatus.ts`
+
+Edited:
+- `src/App.tsx` — register new public routes
+- `src/pages/Index.tsx` — launch ad trigger + "Scan Document" button
+- `src/pages/Locker.tsx` — consume `pendingVaultFile` after unlock
+- `public/manifest.json` — `file_handlers` entries
+- `index.html` — none required (manifest already linked)
+
+Untouched (explicitly): `SecurityVerify.tsx`, `SecuritySetup.tsx`, `useAutoLock.ts`, `webauthn.ts`, `SecureDeleteDialog.tsx`, `Auth.tsx`, all phone-PIN edge functions, `DrawerView.tsx`, `FilePreviewDialog.tsx`.
+
+## Notes
+
+- "AdMob" on web/PWA is served via the existing `NativeAdSlot` placeholder; real AdMob SDK requires the Capacitor native shell, which is out of scope for this web build. The trigger contract (offline-skip, resolves-always, fires at the 4 listed moments) is fully implemented and will wire to a real AdMob plugin the moment the project is wrapped in Capacitor.
+- All new buttons use the existing shadcn `Button` component and current mahogany/brass design tokens so they match the locker aesthetic.
