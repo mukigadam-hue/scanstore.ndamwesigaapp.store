@@ -606,6 +606,30 @@ const Locker = () => {
         currentTimeout={autoLockSeconds}
         onSave={handleAutoLockSave}
       />
+
+      <Dialog open={!!pendingFile} onOpenChange={(o) => { if (!o) { sessionStorage.removeItem("pendingVaultFile"); setPendingFile(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save to Secure Vault</DialogTitle>
+            <DialogDescription>
+              Pick a drawer for <span className="font-medium">{pendingFile?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2 mt-2 max-h-[50vh] overflow-y-auto">
+            {drawers.map((d) => (
+              <Button
+                key={d.id}
+                variant="outline"
+                disabled={pendingUploading}
+                onClick={() => uploadPendingTo(d.name)}
+                className="justify-start"
+              >
+                <span className="mr-2">{d.icon}</span> {d.name}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
