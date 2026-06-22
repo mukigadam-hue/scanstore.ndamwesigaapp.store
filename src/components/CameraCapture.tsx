@@ -14,7 +14,30 @@ interface CameraCaptureProps {
   onScanStart?: () => void;
 }
 
-type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview";
+type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview" | "id-layout";
+
+interface IdPlacement { xMm: number; yMm: number; widthMm: number; }
+const ID_ASPECT = 85.6 / 53.98; // width / height
+const A4_W_MM = 210;
+const A4_H_MM = 297;
+const DEFAULT_ID_WIDTH_MM = 110;
+
+const clampPlacement = (p: IdPlacement): IdPlacement => {
+  const minW = 40;
+  const maxW = A4_W_MM - 10;
+  const widthMm = Math.max(minW, Math.min(maxW, p.widthMm));
+  const heightMm = widthMm / ID_ASPECT;
+  const xMm = Math.max(0, Math.min(A4_W_MM - widthMm, p.xMm));
+  const yMm = Math.max(0, Math.min(A4_H_MM - heightMm, p.yMm));
+  return { xMm, yMm, widthMm };
+};
+
+const qualityLabel = (score: number) => {
+  if (score >= 90) return { label: "Best scan", tone: "text-emerald-300 bg-emerald-500/20 border-emerald-400/40" };
+  if (score >= 60) return { label: "Good scan", tone: "text-lime-300 bg-lime-500/20 border-lime-400/40" };
+  if (score >= 50) return { label: "Not yet accurate", tone: "text-amber-300 bg-amber-500/20 border-amber-400/40" };
+  return { label: "Poor scan", tone: "text-red-300 bg-red-500/20 border-red-400/40" };
+};
 
 const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
