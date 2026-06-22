@@ -12,7 +12,7 @@ import {
   KeyRound, AlertTriangle, Mail, Loader2, Home, LogOut,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import NativeAdSlot from "@/components/NativeAdSlot";
+
 import { showInterstitial } from "@/lib/ads";
 
 interface SecuritySettingsRow {
