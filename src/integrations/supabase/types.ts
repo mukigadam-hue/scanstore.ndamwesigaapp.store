@@ -125,28 +125,67 @@ export type Database = {
         }
         Relationships: []
       }
+      pin_recovery_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          phone_e164: string
+          used_at: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          phone_e164: string
+          used_at?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          phone_e164?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          auth_method: string
+          country_code: string | null
           created_at: string
-          email: string
+          email: string | null
           id: string
           phone: string | null
+          phone_e164: string | null
+          pin_hash: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          auth_method?: string
+          country_code?: string | null
           created_at?: string
-          email: string
+          email?: string | null
           id?: string
           phone?: string | null
+          phone_e164?: string | null
+          pin_hash?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          auth_method?: string
+          country_code?: string | null
           created_at?: string
-          email?: string
+          email?: string | null
           id?: string
           phone?: string | null
+          phone_e164?: string | null
+          pin_hash?: string | null
           updated_at?: string
           user_id?: string
         }
