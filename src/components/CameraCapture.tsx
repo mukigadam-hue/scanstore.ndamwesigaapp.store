@@ -453,53 +453,39 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const combineIdSides = async (): Promise<string | null> => {
     if (!idFrontImage || !idBackImage) return null;
 
-    // A4 canvas at ~200 DPI (lighter than 300 DPI → much faster encode, still print-quality)
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    const PX_PER_MM = 1240 / 210; // ≈ 5.9 (≈ 200 DPI)
-    const canvasW = 1240;          // 210 mm
-    const canvasH = 1754;          // 297 mm
+    const PX_PER_MM = 1240 / A4_W_MM; // ≈ 200 DPI
+    const canvasW = 1240;
+    const canvasH = Math.round(A4_H_MM * PX_PER_MM);
     canvas.width = canvasW;
     canvas.height = canvasH;
 
-    // White A4 background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Render ID slightly larger than real physical size to match copier output.
-    // Real ISO/IEC 7810 ID-1 is 85.6 × 53.98 mm — bump ~28% so prints feel like a copy.
-    const ID_W_MM = 110;
-    const ID_H_MM = 110 / (85.6 / 53.98); // keep aspect ratio ≈ 69.4 mm
-    const idW = Math.round(ID_W_MM * PX_PER_MM);
-    const idH = Math.round(ID_H_MM * PX_PER_MM);
-
-    const topMarginMm = 15;        // top of paper
-    const gapMm = 10;              // separation between front and back
-    const topMargin = Math.round(topMarginMm * PX_PER_MM);
-    const gap = Math.round(gapMm * PX_PER_MM);
-
-    const xCenter = Math.round((canvasW - idW) / 2);
-    const yFront = topMargin;
-    const yBack = topMargin + idH + gap;
-
-    const drawSide = (img: ImageBitmap | HTMLImageElement, x: number, y: number) => {
-      ctx.drawImage(img as CanvasImageSource, x, y, idW, idH);
+    const drawPlacement = (img: ImageBitmap | HTMLImageElement, p: IdPlacement) => {
+      const x = Math.round(p.xMm * PX_PER_MM);
+      const y = Math.round(p.yMm * PX_PER_MM);
+      const w = Math.round(p.widthMm * PX_PER_MM);
+      const h = Math.round((p.widthMm / ID_ASPECT) * PX_PER_MM);
+      ctx.drawImage(img as CanvasImageSource, x, y, w, h);
       ctx.strokeStyle = "#d0d0d0";
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, idW - 1, idH - 1);
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     };
 
-    // Decode both sides in parallel for speed
     const [frontImg, backImg] = await Promise.all([
       decodeImage(idFrontImage),
       decodeImage(idBackImage),
     ]);
-    drawSide(frontImg, xCenter, yFront);
-    drawSide(backImg, xCenter, yBack);
-    return canvas.toDataURL("image/jpeg", 0.82);
+    drawPlacement(frontImg, idLayout.front);
+    drawPlacement(backImg, idLayout.back);
+    return canvas.toDataURL("image/jpeg", 0.85);
   };
+
 
   const saveIdAsPdf = async () => {
     try {
