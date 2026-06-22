@@ -19,6 +19,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useAutoLock } from "@/hooks/useAutoLock";
 import woodTexture from "@/assets/wood-texture.jpg";
 import { UpgradeVaultBanner } from "@/components/UpgradeVaultBanner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Drawer {
   id: string;
@@ -96,6 +97,54 @@ const Locker = () => {
       if (verified) setSessionVerified(true);
     }
   }, [user?.id]);
+
+  // ---- Pending vault file (from /view "Save to Secure Vault") ----
+  const [pendingFile, setPendingFile] = useState<{ name: string; type: string; dataUrl: string } | null>(null);
+  const [pendingUploading, setPendingUploading] = useState(false);
+
+  useEffect(() => {
+    if (!sessionVerified) return;
+    const raw = sessionStorage.getItem("pendingVaultFile");
+    if (!raw) return;
+    try {
+      setPendingFile(JSON.parse(raw));
+    } catch {
+      sessionStorage.removeItem("pendingVaultFile");
+    }
+  }, [sessionVerified]);
+
+  const uploadPendingTo = async (drawerName: string) => {
+    if (!pendingFile || !user) return;
+    setPendingUploading(true);
+    try {
+      const [, b64] = pendingFile.dataUrl.split(",");
+      const bin = atob(b64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const blob = new Blob([arr], { type: pendingFile.type });
+      const filePath = `${user.id}/${Date.now()}_${pendingFile.name}`;
+      const { error: upErr } = await supabase.storage.from("documents").upload(filePath, blob);
+      if (upErr) throw upErr;
+      const { error: dbErr } = await supabase.from("documents").insert({
+        user_id: user.id,
+        name: pendingFile.name,
+        file_path: filePath,
+        file_size: blob.size,
+        file_type: pendingFile.type,
+        drawer_name: drawerName,
+      });
+      if (dbErr) throw dbErr;
+      toast.success(`Saved to ${drawerName}`);
+      sessionStorage.removeItem("pendingVaultFile");
+      setPendingFile(null);
+      queryClient.invalidateQueries({ queryKey: ["documents", user.id] });
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save to vault");
+    } finally {
+      setPendingUploading(false);
+    }
+  };
+
 
   const markVerified = () => {
     if (user?.id) localStorage.setItem(`locker_verified_${user.id}`, "true");
