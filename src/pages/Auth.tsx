@@ -412,16 +412,6 @@ const Auth = () => {
                   <div className="flex flex-col gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => {
-                        setMode("phone-login");
-                        setPin("");
-                      }}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors text-center"
-                    >
-                      Already have a vault? Sign in
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setMode("recover-phone")}
                       className="text-xs text-muted-foreground hover:text-primary transition-colors text-center"
                     >
@@ -435,6 +425,7 @@ const Auth = () => {
                       Logged in before with Email? Tap here
                     </button>
                   </div>
+
                 </motion.form>
               )}
 
