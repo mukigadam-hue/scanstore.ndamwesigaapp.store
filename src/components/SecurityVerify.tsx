@@ -12,6 +12,7 @@ import {
   KeyRound, AlertTriangle, Mail, Loader2,
 } from "lucide-react";
 import NativeAdSlot from "@/components/NativeAdSlot";
+import { showInterstitial } from "@/lib/ads";
 
 interface SecuritySettingsRow {
   pin_code: string | null;
@@ -36,6 +37,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const [pin, setPin] = useState("");
   const [school, setSchool] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
+  const [phase, setPhase] = useState<"verifying" | "playing_ad" | "verification_success">("verifying");
 
   // Forgot / recovery flow
   const [showForgot, setShowForgot] = useState(false);
@@ -57,7 +59,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   const requiredCount = Math.min(REQUIRED_VERIFICATIONS, availableMethods.length);
 
-  const markVerified = (methodId: MethodId) => {
+  const markVerified = async (methodId: MethodId) => {
     const updated = new Set(verifiedMethods);
     updated.add(methodId);
     setVerifiedMethods(updated);
@@ -66,8 +68,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setSchool("");
 
     if (updated.size >= requiredCount) {
-      toast.success("Identity fully verified! Welcome back 🔓");
-      onVerified();
+      // Show interstitial ad first, then reveal the success screen.
+      setPhase("playing_ad");
+      await showInterstitial("identity-verified");
+      setPhase("verification_success");
     } else {
       const remaining = requiredCount - updated.size;
       toast.success(`Method verified ✓ — ${remaining} more needed`);
