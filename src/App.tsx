@@ -9,6 +9,10 @@ import Auth from "./pages/Auth";
 import Locker from "./pages/Locker";
 import ResetPassword from "./pages/ResetPassword";
 import OpenFile from "./pages/OpenFile";
+import ScanScreen from "./pages/ScanScreen";
+import ViewerScreen from "./pages/ViewerScreen";
+import UtilityHome from "./pages/UtilityHome";
+import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,8 +30,12 @@ const App = () => (
             <Route path="/locker" element={<Locker />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/open" element={<OpenFile />} />
+            <Route path="/view" element={<ViewerScreen />} />
+            <Route path="/scan" element={<ScanScreen />} />
+            <Route path="/utility" element={<UtilityHome />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <InterstitialAdOverlay />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
