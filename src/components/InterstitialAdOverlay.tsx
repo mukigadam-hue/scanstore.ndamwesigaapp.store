@@ -58,7 +58,7 @@ export default function InterstitialAdOverlay() {
       </div>
       <div className="flex-1 flex items-center justify-center px-4 pb-6">
         <div className="w-full max-w-md">
-          <NativeAdSlot slotId={`interstitial-${trigger}`} size="large" />
+          <NativeAdSlot slotId={`interstitial-${trigger}`} size="medium" />
         </div>
       </div>
     </div>,
