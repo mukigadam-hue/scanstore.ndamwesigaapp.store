@@ -666,28 +666,141 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   }
 
   // ID preview screen (both sides captured)
-  if (scanMode === "id-preview" && idFrontImage && idBackImage) {
-    const previewOverlay = (
+  if (scanMode === "id-layout" && idFrontImage && idBackImage) {
+    const startDrag = (
+      side: "front" | "back",
+      mode: "move" | "resize",
+      e: React.PointerEvent
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      const container = a4ContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const mmPerPx = A4_W_MM / rect.width;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const start = idLayout[side];
+
+      const onMove = (ev: PointerEvent) => {
+        const dxMm = (ev.clientX - startX) * mmPerPx;
+        const dyMm = (ev.clientY - startY) * mmPerPx;
+        setIdLayout((prev) => {
+          const next = { ...prev };
+          if (mode === "move") {
+            next[side] = clampPlacement({ ...start, xMm: start.xMm + dxMm, yMm: start.yMm + dyMm });
+          } else {
+            // resize from bottom-right, preserve aspect via width
+            next[side] = clampPlacement({ ...start, widthMm: start.widthMm + dxMm });
+          }
+          return next;
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    };
+
+    const renderCard = (side: "front" | "back") => {
+      const p = idLayout[side];
+      const heightMm = p.widthMm / ID_ASPECT;
+      const src = side === "front" ? idFrontImage : idBackImage;
+      return (
+        <div
+          key={side}
+          onPointerDown={(e) => startDrag(side, "move", e)}
+          className="absolute touch-none cursor-move select-none rounded-md ring-2 ring-amber-400/70 shadow-lg overflow-hidden"
+          style={{
+            left: `${(p.xMm / A4_W_MM) * 100}%`,
+            top: `${(p.yMm / A4_H_MM) * 100}%`,
+            width: `${(p.widthMm / A4_W_MM) * 100}%`,
+            height: `${(heightMm / A4_H_MM) * 100}%`,
+            background: "#fff",
+          }}
+        >
+          <img src={src!} alt={`ID ${side}`} className="w-full h-full object-fill pointer-events-none" draggable={false} />
+          <span className="absolute top-1 left-1 text-[10px] font-bold bg-amber-400 text-black px-1.5 py-0.5 rounded uppercase">
+            {side}
+          </span>
+          {/* Resize handle */}
+          <div
+            onPointerDown={(e) => startDrag(side, "resize", e)}
+            className="absolute bottom-0 right-0 w-6 h-6 bg-amber-400 cursor-nwse-resize touch-none flex items-center justify-center"
+            style={{ borderTopLeftRadius: 6 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 10 L10 2 M5 10 L10 5 M8 10 L10 8" stroke="#000" strokeWidth="1.5" fill="none" /></svg>
+          </div>
+        </div>
+      );
+    };
+
+    const layoutOverlay = (
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
-          <h3 className="text-white text-sm font-medium">ID Scan Preview — Both Sides</h3>
+          <h3 className="text-white text-sm font-medium">Arrange on A4 — drag & resize</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
         </div>
 
-        <div className="flex-1 overflow-auto flex flex-col items-center justify-center px-4 py-4 gap-4">
-          <div className="w-full max-w-md">
-            <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2 text-center">Front Side</p>
-            <div className="rounded-xl overflow-hidden border-2 border-white/10 shadow-lg">
-              <img src={idFrontImage} alt="ID Front" className="w-full object-contain bg-white" />
-            </div>
+        <div className="flex-1 overflow-auto flex flex-col items-center justify-start px-3 py-3 gap-2">
+          <p className="text-white/70 text-xs text-center max-w-xs">
+            Drag each side to move it. Drag the amber corner to resize. Both copies stay inside the A4 page.
+          </p>
+          <div
+            ref={a4ContainerRef}
+            className="relative bg-white shadow-2xl"
+            style={{ width: "min(92vw, 420px)", aspectRatio: `${A4_W_MM}/${A4_H_MM}` }}
+          >
+            {/* faint grid */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              backgroundImage: "linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px)",
+              backgroundSize: `${100 / 7}% ${100 / 10}%`,
+            }} />
+            {renderCard("front")}
+            {renderCard("back")}
           </div>
-          <div className="w-full max-w-md">
-            <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2 text-center">Back Side</p>
-            <div className="rounded-xl overflow-hidden border-2 border-white/10 shadow-lg">
-              <img src={idBackImage} alt="ID Back" className="w-full object-contain bg-white" />
-            </div>
+
+          <div className="flex gap-2 mt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-white/30 text-white hover:bg-white/10 bg-transparent"
+              onClick={() => setIdLayout({
+                front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
+                back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
+              })}
+            >
+              Reset layout
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-white/30 text-white hover:bg-white/10 bg-transparent"
+              onClick={() => setIdLayout((p) => ({
+                front: clampPlacement({ ...p.front, widthMm: Math.min(A4_W_MM - 10, p.front.widthMm + 10) }),
+                back:  clampPlacement({ ...p.back,  widthMm: Math.min(A4_W_MM - 10, p.back.widthMm + 10) }),
+              }))}
+            >
+              Bigger
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-white/30 text-white hover:bg-white/10 bg-transparent"
+              onClick={() => setIdLayout((p) => ({
+                front: clampPlacement({ ...p.front, widthMm: Math.max(40, p.front.widthMm - 10) }),
+                back:  clampPlacement({ ...p.back,  widthMm: Math.max(40, p.back.widthMm - 10) }),
+              }))}
+            >
+              Smaller
+            </Button>
           </div>
         </div>
 
@@ -725,8 +838,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         </div>
       </div>
     );
-    return createPortal(previewOverlay, document.body);
+    return createPortal(layoutOverlay, document.body);
   }
+
 
   // Determine labels for ID scanning
   const isIdMode = scanMode === "id-front" || scanMode === "id-back";
