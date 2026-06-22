@@ -326,6 +326,23 @@ const Auth = () => {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("phone-login");
+                        setPin("");
+                      }}
+                      className="block w-full font-bold text-base text-primary hover:underline"
+                    >
+                      Already have a vault? Sign in
+                    </button>
+                  </div>
+
+                  <p className="text-center font-bold text-sm text-foreground">
+                    New here? Open the account
+                  </p>
+
                   <div className="flex gap-2">
                     <CountryCodePicker value={country} onChange={setCountry} />
                     <Input
@@ -395,16 +412,6 @@ const Auth = () => {
                   <div className="flex flex-col gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => {
-                        setMode("phone-login");
-                        setPin("");
-                      }}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors text-center"
-                    >
-                      Already have a vault? Sign in
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => setMode("recover-phone")}
                       className="text-xs text-muted-foreground hover:text-primary transition-colors text-center"
                     >
@@ -418,6 +425,7 @@ const Auth = () => {
                       Logged in before with Email? Tap here
                     </button>
                   </div>
+
                 </motion.form>
               )}
 
