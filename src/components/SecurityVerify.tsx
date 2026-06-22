@@ -274,7 +274,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <LogOut className="h-4 w-4 mr-1.5" /> Sign Out
         </Button>
       </div>
-      <NativeAdSlot slotId="verify-top" size="medium" className="mb-4 max-w-md w-full" />
+      
       <motion.div
         initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -616,7 +616,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <div className="brass-gradient h-1" />
         </div>
       </motion.div>
-      <NativeAdSlot slotId="verify-bottom" size="medium" className="mt-4 max-w-md w-full" />
+      
     </div>
   );
 };

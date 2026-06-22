@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import NativeAdSlot from "@/components/NativeAdSlot";
+
 import { registerInterstitialHost } from "@/lib/ads";
 
 const SKIP_SECONDS = 5;
