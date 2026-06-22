@@ -911,6 +911,32 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               </div>
             )}
 
+            {/* Live scan quality meter */}
+            {streaming && !scanning && (() => {
+              const q = qualityLabel(quality);
+              return (
+                <div className="absolute top-2 left-2 right-2 flex flex-col items-center gap-1 pointer-events-none">
+                  <div className={`px-3 py-1 rounded-full border text-xs font-bold backdrop-blur-sm flex items-center gap-2 ${q.tone}`}>
+                    <span className="tabular-nums">{quality}%</span>
+                    <span>{q.label}</span>
+                  </div>
+                  <div className="w-44 h-1.5 bg-black/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-200"
+                      style={{
+                        width: `${quality}%`,
+                        background: quality >= 90 ? "#34d399" : quality >= 60 ? "#a3e635" : quality >= 50 ? "#fbbf24" : "#f87171",
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-white/85 bg-black/55 px-2 py-0.5 rounded-full max-w-[90%] text-center">
+                    {qualityHint}
+                  </span>
+                </div>
+              );
+            })()}
+
+
             {/* Scanning animation */}
             {scanning && (
               <div className="absolute inset-0 pointer-events-none">
