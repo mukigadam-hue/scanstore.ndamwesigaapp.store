@@ -14,7 +14,30 @@ interface CameraCaptureProps {
   onScanStart?: () => void;
 }
 
-type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview";
+type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview" | "id-layout";
+
+interface IdPlacement { xMm: number; yMm: number; widthMm: number; }
+const ID_ASPECT = 85.6 / 53.98; // width / height
+const A4_W_MM = 210;
+const A4_H_MM = 297;
+const DEFAULT_ID_WIDTH_MM = 110;
+
+const clampPlacement = (p: IdPlacement): IdPlacement => {
+  const minW = 40;
+  const maxW = A4_W_MM - 10;
+  const widthMm = Math.max(minW, Math.min(maxW, p.widthMm));
+  const heightMm = widthMm / ID_ASPECT;
+  const xMm = Math.max(0, Math.min(A4_W_MM - widthMm, p.xMm));
+  const yMm = Math.max(0, Math.min(A4_H_MM - heightMm, p.yMm));
+  return { xMm, yMm, widthMm };
+};
+
+const qualityLabel = (score: number) => {
+  if (score >= 90) return { label: "Best scan", tone: "text-emerald-300 bg-emerald-500/20 border-emerald-400/40" };
+  if (score >= 60) return { label: "Good scan", tone: "text-lime-300 bg-lime-500/20 border-lime-400/40" };
+  if (score >= 50) return { label: "Not yet accurate", tone: "text-amber-300 bg-amber-500/20 border-amber-400/40" };
+  return { label: "Poor scan", tone: "text-red-300 bg-red-500/20 border-red-400/40" };
+};
 
 const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
@@ -35,6 +58,18 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanMode, setScanMode] = useState<ScanMode>("select");
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
   const [idBackImage, setIdBackImage] = useState<string | null>(null);
+
+  // Live scan quality feedback (0-100)
+  const [quality, setQuality] = useState(0);
+  const [qualityHint, setQualityHint] = useState<string>("Hold steady, fill the frame");
+  const qualityCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // ID A4 layout editor state
+  const [idLayout, setIdLayout] = useState<{ front: IdPlacement; back: IdPlacement }>({
+    front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
+    back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
+  });
+  const a4ContainerRef = useRef<HTMLDivElement | null>(null);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -113,6 +148,99 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open]);
+
+  // Live quality monitor — samples the video feed periodically and scores
+  // sharpness, brightness and edge symmetry to guide the user.
+  useEffect(() => {
+    if (!open || !streaming || scanning || captured) {
+      setQuality(0);
+      return;
+    }
+    if (!qualityCanvasRef.current) qualityCanvasRef.current = document.createElement("canvas");
+    const sampleCanvas = qualityCanvasRef.current;
+    const SAMPLE_W = 160, SAMPLE_H = 120;
+    sampleCanvas.width = SAMPLE_W;
+    sampleCanvas.height = SAMPLE_H;
+    const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      const v = videoRef.current;
+      if (!v || v.readyState < 2) return;
+      try {
+        ctx.drawImage(v, 0, 0, SAMPLE_W, SAMPLE_H);
+        const { data } = ctx.getImageData(0, 0, SAMPLE_W, SAMPLE_H);
+        // Grayscale buffer
+        const gray = new Float32Array(SAMPLE_W * SAMPLE_H);
+        let sum = 0;
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+          const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          gray[j] = g;
+          sum += g;
+        }
+        const mean = sum / gray.length;
+        // Stdev (contrast)
+        let varSum = 0;
+        for (let j = 0; j < gray.length; j++) varSum += (gray[j] - mean) ** 2;
+        const stdev = Math.sqrt(varSum / gray.length);
+
+        // Laplacian variance (sharpness)
+        let lapSum = 0, lapSqSum = 0, lapN = 0;
+        // Horizontal/vertical gradient sums for tilt symmetry
+        let leftEdge = 0, rightEdge = 0, topEdge = 0, bottomEdge = 0;
+        for (let y = 1; y < SAMPLE_H - 1; y++) {
+          for (let x = 1; x < SAMPLE_W - 1; x++) {
+            const i = y * SAMPLE_W + x;
+            const lap = -4 * gray[i] + gray[i - 1] + gray[i + 1] + gray[i - SAMPLE_W] + gray[i + SAMPLE_W];
+            lapSum += lap;
+            lapSqSum += lap * lap;
+            lapN++;
+            const gx = Math.abs(gray[i + 1] - gray[i - 1]);
+            const gy = Math.abs(gray[i + SAMPLE_W] - gray[i - SAMPLE_W]);
+            if (x < SAMPLE_W * 0.15) leftEdge += gx;
+            else if (x > SAMPLE_W * 0.85) rightEdge += gx;
+            if (y < SAMPLE_H * 0.15) topEdge += gy;
+            else if (y > SAMPLE_H * 0.85) bottomEdge += gy;
+          }
+        }
+        const lapMean = lapSum / lapN;
+        const lapVar = lapSqSum / lapN - lapMean * lapMean;
+
+        // Score components
+        const sharpScore = Math.min(100, (lapVar / 90) * 100); // tuned
+        const brightScore = mean < 40 ? (mean / 40) * 60 : mean > 215 ? Math.max(0, 100 - (mean - 215) * 4) : 100;
+        const contrastScore = Math.min(100, (stdev / 55) * 100);
+        const hSym = 1 - Math.abs(leftEdge - rightEdge) / (leftEdge + rightEdge + 1);
+        const vSym = 1 - Math.abs(topEdge - bottomEdge) / (topEdge + bottomEdge + 1);
+        const alignScore = ((hSym + vSym) / 2) * 100;
+
+        const score = Math.round(
+          sharpScore * 0.4 + contrastScore * 0.2 + brightScore * 0.2 + alignScore * 0.2
+        );
+        const clamped = Math.max(5, Math.min(100, score));
+        setQuality(clamped);
+
+        // Hint
+        let hint = "Looks great — hold still";
+        if (mean < 60) hint = "Too dark — turn on the flashlight or move to better light";
+        else if (mean > 215) hint = "Too bright — reduce glare or shadow";
+        else if (sharpScore < 35) hint = "Blurry — hold the phone steady and tap to focus";
+        else if (contrastScore < 30) hint = "Move closer so the document fills the frame";
+        else if (alignScore < 55) hint = "Straighten the phone — keep it parallel to the page";
+        else if (clamped < 60) hint = "Almost there — adjust angle slightly";
+        setQualityHint(hint);
+      } catch {
+        // ignore frame errors
+      }
+    };
+
+    const id = window.setInterval(tick, 350);
+    tick();
+    return () => { cancelled = true; window.clearInterval(id); };
+  }, [open, streaming, scanning, captured, scanMode]);
+
 
   const takePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -297,7 +425,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setTimeout(() => startCamera(facingMode), 300);
     } else {
       setIdBackImage(result);
-      setScanMode("id-preview");
+      // Reset placements to defaults each time both sides are freshly captured
+      setIdLayout({
+        front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
+        back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
+      });
+      setScanMode("id-layout");
     }
   };
 
@@ -320,53 +453,39 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const combineIdSides = async (): Promise<string | null> => {
     if (!idFrontImage || !idBackImage) return null;
 
-    // A4 canvas at ~200 DPI (lighter than 300 DPI → much faster encode, still print-quality)
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    const PX_PER_MM = 1240 / 210; // ≈ 5.9 (≈ 200 DPI)
-    const canvasW = 1240;          // 210 mm
-    const canvasH = 1754;          // 297 mm
+    const PX_PER_MM = 1240 / A4_W_MM; // ≈ 200 DPI
+    const canvasW = 1240;
+    const canvasH = Math.round(A4_H_MM * PX_PER_MM);
     canvas.width = canvasW;
     canvas.height = canvasH;
 
-    // White A4 background
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvasW, canvasH);
 
-    // Render ID slightly larger than real physical size to match copier output.
-    // Real ISO/IEC 7810 ID-1 is 85.6 × 53.98 mm — bump ~28% so prints feel like a copy.
-    const ID_W_MM = 110;
-    const ID_H_MM = 110 / (85.6 / 53.98); // keep aspect ratio ≈ 69.4 mm
-    const idW = Math.round(ID_W_MM * PX_PER_MM);
-    const idH = Math.round(ID_H_MM * PX_PER_MM);
-
-    const topMarginMm = 15;        // top of paper
-    const gapMm = 10;              // separation between front and back
-    const topMargin = Math.round(topMarginMm * PX_PER_MM);
-    const gap = Math.round(gapMm * PX_PER_MM);
-
-    const xCenter = Math.round((canvasW - idW) / 2);
-    const yFront = topMargin;
-    const yBack = topMargin + idH + gap;
-
-    const drawSide = (img: ImageBitmap | HTMLImageElement, x: number, y: number) => {
-      ctx.drawImage(img as CanvasImageSource, x, y, idW, idH);
+    const drawPlacement = (img: ImageBitmap | HTMLImageElement, p: IdPlacement) => {
+      const x = Math.round(p.xMm * PX_PER_MM);
+      const y = Math.round(p.yMm * PX_PER_MM);
+      const w = Math.round(p.widthMm * PX_PER_MM);
+      const h = Math.round((p.widthMm / ID_ASPECT) * PX_PER_MM);
+      ctx.drawImage(img as CanvasImageSource, x, y, w, h);
       ctx.strokeStyle = "#d0d0d0";
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, idW - 1, idH - 1);
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     };
 
-    // Decode both sides in parallel for speed
     const [frontImg, backImg] = await Promise.all([
       decodeImage(idFrontImage),
       decodeImage(idBackImage),
     ]);
-    drawSide(frontImg, xCenter, yFront);
-    drawSide(backImg, xCenter, yBack);
-    return canvas.toDataURL("image/jpeg", 0.82);
+    drawPlacement(frontImg, idLayout.front);
+    drawPlacement(backImg, idLayout.back);
+    return canvas.toDataURL("image/jpeg", 0.85);
   };
+
 
   const saveIdAsPdf = async () => {
     try {
@@ -547,28 +666,141 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   }
 
   // ID preview screen (both sides captured)
-  if (scanMode === "id-preview" && idFrontImage && idBackImage) {
-    const previewOverlay = (
+  if (scanMode === "id-layout" && idFrontImage && idBackImage) {
+    const startDrag = (
+      side: "front" | "back",
+      mode: "move" | "resize",
+      e: React.PointerEvent
+    ) => {
+      e.preventDefault();
+      e.stopPropagation();
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      const container = a4ContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const mmPerPx = A4_W_MM / rect.width;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const start = idLayout[side];
+
+      const onMove = (ev: PointerEvent) => {
+        const dxMm = (ev.clientX - startX) * mmPerPx;
+        const dyMm = (ev.clientY - startY) * mmPerPx;
+        setIdLayout((prev) => {
+          const next = { ...prev };
+          if (mode === "move") {
+            next[side] = clampPlacement({ ...start, xMm: start.xMm + dxMm, yMm: start.yMm + dyMm });
+          } else {
+            // resize from bottom-right, preserve aspect via width
+            next[side] = clampPlacement({ ...start, widthMm: start.widthMm + dxMm });
+          }
+          return next;
+        });
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    };
+
+    const renderCard = (side: "front" | "back") => {
+      const p = idLayout[side];
+      const heightMm = p.widthMm / ID_ASPECT;
+      const src = side === "front" ? idFrontImage : idBackImage;
+      return (
+        <div
+          key={side}
+          onPointerDown={(e) => startDrag(side, "move", e)}
+          className="absolute touch-none cursor-move select-none rounded-md ring-2 ring-amber-400/70 shadow-lg overflow-hidden"
+          style={{
+            left: `${(p.xMm / A4_W_MM) * 100}%`,
+            top: `${(p.yMm / A4_H_MM) * 100}%`,
+            width: `${(p.widthMm / A4_W_MM) * 100}%`,
+            height: `${(heightMm / A4_H_MM) * 100}%`,
+            background: "#fff",
+          }}
+        >
+          <img src={src!} alt={`ID ${side}`} className="w-full h-full object-fill pointer-events-none" draggable={false} />
+          <span className="absolute top-1 left-1 text-[10px] font-bold bg-amber-400 text-black px-1.5 py-0.5 rounded uppercase">
+            {side}
+          </span>
+          {/* Resize handle */}
+          <div
+            onPointerDown={(e) => startDrag(side, "resize", e)}
+            className="absolute bottom-0 right-0 w-6 h-6 bg-amber-400 cursor-nwse-resize touch-none flex items-center justify-center"
+            style={{ borderTopLeftRadius: 6 }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 10 L10 2 M5 10 L10 5 M8 10 L10 8" stroke="#000" strokeWidth="1.5" fill="none" /></svg>
+          </div>
+        </div>
+      );
+    };
+
+    const layoutOverlay = (
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
-          <h3 className="text-white text-sm font-medium">ID Scan Preview — Both Sides</h3>
+          <h3 className="text-white text-sm font-medium">Arrange on A4 — drag & resize</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
         </div>
 
-        <div className="flex-1 overflow-auto flex flex-col items-center justify-center px-4 py-4 gap-4">
-          <div className="w-full max-w-md">
-            <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2 text-center">Front Side</p>
-            <div className="rounded-xl overflow-hidden border-2 border-white/10 shadow-lg">
-              <img src={idFrontImage} alt="ID Front" className="w-full object-contain bg-white" />
-            </div>
+        <div className="flex-1 overflow-auto flex flex-col items-center justify-start px-3 py-3 gap-2">
+          <p className="text-white/70 text-xs text-center max-w-xs">
+            Drag each side to move it. Drag the amber corner to resize. Both copies stay inside the A4 page.
+          </p>
+          <div
+            ref={a4ContainerRef}
+            className="relative bg-white shadow-2xl"
+            style={{ width: "min(92vw, 420px)", aspectRatio: `${A4_W_MM}/${A4_H_MM}` }}
+          >
+            {/* faint grid */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              backgroundImage: "linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px)",
+              backgroundSize: `${100 / 7}% ${100 / 10}%`,
+            }} />
+            {renderCard("front")}
+            {renderCard("back")}
           </div>
-          <div className="w-full max-w-md">
-            <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2 text-center">Back Side</p>
-            <div className="rounded-xl overflow-hidden border-2 border-white/10 shadow-lg">
-              <img src={idBackImage} alt="ID Back" className="w-full object-contain bg-white" />
-            </div>
+
+          <div className="flex gap-2 mt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-white/30 text-white hover:bg-white/10 bg-transparent"
+              onClick={() => setIdLayout({
+                front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
+                back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
+              })}
+            >
+              Reset layout
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-white/30 text-white hover:bg-white/10 bg-transparent"
+              onClick={() => setIdLayout((p) => ({
+                front: clampPlacement({ ...p.front, widthMm: Math.min(A4_W_MM - 10, p.front.widthMm + 10) }),
+                back:  clampPlacement({ ...p.back,  widthMm: Math.min(A4_W_MM - 10, p.back.widthMm + 10) }),
+              }))}
+            >
+              Bigger
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-white/30 text-white hover:bg-white/10 bg-transparent"
+              onClick={() => setIdLayout((p) => ({
+                front: clampPlacement({ ...p.front, widthMm: Math.max(40, p.front.widthMm - 10) }),
+                back:  clampPlacement({ ...p.back,  widthMm: Math.max(40, p.back.widthMm - 10) }),
+              }))}
+            >
+              Smaller
+            </Button>
           </div>
         </div>
 
@@ -606,8 +838,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         </div>
       </div>
     );
-    return createPortal(previewOverlay, document.body);
+    return createPortal(layoutOverlay, document.body);
   }
+
 
   // Determine labels for ID scanning
   const isIdMode = scanMode === "id-front" || scanMode === "id-back";
@@ -677,6 +910,32 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 </span>
               </div>
             )}
+
+            {/* Live scan quality meter */}
+            {streaming && !scanning && (() => {
+              const q = qualityLabel(quality);
+              return (
+                <div className="absolute top-2 left-2 right-2 flex flex-col items-center gap-1 pointer-events-none">
+                  <div className={`px-3 py-1 rounded-full border text-xs font-bold backdrop-blur-sm flex items-center gap-2 ${q.tone}`}>
+                    <span className="tabular-nums">{quality}%</span>
+                    <span>{q.label}</span>
+                  </div>
+                  <div className="w-44 h-1.5 bg-black/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-200"
+                      style={{
+                        width: `${quality}%`,
+                        background: quality >= 90 ? "#34d399" : quality >= 60 ? "#a3e635" : quality >= 50 ? "#fbbf24" : "#f87171",
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] text-white/85 bg-black/55 px-2 py-0.5 rounded-full max-w-[90%] text-center">
+                    {qualityHint}
+                  </span>
+                </div>
+              );
+            })()}
+
 
             {/* Scanning animation */}
             {scanning && (
