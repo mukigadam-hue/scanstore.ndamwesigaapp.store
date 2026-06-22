@@ -326,6 +326,23 @@ const Auth = () => {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("phone-login");
+                        setPin("");
+                      }}
+                      className="block w-full font-bold text-base text-primary hover:underline"
+                    >
+                      Already have a vault? Sign in
+                    </button>
+                  </div>
+
+                  <p className="text-center font-bold text-sm text-foreground">
+                    New here? Open the account
+                  </p>
+
                   <div className="flex gap-2">
                     <CountryCodePicker value={country} onChange={setCountry} />
                     <Input
