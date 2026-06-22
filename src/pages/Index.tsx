@@ -1,14 +1,28 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { motion } from "framer-motion";
-import { KeyRound, Shield, Download, Upload } from "lucide-react";
+import { KeyRound, Shield, Download, Upload, ScanLine, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { useEffect } from "react";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
 import NativeAdSlot from "@/components/NativeAdSlot";
+import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
 
 const Index = () => {
   const { user, loading } = useAuth();
+
+  useEffect(() => {
+    // Ad Trigger 1: app launch, once per session, only when online.
+    if (sessionStorage.getItem("launchAdShown") === "1") return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    sessionStorage.setItem("launchAdShown", "1");
+    prefetchInterstitial();
+    // Small delay so the host overlay registers first.
+    const t = setTimeout(() => { showInterstitial("app-launch"); }, 250);
+    return () => clearTimeout(t);
+  }, []);
+
 
   if (loading) {
     return (
@@ -64,9 +78,23 @@ const Index = () => {
                 Open Your Locker
               </Button>
             </Link>
+
+            <div className="mt-4 flex flex-wrap gap-2 justify-center">
+              <Link to="/scan">
+                <Button variant="outline" className="font-display">
+                  <ScanLine className="h-4 w-4 mr-2" /> Scan Document
+                </Button>
+              </Link>
+              <Link to="/view">
+                <Button variant="outline" className="font-display">
+                  <FileText className="h-4 w-4 mr-2" /> Open a File
+                </Button>
+              </Link>
+            </div>
           </motion.div>
         </div>
       </div>
+
 
       {/* Features */}
       <div className="max-w-4xl mx-auto px-4 py-16">
