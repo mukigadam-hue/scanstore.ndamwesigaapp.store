@@ -18,6 +18,7 @@ import AutoLockSettings from "@/components/AutoLockSettings";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useAutoLock } from "@/hooks/useAutoLock";
 import woodTexture from "@/assets/wood-texture.jpg";
+import { UpgradeVaultBanner } from "@/components/UpgradeVaultBanner";
 
 interface Drawer {
   id: string;
