@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useEffect } from "react";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
-import NativeAdSlot from "@/components/NativeAdSlot";
+
 import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
 
 const Index = () => {
@@ -50,10 +50,6 @@ const Index = () => {
         </div>
 
         <div className="relative z-10 max-w-4xl mx-auto px-4 py-24 text-center">
-          {/* Top ad for free-tier users */}
-          <div className="mb-4">
-            <NativeAdSlot slotId="landing-top" size="banner" />
-          </div>
 
           <motion.div
             initial={{ opacity: 0, y: 30 }}
