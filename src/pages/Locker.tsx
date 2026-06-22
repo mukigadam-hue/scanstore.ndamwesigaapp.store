@@ -330,6 +330,7 @@ const Locker = () => {
 
         {/* Main content */}
         <main className="max-w-6xl mx-auto px-4 py-8">
+          <UpgradeVaultBanner />
           <AnimatePresence mode="popLayout">
             {selectedDrawer ? (
               <DrawerView
