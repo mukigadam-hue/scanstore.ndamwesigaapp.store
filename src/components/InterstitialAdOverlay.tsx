@@ -42,7 +42,7 @@ export default function InterstitialAdOverlay() {
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 text-xs text-white/70">
-        <span>Sponsored · {trigger}</span>
+        <span>Advertisement</span>
         {countdown > 0 ? (
           <span>Skip in {countdown}s</span>
         ) : (
@@ -57,8 +57,12 @@ export default function InterstitialAdOverlay() {
         )}
       </div>
       <div className="flex-1 flex items-center justify-center px-4 pb-6">
-        <div className="w-full max-w-md">
-          <NativeAdSlot slotId={`interstitial-${trigger}`} size="medium" />
+        <div
+          className="w-full max-w-md h-[250px] rounded-md border border-white/10 bg-white/5 flex items-center justify-center text-white/40 text-sm"
+          data-ad-slot={`interstitial-${trigger}`}
+        >
+          {/* === REPLACE WITH YOUR INTERSTITIAL AD SDK === */}
+          Ad
         </div>
       </div>
     </div>,
