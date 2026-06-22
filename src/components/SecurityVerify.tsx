@@ -9,8 +9,9 @@ import { getBiometricErrorMessage, verifyDeviceBiometric } from "@/lib/webauthn"
 import {
   Shield, Hash, Fingerprint, Camera,
   GraduationCap, Users, IdCard, ArrowLeft, CheckCircle2,
-  KeyRound, AlertTriangle, Mail, Loader2,
+  KeyRound, AlertTriangle, Mail, Loader2, Home, LogOut,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import NativeAdSlot from "@/components/NativeAdSlot";
 import { showInterstitial } from "@/lib/ads";
 
@@ -31,7 +32,8 @@ interface SecurityVerifyProps {
 type MethodId = "pin" | "fingerprint" | "face" | "school" | "family" | "id";
 
 const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [selectedMethod, setSelectedMethod] = useState<MethodId | null>(null);
   const [verifiedMethods, setVerifiedMethods] = useState<Set<MethodId>>(new Set());
   const [pin, setPin] = useState("");
@@ -253,6 +255,25 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      {/* Exit bar: leave verification or sign out completely */}
+      <div className="w-full max-w-md flex items-center justify-between mb-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/")}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <Home className="h-4 w-4 mr-1.5" /> Back to Home
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={signOut}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4 mr-1.5" /> Sign Out
+        </Button>
+      </div>
       <NativeAdSlot slotId="verify-top" size="medium" className="mb-4 max-w-md w-full" />
       <motion.div
         initial={{ opacity: 0, scale: 0.97 }}
