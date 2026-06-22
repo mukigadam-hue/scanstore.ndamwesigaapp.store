@@ -204,6 +204,53 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   const remainingMethods = availableMethods.filter((m) => !verifiedMethods.has(m.id));
 
+  if (phase === "verification_success") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35 }}
+          className="w-full max-w-sm text-center"
+        >
+          <div className="flex justify-center mb-5">
+            <div className="brass-gradient rounded-full p-5 brass-glow">
+              <CheckCircle2 className="h-12 w-12 text-primary-foreground" />
+            </div>
+          </div>
+          <h2 className="font-display text-3xl font-bold brass-text mb-2">
+            Identity Verified
+          </h2>
+          <p className="text-sm text-muted-foreground mb-8">
+            Welcome back. Your vault is ready.
+          </p>
+          <motion.button
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={onVerified}
+            className="brass-gradient brass-glow rounded-full p-10 inline-flex flex-col items-center justify-center mx-auto hover:opacity-95 transition-opacity"
+          >
+            <KeyRound className="h-16 w-16 text-primary-foreground" />
+          </motion.button>
+          <p className="mt-5 font-display text-lg font-semibold brass-text">
+            Open Your Drawers
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (phase === "playing_ad") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground">Verifying identity…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <NativeAdSlot slotId="verify-top" size="medium" className="mb-4 max-w-md w-full" />
