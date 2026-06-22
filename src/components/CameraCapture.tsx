@@ -59,21 +59,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
   const [idBackImage, setIdBackImage] = useState<string | null>(null);
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setStreaming(false);
-    setTorchOn(false);
-    setTorchSupported(false);
-  }, []);
-
-  const startCamera = useCallback(async (facing: "user" | "environment") => {
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
   // Live scan quality feedback (0-100)
   const [quality, setQuality] = useState(0);
   const [qualityHint, setQualityHint] = useState<string>("Hold steady, fill the frame");
