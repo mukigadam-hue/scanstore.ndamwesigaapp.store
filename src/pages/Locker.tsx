@@ -22,6 +22,7 @@ import { UpgradeVaultBanner } from "@/components/UpgradeVaultBanner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import LanguageSelector from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
+import { getPendingVaultFile, clearPendingVaultFile } from "@/lib/pendingVaultFile";
 
 interface Drawer {
   id: string;
@@ -107,13 +108,8 @@ const Locker = () => {
 
   useEffect(() => {
     if (!sessionVerified) return;
-    const raw = sessionStorage.getItem("pendingVaultFile");
-    if (!raw) return;
-    try {
-      setPendingFile(JSON.parse(raw));
-    } catch {
-      sessionStorage.removeItem("pendingVaultFile");
-    }
+    const staged = getPendingVaultFile();
+    if (staged) setPendingFile(staged);
   }, [sessionVerified]);
 
   const uploadPendingTo = async (drawerName: string) => {
@@ -138,7 +134,7 @@ const Locker = () => {
       });
       if (dbErr) throw dbErr;
       toast.success(`Saved to ${drawerName}`);
-      sessionStorage.removeItem("pendingVaultFile");
+      clearPendingVaultFile();
       setPendingFile(null);
       queryClient.invalidateQueries({ queryKey: ["documents", user.id] });
     } catch (e: any) {
@@ -611,7 +607,7 @@ const Locker = () => {
         onSave={handleAutoLockSave}
       />
 
-      <Dialog open={!!pendingFile} onOpenChange={(o) => { if (!o) { sessionStorage.removeItem("pendingVaultFile"); setPendingFile(null); } }}>
+      <Dialog open={!!pendingFile} onOpenChange={(o) => { if (!o) { clearPendingVaultFile(); setPendingFile(null); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Save to Secure Vault</DialogTitle>
