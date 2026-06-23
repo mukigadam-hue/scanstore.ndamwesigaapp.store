@@ -352,10 +352,12 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   // re-fetches the freshly saved bytes (bypassing CDN/browser cache).
   const persistBlob = async (blob: Blob, contentType: string) => {
     if (!doc) throw new Error("No document");
-    // Upload with cacheControl '0' so CDN/browsers always re-validate.
+    // Use upload+upsert with no-cache so the new bytes always overwrite cleanly
+    // and CDN/browsers must re-validate. `.update()` was sometimes returning
+    // success without the new bytes being served on the next signed URL fetch.
     const { error: upErr } = await supabase.storage
       .from("documents")
-      .update(doc.file_path, blob, {
+      .upload(doc.file_path, blob, {
         upsert: true,
         cacheControl: "0",
         contentType,
@@ -370,6 +372,15 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
         .eq("id", doc.id)
         .eq("user_id", user.id);
     }
+
+    // Clear cached preview state so the effect re-fetches fresh bytes
+    // (and the user immediately sees their saved version on next open).
+    if (previewUrl && previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    setOfficeHtml(null);
+    setTextContent(null);
 
     // Refresh the cached list everywhere
     queryClient.invalidateQueries({ queryKey: ["documents"] });
