@@ -12,6 +12,7 @@ import OpenFile from "./pages/OpenFile";
 import ScanScreen from "./pages/ScanScreen";
 import ViewerScreen from "./pages/ViewerScreen";
 import UtilityHome from "./pages/UtilityHome";
+import Privacy from "./pages/Privacy";
 import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
 import NotFound from "./pages/NotFound";
 
@@ -33,6 +34,8 @@ const App = () => (
             <Route path="/view" element={<ViewerScreen />} />
             <Route path="/scan" element={<ScanScreen />} />
             <Route path="/utility" element={<UtilityHome />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/privacy-policy" element={<Privacy />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <InterstitialAdOverlay />
