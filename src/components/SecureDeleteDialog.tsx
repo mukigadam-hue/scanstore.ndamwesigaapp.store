@@ -27,7 +27,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
     queryFn: async () => {
       const { data } = await supabase
         .from("security_settings")
-        .select("pin_code, last_school")
+        .select("pin_hash, last_school")
         .eq("user_id", user!.id)
         .maybeSingle();
       return data;
@@ -45,9 +45,12 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
     setStep("verify");
   };
 
-  const handleVerifyAndDelete = () => {
-    if (securitySettings?.pin_code) {
-      if (pin !== securitySettings.pin_code) {
+  const handleVerifyAndDelete = async () => {
+    if (securitySettings?.pin_hash) {
+      if (!user?.id) return;
+      const { hashPin } = await import("@/lib/hashPin");
+      const candidate = await hashPin(user.id, pin);
+      if (candidate !== securitySettings.pin_hash) {
         toast.error("Incorrect PIN. Deletion cancelled.");
         return;
       }
@@ -69,7 +72,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
     onClose();
   };
 
-  const verificationLabel = securitySettings?.pin_code
+  const verificationLabel = securitySettings?.pin_hash
     ? "Enter your 5-digit PIN"
     : securitySettings?.last_school
       ? "Enter your last school name"
@@ -135,10 +138,10 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   {verificationLabel || "Confirm deletion by typing DELETE"}
                 </label>
                 <Input
-                  type={securitySettings?.pin_code ? "password" : "text"}
-                  inputMode={securitySettings?.pin_code ? "numeric" : "text"}
+                  type={securitySettings?.pin_hash ? "password" : "text"}
+                  inputMode={securitySettings?.pin_hash ? "numeric" : "text"}
                   placeholder={
-                    securitySettings?.pin_code
+                    securitySettings?.pin_hash
                       ? "• • • • •"
                       : securitySettings?.last_school
                         ? "School name..."
@@ -146,7 +149,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   }
                   value={pin}
                   onChange={(e) => {
-                    if (securitySettings?.pin_code) {
+                    if (securitySettings?.pin_hash) {
                       setPin(e.target.value.replace(/\D/g, "").slice(0, 5));
                     } else {
                       setPin(e.target.value);
