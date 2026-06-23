@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays } from "date-fns";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 
 export const PLANS = [
   {
@@ -76,7 +76,7 @@ interface SubscriptionRow {
 
 export function useSubscription() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+
 
   const { data: subscription, isLoading: subLoading } = useQuery({
     queryKey: ["subscription", user?.id],
@@ -120,24 +120,13 @@ export function useSubscription() {
     staleTime: 2 * 60 * 1000,
   });
 
-  // Auto-freeze expired premium subscriptions but allow free-tier fallback
-  useEffect(() => {
-    if (!subscription || !user) return;
-    if (subscription.tier === "free") return;
-    if (subscription.status === "active" && subscription.expires_at) {
-      const expired = new Date(subscription.expires_at) < new Date();
-      if (expired) {
-        // Downgrade to frozen but user can still access free-tier (50MB, first 6 drawers)
-        supabase
-          .from("user_subscriptions")
-          .update({ status: "frozen" })
-          .eq("id", subscription.id)
-          .then(() =>
-            queryClient.invalidateQueries({ queryKey: ["subscription", user.id] })
-          );
-      }
-    }
-  }, [subscription, user, queryClient]);
+  // Expired premium subscriptions are treated as frozen client-side.
+  // Status changes are managed server-side by edge functions only (RLS-protected).
+  const isExpiredPremium =
+    !!subscription &&
+    subscription.tier !== "free" &&
+    !!subscription.expires_at &&
+    new Date(subscription.expires_at) < new Date();
 
   const storageLimit = subscription?.storage_limit_bytes ?? 50 * 1024 * 1024;
   const storageUsed = useMemo(
@@ -155,8 +144,7 @@ export function useSubscription() {
   const canAccess = !isFrozen || isRetrievalActive;
   const canUpload = canAccess && storageUsed < storageLimit;
 
-  // Expired premium users get free tier access (50MB)
-  const isExpiredPremium = subscription?.tier !== "free" && isFrozen && !isRetrievalActive;
+  // (isExpiredPremium is computed above from expires_at, since client-side status updates are blocked by RLS)
 
   const expiresAt = subscription?.expires_at;
   const daysUntilExpiry =
