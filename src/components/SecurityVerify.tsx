@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { showInterstitial } from "@/lib/ads";
 
 interface SecuritySettingsRow {
-  pin_code: string | null;
+  pin_hash: string | null;
   fingerprint_enabled: boolean | null;
   face_image_path: string | null;
   last_school: string | null;
@@ -51,7 +51,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const REQUIRED_VERIFICATIONS = 2;
 
   const availableMethods = [
-    settings.pin_code && { id: "pin" as MethodId, label: "Enter PIN", icon: Hash },
+    settings.pin_hash && { id: "pin" as MethodId, label: "Enter PIN", icon: Hash },
     settings.fingerprint_enabled && { id: "fingerprint" as MethodId, label: "Fingerprint", icon: Fingerprint },
     settings.face_image_path && { id: "face" as MethodId, label: "Face Photo", icon: Camera },
     settings.last_school && { id: "school" as MethodId, label: "School Name", icon: GraduationCap },
@@ -80,8 +80,14 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     }
   };
 
-  const handleVerifyPin = () => {
-    if (pin === settings.pin_code) {
+  const handleVerifyPin = async () => {
+    if (!user?.id || !settings.pin_hash) {
+      toast.error("PIN not configured");
+      return;
+    }
+    const { hashPin } = await import("@/lib/hashPin");
+    const candidate = await hashPin(user.id, pin);
+    if (candidate === settings.pin_hash) {
       markVerified("pin");
     } else {
       toast.error("Incorrect PIN — try again");
@@ -181,7 +187,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setForgotSending(true);
     try {
       const { error } = await supabase.from("security_settings").update({
-        pin_code: null,
+        pin_hash: null,
         fingerprint_enabled: false,
         face_image_path: null,
         last_school: null,

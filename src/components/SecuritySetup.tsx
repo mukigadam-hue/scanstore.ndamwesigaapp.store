@@ -158,10 +158,13 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
       if (completed.id instanceof File)
         idDocumentPath = await uploadImage(completed.id, `${user.id}/id_doc`);
 
+      const { hashPin } = await import("@/lib/hashPin");
+      const pinHash = completed.pin ? await hashPin(user.id, completed.pin) : null;
+
       const { error } = await supabase.from("security_settings").upsert(
         {
           user_id: user.id,
-          pin_code: completed.pin ?? null,
+          pin_hash: pinHash,
           fingerprint_enabled: completed.fingerprint ?? false,
           face_image_path: faceImagePath,
           last_school: completed.school ?? null,
