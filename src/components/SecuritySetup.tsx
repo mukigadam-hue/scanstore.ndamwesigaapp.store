@@ -22,7 +22,7 @@ interface CompletedMethods {
   fingerprint?: boolean;
   face?: File;
   school?: string;
-  family?: File;
+  family?: string;
   id?: File;
 }
 
@@ -35,8 +35,8 @@ const METHODS = [
   { id: "pin", label: "5-Digit PIN Code", desc: "A 5-number personal code to unlock your locker", icon: Hash },
   { id: "fingerprint", label: "Fingerprint Scan", desc: "Register your device fingerprint sensor", icon: Fingerprint },
   { id: "face", label: "Your Face Photo", desc: "Upload a clear photo of your face", icon: Camera },
-  { id: "school", label: "Last School Attended", desc: "Name of your last school or university", icon: GraduationCap },
-  { id: "family", label: "Family Member's Face", desc: "A photo of a trusted family member", icon: Users },
+  { id: "school", label: "Any School You Attended or Like", desc: "Name any school you attended or simply like", icon: GraduationCap },
+  { id: "family", label: "Family Member's Name you Like", desc: "Name of a family member you like and remember", icon: Users },
   { id: "id", label: "National ID / Driving Permit", desc: "Upload your government-issued identity document", icon: IdCard },
 ];
 
