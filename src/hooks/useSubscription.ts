@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays } from "date-fns";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 
 export const PLANS = [
   {
