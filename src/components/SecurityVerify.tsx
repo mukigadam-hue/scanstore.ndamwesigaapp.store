@@ -208,7 +208,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   if (phase === "verification_success") {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      <div
+        className="min-h-screen wood-gradient flex flex-col items-center justify-center p-6"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, hsl(15 35% 22%) 0%, hsl(15 40% 14%) 55%, hsl(15 45% 8%) 100%)",
+        }}
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -223,16 +229,48 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <h2 className="font-display text-3xl font-bold brass-text mb-2">
             Identity Verified
           </h2>
-          <p className="text-sm text-muted-foreground mb-8">
+          <p className="text-sm text-foreground/80 mb-8">
             Welcome back. Your vault is ready.
           </p>
           <motion.button
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={onVerified}
-            className="brass-gradient brass-glow rounded-full p-10 inline-flex flex-col items-center justify-center mx-auto hover:opacity-95 transition-opacity"
+            className="relative brass-gradient brass-glow rounded-full p-10 inline-flex flex-col items-center justify-center mx-auto hover:opacity-95 transition-opacity"
+            aria-label="Click here to open your drawers"
           >
-            <KeyRound className="h-16 w-16 text-primary-foreground" />
+            <KeyRound className="h-16 w-16 text-primary-foreground relative z-10" />
+            {/* Curved "Click Here" text wrapping the key button */}
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              viewBox="0 0 200 200"
+              aria-hidden="true"
+            >
+              <defs>
+                {/* Circle path — text rides along it. Radius chosen so text sits just inside the button edge. */}
+                <path
+                  id="clickHereCurve"
+                  d="M 100,100 m -78,0 a 78,78 0 1,1 156,0 a 78,78 0 1,1 -156,0"
+                  fill="none"
+                />
+              </defs>
+              <text
+                className="font-display font-bold"
+                style={{
+                  fontSize: "20px",
+                  letterSpacing: "6px",
+                  fill: "hsl(var(--primary-foreground))",
+                }}
+              >
+                <textPath
+                  href="#clickHereCurve"
+                  startOffset="25%"
+                  textAnchor="middle"
+                >
+                  • CLICK HERE •
+                </textPath>
+              </text>
+            </svg>
           </motion.button>
           <p className="mt-5 font-display text-lg font-semibold brass-text">
             Open Your Drawers
