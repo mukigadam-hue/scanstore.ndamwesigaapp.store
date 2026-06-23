@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { showInterstitial } from "@/lib/ads";
 import SaveToVaultButton from "@/components/SaveToVaultButton";
+import PdfCanvasViewer from "@/components/PdfCanvasViewer";
 
 function dataUrlToFile(dataUrl: string, name: string, type: string): File {
   const [, b64] = dataUrl.split(",");
@@ -231,7 +232,7 @@ export default function ViewerScreen() {
           <img src={previewUrl} alt={file.name} className="max-w-full mx-auto rounded-md" />
         )}
         {textContent === null && officeHtml === null && isPdf && previewUrl && (
-          <iframe src={previewUrl} className="w-full h-[80vh] rounded-md border border-border" title={file.name} />
+          <PdfCanvasViewer url={previewUrl} />
         )}
         {textContent === null && officeHtml === null && !isImage && !isPdf && (
           <div className="text-center text-muted-foreground py-12">
