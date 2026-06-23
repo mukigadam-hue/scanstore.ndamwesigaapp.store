@@ -50,11 +50,11 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [school, setSchool] = useState("");
+  const [familyName, setFamilyName] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
   const faceRef = useRef<HTMLInputElement>(null);
-  const familyRef = useRef<HTMLInputElement>(null);
   const idRef = useRef<HTMLInputElement>(null);
 
   const completedCount = Object.keys(completed).length;
@@ -107,7 +107,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
     }
   };
 
-  const handleImageFile = (type: "face" | "family" | "id", file: File) => {
+  const handleImageFile = (type: "face" | "id", file: File) => {
     const reader = new FileReader();
     reader.onloadend = () =>
       setPreviews((prev) => ({ ...prev, [type]: reader.result as string }));
@@ -115,10 +115,18 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
     markDone(type, file);
     const labels: Record<string, string> = {
       face: "Face photo",
-      family: "Family photo",
       id: "ID document",
     };
     toast.success(`${labels[type]} registered ✓`);
+  };
+
+  const handleFamilySet = () => {
+    if (!familyName.trim()) {
+      toast.error("Please enter a family member's name");
+      return;
+    }
+    markDone("family", familyName.trim());
+    toast.success("Family member name registered ✓");
   };
 
   const handleSchoolSet = () => {
@@ -143,13 +151,10 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
     setSaving(true);
     try {
       let faceImagePath: string | null = null;
-      let familyFacePath: string | null = null;
       let idDocumentPath: string | null = null;
 
       if (completed.face instanceof File)
         faceImagePath = await uploadImage(completed.face, `${user.id}/face`);
-      if (completed.family instanceof File)
-        familyFacePath = await uploadImage(completed.family, `${user.id}/family`);
       if (completed.id instanceof File)
         idDocumentPath = await uploadImage(completed.id, `${user.id}/id_doc`);
 
@@ -160,7 +165,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
           fingerprint_enabled: completed.fingerprint ?? false,
           face_image_path: faceImagePath,
           last_school: completed.school ?? null,
-          family_face_path: familyFacePath,
+          family_face_path: completed.family ?? null,
           id_document_path: idDocumentPath,
           setup_completed: true,
         },
@@ -333,11 +338,10 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
 
                             {method.id === "family" && (
                               <>
-                                {previews.family && <img src={previews.family} alt="Family preview" className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30" />}
-                                <input type="file" ref={familyRef} accept="image/*" className="hidden"
-                                  onChange={(e) => e.target.files?.[0] && handleImageFile("family", e.target.files[0])} />
-                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={() => familyRef.current?.click()}>
-                                  <Users className="h-4 w-4 mr-2" />Upload Family Member's Photo
+                                <Input placeholder="e.g. Grandma Sarah" value={familyName} onChange={(e) => setFamilyName(e.target.value)}
+                                  className="bg-input border-border" autoFocus onKeyDown={(e) => e.key === "Enter" && handleFamilySet()} />
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handleFamilySet}>
+                                  <Users className="h-4 w-4 mr-2" />Register Family Member's Name
                                 </Button>
                               </>
                             )}
