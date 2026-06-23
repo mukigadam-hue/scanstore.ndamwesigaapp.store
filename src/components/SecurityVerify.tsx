@@ -298,7 +298,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate("/")}
+          onClick={async () => {
+            try { await signOut(); } catch { /* ignore */ }
+            navigate("/", { replace: true });
+          }}
           className="text-muted-foreground hover:text-foreground"
         >
           <Home className="h-4 w-4 mr-1.5" /> Back to Home
