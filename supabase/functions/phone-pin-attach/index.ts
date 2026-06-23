@@ -78,20 +78,34 @@ Deno.serve(async (req) => {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
 
-    await admin
+    const { error: upsertErr } = await admin
       .from("profiles")
-      .update({
-        phone: phoneE164,
-        phone_e164: phoneE164,
-        country_code: countryCode || null,
-        pin_hash: pinHash,
-      })
-      .eq("user_id", userData.user.id);
+      .upsert(
+        {
+          user_id: userData.user.id,
+          email: userData.user.email ?? null,
+          phone: phoneE164,
+          phone_e164: phoneE164,
+          country_code: countryCode || null,
+          pin_hash: pinHash,
+          auth_method: "email",
+        },
+        { onConflict: "user_id" },
+      );
+
+    if (upsertErr) {
+      console.error("profile upsert failed", upsertErr);
+      return new Response(
+        JSON.stringify({ error: upsertErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
+    console.error("phone-pin-attach error", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
