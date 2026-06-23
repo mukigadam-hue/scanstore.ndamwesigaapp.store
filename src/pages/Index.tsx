@@ -5,12 +5,15 @@ import { KeyRound, Shield, Download, Upload, ScanLine, FileText } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
+import LanguageSelector from "@/components/LanguageSelector";
 
 import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
 
 const Index = () => {
   const { user, loading } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     // Ad Trigger 1: app launch, once per session, only when online.
@@ -41,6 +44,11 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Top bar with language selector — always reachable */}
+      <div className="absolute top-0 right-0 z-20 p-3">
+        <LanguageSelector compact={false} />
+      </div>
+
       {/* Hero */}
       <div className="relative overflow-hidden">
         {/* Background image */}
@@ -66,24 +74,24 @@ const Index = () => {
               DocLocker
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-lg mx-auto">
-              Your personal document vault. Store, organize, and access your important files — anytime, anywhere.
+              {t("landing.heroDesc")}
             </p>
 
             <Link to="/auth">
               <Button className="brass-gradient text-primary-foreground text-lg px-8 py-6 hover:opacity-90 font-display font-semibold">
-                Open Your Locker
+                {t("landing.openLocker")}
               </Button>
             </Link>
 
             <div className="mt-4 flex flex-wrap gap-2 justify-center">
               <Link to="/scan">
                 <Button variant="outline" className="font-display">
-                  <ScanLine className="h-4 w-4 mr-2" /> Scan Document
+                  <ScanLine className="h-4 w-4 mr-2" /> {t("landing.scanDoc")}
                 </Button>
               </Link>
               <Link to="/view">
                 <Button variant="outline" className="font-display">
-                  <FileText className="h-4 w-4 mr-2" /> Open a File
+                  <FileText className="h-4 w-4 mr-2" /> {t("landing.openFile")}
                 </Button>
               </Link>
             </div>
@@ -98,18 +106,18 @@ const Index = () => {
           {[
             {
               icon: <Shield className="h-6 w-6" />,
-              title: "Secure Storage",
-              desc: "Your documents are locked away safely, accessible only by you.",
+              title: t("landing.feature.secure.title"),
+              desc: t("landing.feature.secure.desc"),
             },
             {
               icon: <Upload className="h-6 w-6" />,
-              title: "Easy Upload",
-              desc: "Drag, drop, and store any document in your organized drawers.",
+              title: t("landing.feature.upload.title"),
+              desc: t("landing.feature.upload.desc"),
             },
             {
               icon: <Download className="h-6 w-6" />,
-              title: "Download Anytime",
-              desc: "Access and download your documents from any device, anywhere.",
+              title: t("landing.feature.download.title"),
+              desc: t("landing.feature.download.desc"),
             },
           ].map((f, i) => (
             <motion.div
@@ -131,7 +139,7 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
-        DocLocker — Keep your documents safe ✦
+        {t("landing.footer")}
       </footer>
     </div>
   );

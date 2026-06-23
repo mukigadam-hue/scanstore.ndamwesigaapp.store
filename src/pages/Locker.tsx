@@ -20,6 +20,8 @@ import { useAutoLock } from "@/hooks/useAutoLock";
 import woodTexture from "@/assets/wood-texture.jpg";
 import { UpgradeVaultBanner } from "@/components/UpgradeVaultBanner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import LanguageSelector from "@/components/LanguageSelector";
+import { useTranslation } from "react-i18next";
 
 interface Drawer {
   id: string;
@@ -55,6 +57,7 @@ const DRAWER_COLORS = [
 
 const Locker = () => {
   const { user, signOut } = useAuth();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [selectedDrawer, setSelectedDrawer] = useState<string | null>(null);
   const [showNewDrawer, setShowNewDrawer] = useState(false);
@@ -325,43 +328,44 @@ const Locker = () => {
                   DocLocker
                 </h1>
                 <p className="text-xs text-muted-foreground">
-                  Your secure document vault
+                  {t("common.tagline")}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1.5 flex-wrap flex-1 justify-end">
               <StorageBar />
+              <LanguageSelector compact />
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowSecuritySetup(true)}
                 className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
-                title="Security settings"
+                title={t("locker.security")}
               >
                 <Shield className="h-4 w-4 mr-1.5" />
-                <span className="text-xs">Security</span>
+                <span className="text-xs">{t("locker.security")}</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowAutoLock(true)}
                 className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
-                title="Auto-lock timer"
+                title={t("locker.autolock")}
               >
                 <Timer className="h-4 w-4 mr-1.5" />
-                <span className="text-xs">Auto-lock</span>
+                <span className="text-xs">{t("locker.autolock")}</span>
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowPricing(true)}
                 className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
-                title="Subscription plans"
+                title={t("locker.upgrade")}
               >
                 <Crown className="h-4 w-4 mr-1.5" />
                 <span className="text-xs">
-                  {currentPlan.name === "Free" ? "Upgrade" : currentPlan.name}
+                  {currentPlan.name === "Free" ? t("locker.upgrade") : currentPlan.name}
                 </span>
               </Button>
               <Button
@@ -369,10 +373,10 @@ const Locker = () => {
                 size="sm"
                 onClick={signOut}
                 className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
-                title="Sign out and lock vault"
+                title={t("locker.signOut")}
               >
                 <LogOut className="h-4 w-4 mr-1.5" />
-                <span className="text-xs">Lock & Leave</span>
+                <span className="text-xs">{t("locker.signOut")}</span>
               </Button>
             </div>
           </div>
@@ -421,10 +425,10 @@ const Locker = () => {
 
                 <div className="mb-8">
                   <h2 className="font-display text-3xl font-bold brass-text mb-2">
-                    Your Locker
+                    {t("locker.title")}
                   </h2>
                   <p className="text-muted-foreground">
-                    Tap a drawer to open it and manage your documents
+                    {t("locker.subtitle")}
                   </p>
                 </div>
 
@@ -432,10 +436,10 @@ const Locker = () => {
                 <div className="mb-6">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Essential Drawers
+                      {t("locker.essential")}
                     </span>
                     <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                      Always Free · Fill First
+                      {t("locker.alwaysFree")}
                     </span>
                   </div>
 
@@ -474,7 +478,7 @@ const Locker = () => {
                   <div className="mb-6">
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Custom Drawers
+                        {t("locker.custom")}
                       </span>
                       <Crown className="h-3.5 w-3.5 text-primary" />
                     </div>
@@ -518,7 +522,7 @@ const Locker = () => {
                           <div className="wood-panel rounded-lg border border-border p-5">
                             <div className="brass-gradient h-1.5 rounded-t -mt-5 -mx-5 mb-4" />
                             <Input
-                              placeholder="Drawer name..."
+                              placeholder={t("locker.drawerName")}
                               value={newDrawerName}
                               onChange={(e) => setNewDrawerName(e.target.value)}
                               onKeyDown={(e) => e.key === "Enter" && addDrawer()}
@@ -531,7 +535,7 @@ const Locker = () => {
                                 onClick={addDrawer}
                                 className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
                               >
-                                Create
+                                {t("common.create")}
                               </Button>
                               <Button
                                 size="sm"
@@ -547,7 +551,7 @@ const Locker = () => {
                           <button
                             onClick={() => {
                               if (!essentialDrawersFilled) {
-                                toast.error("Fill all 6 Essential Drawers first before adding custom drawers.");
+                                toast.error(t("locker.fillFirst"));
                                 return;
                               }
                               setShowNewDrawer(true);
@@ -556,7 +560,7 @@ const Locker = () => {
                           >
                             <Plus className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
                             <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                              Add Drawer
+                              {t("locker.addDrawer")}
                             </span>
                           </button>
                         )}
@@ -574,9 +578,9 @@ const Locker = () => {
                       className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center"
                     >
                       <Crown className="h-6 w-6 text-primary mx-auto mb-2" />
-                      <p className="text-sm text-foreground font-medium mb-1">Want more drawers?</p>
+                      <p className="text-sm text-foreground font-medium mb-1">{t("locker.upgradeMore")}</p>
                       <p className="text-xs text-muted-foreground mb-3">
-                        Upgrade to Premium to create unlimited custom drawers with your own names.
+                        {t("locker.upgradeMoreDesc")}
                       </p>
                       <Button
                         size="sm"
@@ -584,7 +588,7 @@ const Locker = () => {
                         className="brass-gradient text-primary-foreground"
                       >
                         <Crown className="h-4 w-4 mr-1.5" />
-                        Upgrade Now
+                        {t("locker.upgradeNow")}
                       </Button>
                     </motion.div>
                   </div>
