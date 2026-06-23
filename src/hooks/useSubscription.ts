@@ -144,8 +144,7 @@ export function useSubscription() {
   const canAccess = !isFrozen || isRetrievalActive;
   const canUpload = canAccess && storageUsed < storageLimit;
 
-  // Expired premium users get free tier access (50MB)
-  const isExpiredPremium = subscription?.tier !== "free" && isFrozen && !isRetrievalActive;
+  // (isExpiredPremium is computed above from expires_at, since client-side status updates are blocked by RLS)
 
   const expiresAt = subscription?.expires_at;
   const daysUntilExpiry =
