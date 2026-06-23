@@ -200,7 +200,7 @@ export type Database = {
           id: string
           id_document_path: string | null
           last_school: string | null
-          pin_code: string | null
+          pin_hash: string | null
           setup_completed: boolean | null
           updated_at: string
           user_id: string
@@ -213,7 +213,7 @@ export type Database = {
           id?: string
           id_document_path?: string | null
           last_school?: string | null
-          pin_code?: string | null
+          pin_hash?: string | null
           setup_completed?: boolean | null
           updated_at?: string
           user_id: string
@@ -226,7 +226,7 @@ export type Database = {
           id?: string
           id_document_path?: string | null
           last_school?: string | null
-          pin_code?: string | null
+          pin_hash?: string | null
           setup_completed?: boolean | null
           updated_at?: string
           user_id?: string
