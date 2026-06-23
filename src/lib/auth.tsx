@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem(`locker_verified_${uid}`);
         localStorage.removeItem(`security_otp_${uid}`);
       }
+      // NOTE: we intentionally do NOT clear pendingVaultFile here, so files
+      // staged from the public flow survive auto-lock & re-verification.
       sessionStorage.removeItem("pendingVaultFile");
       sessionStorage.removeItem("launchAdShown");
     } catch {}
