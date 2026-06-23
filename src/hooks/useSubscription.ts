@@ -76,7 +76,7 @@ interface SubscriptionRow {
 
 export function useSubscription() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+
 
   const { data: subscription, isLoading: subLoading } = useQuery({
     queryKey: ["subscription", user?.id],
