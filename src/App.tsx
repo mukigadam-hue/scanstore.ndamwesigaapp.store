@@ -15,8 +15,19 @@ import UtilityHome from "./pages/UtilityHome";
 import Privacy from "./pages/Privacy";
 import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
 import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
+import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
 
 const queryClient = new QueryClient();
+
+const StartupInterstitial = () => {
+  useEffect(() => {
+    prefetchInterstitial();
+    // Fire-and-forget; user can skip after the countdown.
+    showInterstitial("app-open");
+  }, []);
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -39,6 +50,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           <InterstitialAdOverlay />
+          <StartupInterstitial />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
