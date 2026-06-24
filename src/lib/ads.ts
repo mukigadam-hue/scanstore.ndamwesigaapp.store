@@ -7,7 +7,7 @@
 // resolved immediately so the workflow continues without interruption.
 // Flip AD_NETWORK_READY to true once a real ad SDK is integrated.
 
-export const AD_NETWORK_READY = true;
+export const AD_NETWORK_READY = false;
 
 type Listener = (trigger: string, resolve: () => void) => void;
 
