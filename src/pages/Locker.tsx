@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import LanguageSelector from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import { getPendingVaultFile, clearPendingVaultFile } from "@/lib/pendingVaultFile";
+import BannerAd from "@/components/BannerAd";
 
 interface Drawer {
   id: string;
@@ -593,6 +594,8 @@ const Locker = () => {
             )}
           </AnimatePresence>
         </main>
+        {/* Bottom banner ad — reserves its own space so nothing is covered. */}
+        <BannerAd slot="dashboard" />
       </div>
 
       <PricingDialog

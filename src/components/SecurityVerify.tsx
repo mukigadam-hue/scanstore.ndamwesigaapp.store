@@ -14,6 +14,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { showInterstitial } from "@/lib/ads";
+import BannerAd from "@/components/BannerAd";
 
 interface SecuritySettingsRow {
   pin_hash: string | null;
@@ -663,7 +664,9 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           <div className="brass-gradient h-1" />
         </div>
       </motion.div>
-      
+
+      {/* Bottom banner ad — reserves its own space so the verify card is never covered. */}
+      <BannerAd slot="security-verify" />
     </div>
   );
 };
