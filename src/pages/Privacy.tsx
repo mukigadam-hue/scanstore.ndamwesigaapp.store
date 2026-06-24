@@ -158,12 +158,18 @@ export default function Privacy() {
             DocLocker team at:
           </p>
           <p className="font-medium">
-            <a href="mailto:support@doclocker.app" className="text-primary underline">
-              support@doclocker.app
+            <a href="mailto:ndamson8@gmail.com" className="text-primary underline">
+              ndamson8@gmail.com
             </a>
           </p>
           <p className="text-xs text-muted-foreground">
-            Please replace this address with your own published support email before going live.
+            Web:{" "}
+            <a
+              href="https://scanstore.ndamwesigaapp.store/privacy"
+              className="text-primary underline"
+            >
+              scanstore.ndamwesigaapp.store/privacy
+            </a>
           </p>
         </Section>
 
