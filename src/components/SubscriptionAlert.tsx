@@ -55,14 +55,14 @@ const SubscriptionAlert = () => {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setShowRetrieval(true)}
+                  onClick={() => PAYMENTS_ENABLED ? setShowRetrieval(true) : upcoming()}
                   className="text-xs border-destructive/40 text-destructive hover:bg-destructive/10 whitespace-nowrap"
                 >
                   Unlock (${currentPlan.retrievalFee})
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setShowPricing(true)}
+                  onClick={() => PAYMENTS_ENABLED ? setShowPricing(true) : upcoming()}
                   className="text-xs brass-gradient text-primary-foreground whitespace-nowrap"
                 >
                   Resubscribe
@@ -89,7 +89,7 @@ const SubscriptionAlert = () => {
               </div>
               <Button
                 size="sm"
-                onClick={() => setShowPricing(true)}
+                onClick={() => PAYMENTS_ENABLED ? setShowPricing(true) : upcoming()}
                 className="text-xs brass-gradient text-primary-foreground shrink-0"
               >
                 <RefreshCw className="h-3 w-3 mr-1" />
@@ -117,7 +117,7 @@ const SubscriptionAlert = () => {
               </div>
               <Button
                 size="sm"
-                onClick={() => setShowPricing(true)}
+                onClick={() => PAYMENTS_ENABLED ? setShowPricing(true) : upcoming()}
                 className="text-xs brass-gradient text-primary-foreground shrink-0"
               >
                 Renew Now
