@@ -6,6 +6,7 @@ interface Props {
   onChange: (v: string) => void;
   autoFocus?: boolean;
   id?: string;
+  mask?: boolean;
 }
 
 export function PinInput({ length, value, onChange, autoFocus, id }: Props) {
