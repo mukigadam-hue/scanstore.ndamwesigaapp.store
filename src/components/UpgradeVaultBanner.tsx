@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { CountryCodePicker, useDetectedCountry, Country } from "./CountryCodePicker";
 import { PinInput } from "./PinInput";
 import { toast } from "sonner";
-import { Shield, X } from "lucide-react";
+import { Shield, X, Eye, EyeOff } from "lucide-react";
 
 const DISMISS_KEY = "vault_upgrade_banner_dismissed_v1";
 
