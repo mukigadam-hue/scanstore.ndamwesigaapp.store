@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Crown, Zap } from "lucide-react";
 import { PLANS, useSubscription } from "@/hooks/useSubscription";
 import PaymentDialog from "./PaymentDialog";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const PAYMENTS_ENABLED = false;
 
 interface PricingDialogProps {
   open: boolean;
