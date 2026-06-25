@@ -6,9 +6,10 @@ interface Props {
   onChange: (v: string) => void;
   autoFocus?: boolean;
   id?: string;
+  mask?: boolean;
 }
 
-export function PinInput({ length, value, onChange, autoFocus, id }: Props) {
+export function PinInput({ length, value, onChange, autoFocus, id, mask = true }: Props) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export function PinInput({ length, value, onChange, autoFocus, id }: Props) {
         <input
           key={i}
           ref={(el) => (refs.current[i] = el)}
-          type="tel"
+          type={mask ? "password" : "tel"}
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={1}

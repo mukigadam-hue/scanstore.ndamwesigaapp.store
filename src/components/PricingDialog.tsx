@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Crown, Zap } from "lucide-react";
 import { PLANS, useSubscription } from "@/hooks/useSubscription";
 import PaymentDialog from "./PaymentDialog";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const PAYMENTS_ENABLED = false;
 
 interface PricingDialogProps {
   open: boolean;
@@ -114,7 +117,16 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
                   ) : isUpgrade ? (
                     <Button
                       size="sm"
-                      onClick={() => setPayingPlan(plan)}
+                      onClick={() => {
+                        if (PAYMENTS_ENABLED) {
+                          setPayingPlan(plan);
+                        } else {
+                          toast.info("Upcoming feature", {
+                            description:
+                              "Paid upgrades are coming soon. Keep enjoying the Free tier in the meantime.",
+                          });
+                        }
+                      }}
                       className="w-full brass-gradient text-primary-foreground hover:opacity-90"
                     >
                       Upgrade to {plan.name}

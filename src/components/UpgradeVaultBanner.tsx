@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { CountryCodePicker, useDetectedCountry, Country } from "./CountryCodePicker";
 import { PinInput } from "./PinInput";
 import { toast } from "sonner";
-import { Shield, X } from "lucide-react";
+import { Shield, X, Eye, EyeOff } from "lucide-react";
 
 const DISMISS_KEY = "vault_upgrade_banner_dismissed_v1";
 
@@ -28,6 +28,7 @@ export function UpgradeVaultBanner() {
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   const [dismissed, setDismissed] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(DISMISS_KEY) === "1",
   );
@@ -138,14 +139,24 @@ export function UpgradeVaultBanner() {
               />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-2 text-center">
-                Create a 5-digit Vault PIN
-              </p>
-              <PinInput length={5} value={pin} onChange={setPin} />
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <p className="text-xs text-muted-foreground">
+                  Create a 5-digit Vault PIN
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPin((s) => !s)}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label={showPin ? "Hide PIN" : "Show PIN"}
+                >
+                  {showPin ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+              <PinInput length={5} value={pin} onChange={setPin} mask={!showPin} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-2 text-center">Confirm PIN</p>
-              <PinInput length={5} value={pin2} onChange={setPin2} />
+              <PinInput length={5} value={pin2} onChange={setPin2} mask={!showPin} />
             </div>
           </div>
           <DialogFooter>
