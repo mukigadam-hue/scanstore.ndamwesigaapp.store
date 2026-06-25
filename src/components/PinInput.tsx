@@ -9,7 +9,7 @@ interface Props {
   mask?: boolean;
 }
 
-export function PinInput({ length, value, onChange, autoFocus, id }: Props) {
+export function PinInput({ length, value, onChange, autoFocus, id, mask = true }: Props) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
