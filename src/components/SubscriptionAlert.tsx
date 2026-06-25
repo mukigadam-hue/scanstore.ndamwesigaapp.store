@@ -5,6 +5,13 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useState } from "react";
 import PricingDialog from "./PricingDialog";
 import PaymentDialog from "./PaymentDialog";
+import { toast } from "sonner";
+
+const PAYMENTS_ENABLED = false;
+const upcoming = () =>
+  toast.info("Upcoming feature", {
+    description: "Paid upgrades are coming soon. Keep enjoying the Free tier in the meantime.",
+  });
 
 const SubscriptionAlert = () => {
   const {
