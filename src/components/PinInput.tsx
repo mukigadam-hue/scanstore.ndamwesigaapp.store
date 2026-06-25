@@ -32,7 +32,7 @@ export function PinInput({ length, value, onChange, autoFocus, id, mask = true }
         <input
           key={i}
           ref={(el) => (refs.current[i] = el)}
-          type="tel"
+          type={mask ? "password" : "tel"}
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={1}
