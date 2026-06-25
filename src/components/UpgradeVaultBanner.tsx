@@ -28,6 +28,7 @@ export function UpgradeVaultBanner() {
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPin, setShowPin] = useState(false);
   const [dismissed, setDismissed] = useState(
     () => typeof window !== "undefined" && localStorage.getItem(DISMISS_KEY) === "1",
   );
