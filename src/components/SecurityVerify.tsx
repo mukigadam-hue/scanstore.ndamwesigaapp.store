@@ -305,11 +305,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={async () => {
-            try { await signOut(); } catch { /* ignore */ }
+          onClick={() => {
+            // Stay signed in — just leave the verify screen. Returning to /locker
+            // will bring the user right back here without re-entering credentials.
             navigate("/", { replace: true });
           }}
           className="text-muted-foreground hover:text-foreground"
+          title="Leave verification (you stay signed in)"
         >
           <Home className="h-4 w-4 mr-1.5" /> Back to Home
         </Button>

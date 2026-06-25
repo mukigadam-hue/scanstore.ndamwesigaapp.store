@@ -59,13 +59,18 @@ export default function PdfCanvasViewer({ url, className }: Props) {
         const container = containerRef.current;
         if (!container || cancelled) return;
         const unscaled = page.getViewport({ scale: 1 });
-        const baseScale = container.clientWidth / unscaled.width;
-        const viewport = page.getViewport({ scale: baseScale * zoom });
+        // Account for device pixel ratio so high-DPI mobile screens render crisp,
+        // not blurred. Cap DPR at 3 to keep memory sane for large PDFs.
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        const cssScale = (container.clientWidth / unscaled.width) * zoom;
+        const renderScale = cssScale * dpr;
+        const viewport = page.getViewport({ scale: renderScale });
+        const cssViewport = page.getViewport({ scale: cssScale });
         const canvas = canvasRef.current!;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = `${Math.floor(cssViewport.width)}px`;
+        canvas.style.height = `${Math.floor(cssViewport.height)}px`;
         const ctx = canvas.getContext("2d")!;
         const task = page.render({ canvasContext: ctx, viewport });
         renderTaskRef.current = task;
@@ -98,8 +103,8 @@ export default function PdfCanvasViewer({ url, className }: Props) {
 
   return (
     <div ref={containerRef} className={className || "w-full h-[80vh] overflow-auto bg-white rounded-md border border-border"}>
-      <div className="min-w-full min-h-full flex flex-col items-center p-2">
-        <canvas ref={canvasRef} style={{ display: "block" }} />
+      <div className="min-w-full min-h-full flex flex-col items-center justify-center p-2">
+        <canvas ref={canvasRef} style={{ display: "block", margin: "auto" }} />
         <div className="sticky bottom-2 flex items-center gap-2 bg-black/70 rounded-full px-3 py-1.5 mt-2 z-10">
           <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))}>
             <ZoomOut className="h-4 w-4" />
