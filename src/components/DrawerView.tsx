@@ -330,22 +330,22 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       className="space-y-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-y-2 gap-x-2">
+        <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="ghost"
             size="icon"
             onClick={onBack}
-            className="text-foreground hover:text-primary hover:bg-secondary"
+            className="text-foreground hover:text-primary hover:bg-secondary shrink-0"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h2 className="font-display text-2xl font-bold brass-text">
+          <h2 className="font-display text-2xl font-bold brass-text truncate">
             {drawerName}
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end ml-auto">
           {isNearLimit && canAccess && (
             <span className="text-xs text-yellow-500 hidden sm:inline">
               Storage {Math.round(storagePercent)}% full
