@@ -368,7 +368,17 @@ const Locker = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={signOut}
+                onClick={() => {
+                  // "Lock & Leave" = lock the vault (require re-verification)
+                  // but keep the user signed in, exactly like the auto-lock
+                  // behaviour. Sign-out is a separate, deliberate action.
+                  if (user?.id) {
+                    localStorage.removeItem(`locker_verified_${user.id}`);
+                  }
+                  setSessionVerified(false);
+                  setSelectedDrawer(null);
+                  toast.info("Vault locked 🔒");
+                }}
                 className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
                 title={t("locker.signOut")}
               >
