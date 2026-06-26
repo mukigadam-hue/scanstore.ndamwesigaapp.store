@@ -306,8 +306,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           variant="ghost"
           size="sm"
           onClick={() => {
-            // Stay signed in — just leave the verify screen. Returning to /locker
-            // will bring the user right back here without re-entering credentials.
+            // Stay signed in — just leave the verify screen and show the
+            // landing/dashboard. The flag tells Index to render the landing
+            // once instead of bouncing back to /locker.
+            sessionStorage.setItem("showLandingOnce", "1");
             navigate("/", { replace: true });
           }}
           className="text-muted-foreground hover:text-foreground"
