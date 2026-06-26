@@ -352,9 +352,14 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   // re-fetches the freshly saved bytes (bypassing CDN/browser cache).
   const persistBlob = async (blob: Blob, contentType: string) => {
     if (!doc) throw new Error("No document");
-    // Use upload+upsert with no-cache so the new bytes always overwrite cleanly
-    // and CDN/browsers must re-validate. `.update()` was sometimes returning
-    // success without the new bytes being served on the next signed URL fetch.
+
+    // Remove the old object FIRST so the CDN can't keep serving stale bytes
+    // under the same key, then upload the new bytes. This is the only path
+    // that reliably gives the next signed URL fetch the freshly saved file.
+    await supabase.storage.from("documents").remove([doc.file_path]).catch(() => {
+      /* ignore — upload with upsert will create it */
+    });
+
     const { error: upErr } = await supabase.storage
       .from("documents")
       .upload(doc.file_path, blob, {
@@ -373,8 +378,6 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
         .eq("user_id", user.id);
     }
 
-    // Clear cached preview state so the effect re-fetches fresh bytes
-    // (and the user immediately sees their saved version on next open).
     if (previewUrl && previewUrl.startsWith("blob:")) {
       URL.revokeObjectURL(previewUrl);
     }
@@ -382,9 +385,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
     setOfficeHtml(null);
     setTextContent(null);
 
-    // Refresh the cached list everywhere
     queryClient.invalidateQueries({ queryKey: ["documents"] });
-    // Force preview to re-fetch the new bytes
     setReloadKey((k) => k + 1);
   };
 
@@ -396,6 +397,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       const blob = new Blob([editedText], { type: contentType });
       await persistBlob(blob, contentType);
 
+      // Keep the edited text visible immediately — the reload will fetch the
+      // same bytes from storage on the next open.
       setTextContent(editedText);
       setHasChanges(false);
       setEditing(false);
