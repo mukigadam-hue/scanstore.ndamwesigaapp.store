@@ -40,7 +40,19 @@ const Index = () => {
     );
   }
 
-  if (user) return <Navigate to="/locker" replace />;
+  // If the user already has a session AND has NOT explicitly asked to view
+  // the landing page (e.g. via "Back to Home" from the verify screen), send
+  // them straight to the locker. The sessionStorage flag is set once by
+  // SecurityVerify so the landing can be reached without an immediate
+  // redirect loop back into verification.
+  if (user) {
+    const wantsLanding = sessionStorage.getItem("showLandingOnce") === "1";
+    if (wantsLanding) {
+      sessionStorage.removeItem("showLandingOnce");
+    } else {
+      return <Navigate to="/locker" replace />;
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">

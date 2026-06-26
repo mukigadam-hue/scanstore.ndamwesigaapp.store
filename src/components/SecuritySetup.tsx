@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -41,11 +42,11 @@ const METHODS = [
 ];
 
 const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [completed, setCompleted] = useState<CompletedMethods>({});
   const [expanded, setExpanded] = useState<string | null>("pin");
   const [saving, setSaving] = useState(false);
-  const [showBackConfirm, setShowBackConfirm] = useState(false);
 
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -225,10 +226,14 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowBackConfirm(true)}
+                  onClick={() => {
+                    // Just go back to the previous screen — keep the user signed in.
+                    sessionStorage.setItem("showLandingOnce", "1");
+                    navigate("/", { replace: true });
+                  }}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  <LogOut className="h-4 w-4 mr-1" />
+                  <X className="h-4 w-4 mr-1" />
                   Back
                 </Button>
               )}
@@ -393,27 +398,6 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
         </div>
       </motion.div>
 
-      <AlertDialog open={showBackConfirm} onOpenChange={setShowBackConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign out and go back?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You haven't finished securing your locker. If you go back now, you'll be signed out and will need to complete security setup the next time you sign in.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Stay here</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                setShowBackConfirm(false);
-                await signOut();
-              }}
-            >
-              Sign out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

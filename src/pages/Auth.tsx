@@ -82,7 +82,38 @@ const Auth = () => {
   const fullPhone = () =>
     country.dial + phone.replace(/\D/g, "").replace(/^0+/, "");
 
+  // Detect in-app browsers / WebViews (Facebook, Instagram, TikTok, Gmail
+  // app, generic Android WebView, …). Google refuses OAuth from these with
+  // "Error 403: disallowed_useragent", so we surface a clear message and
+  // try to escape into the system browser instead of silently failing.
+  const isWebView = () => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    return (
+      /FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|Twitter|TikTok|; wv\)|WebView|GSA\//i.test(
+        ua,
+      ) ||
+      // Android WebView typically lacks "Chrome/" on Version/ Mobile Safari path
+      (/Android/.test(ua) && /Version\/[\d.]+\s+Chrome\/[\d.]+\s+Mobile Safari/.test(ua) === false &&
+        /Mobile Safari/.test(ua) && !/Chrome\//.test(ua))
+    );
+  };
+
   const handleGoogleSignIn = async () => {
+    if (isWebView()) {
+      const url = window.location.href;
+      toast.error(
+        "Google blocks sign-in inside in-app browsers. Open this site in Chrome or Safari, then tap 'Continue with Google'.",
+        { duration: 10000 },
+      );
+      // Best-effort: try to launch the system browser.
+      try {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     setGoogleLoading(true);
     try {
       const { error } = await lovable.auth.signInWithOAuth("google", {
