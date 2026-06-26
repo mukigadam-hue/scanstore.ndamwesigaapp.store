@@ -89,7 +89,7 @@ const Index = () => {
               {t("landing.heroDesc")}
             </p>
 
-            <Link to="/auth">
+            <Link to={user ? "/locker" : "/auth"}>
               <Button className="brass-gradient text-primary-foreground text-lg px-8 py-6 hover:opacity-90 font-display font-semibold">
                 {t("landing.openLocker")}
               </Button>
