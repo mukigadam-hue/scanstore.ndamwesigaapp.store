@@ -1,3 +1,4 @@
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { motion } from "framer-motion";
 import { KeyRound, Shield, Download, Upload, ScanLine, FileText } from "lucide-react";
@@ -37,6 +38,10 @@ const Index = () => {
         </motion.div>
       </div>
     );
+  }
+
+  if (user && localStorage.getItem(`doclocker_exit_needs_verify_${user.id}`) === "1") {
+    return <Navigate to="/locker" replace />;
   }
 
   return (

@@ -310,6 +310,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             // landing/dashboard. The flag tells Index to render the landing
             // once instead of bouncing back to /locker.
             sessionStorage.setItem("showLandingOnce", "1");
+            if (user?.id) localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
             navigate("/", { replace: true });
           }}
           className="text-muted-foreground hover:text-foreground"

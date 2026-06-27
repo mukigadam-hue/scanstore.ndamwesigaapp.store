@@ -110,6 +110,7 @@ const Locker = () => {
 
     const lockForExit = () => {
       localStorage.removeItem(`locker_verified_${user.id}`);
+      localStorage.setItem(`doclocker_exit_needs_verify_${user.id}`, "1");
       setSelectedDrawer(null);
       setSessionVerified(false);
     };
@@ -170,7 +171,10 @@ const Locker = () => {
 
 
   const markVerified = () => {
-    if (user?.id) localStorage.removeItem(`locker_verified_${user.id}`);
+    if (user?.id) {
+      localStorage.removeItem(`locker_verified_${user.id}`);
+      localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
+    }
     setSessionVerified(true);
   };
 
@@ -397,6 +401,7 @@ const Locker = () => {
                   // behaviour. Sign-out is a separate, deliberate action.
                   if (user?.id) {
                     localStorage.removeItem(`locker_verified_${user.id}`);
+                    localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
                   }
                   setSessionVerified(false);
                   setSelectedDrawer(null);
