@@ -208,7 +208,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
   }, [open, doc?.id]);
 
   useEffect(() => {
-    if (!open || !doc || !storedFilePath) return;
+    if (!open || !doc) return;
 
     if (localPreviewUrl !== undefined) {
       setPreviewUrl(localPreviewUrl);
@@ -217,6 +217,8 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
       setLoading(false);
       return;
     }
+
+    if (!storedFilePath) return;
 
     let revoked = false;
     const loadPreview = async () => {
