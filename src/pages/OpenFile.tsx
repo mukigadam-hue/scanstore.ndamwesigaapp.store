@@ -4,6 +4,7 @@ import FilePreviewDialog from "@/components/FilePreviewDialog";
 import { toast } from "sonner";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { downloadBlob } from "@/lib/downloadFile";
 
 const OpenFile = () => {
   const navigate = useNavigate();
@@ -109,13 +110,14 @@ const OpenFile = () => {
     input.click();
   };
 
-  const handleDownload = () => {
-    if (!file || !previewUrl) return;
-    const a = document.createElement("a");
-    a.href = previewUrl;
-    a.download = file.name;
-    a.click();
-    toast.success("Download started");
+  const handleDownload = async () => {
+    if (!file) return;
+    try {
+      await downloadBlob(file, file.name);
+      toast.success("Download started");
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error("Download failed");
+    }
   };
 
   const isImage = file?.type.startsWith("image/");
