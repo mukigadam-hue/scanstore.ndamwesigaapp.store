@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { showInterstitial } from "@/lib/ads";
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
+import { downloadBlob } from "@/lib/downloadFile";
 
 function dataUrlToFile(dataUrl: string, name: string, type: string): File {
   const [, b64] = dataUrl.split(",");
@@ -140,13 +141,14 @@ export default function ViewerScreen() {
     await showInterstitial("save-changes");
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!file) return;
-    const url = previewUrl || URL.createObjectURL(file);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = file.name;
-    a.click();
+    try {
+      await downloadBlob(file, file.name);
+      toast.success("Download started");
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error("Download failed");
+    }
   };
 
   if (!file) {

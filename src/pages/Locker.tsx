@@ -98,10 +98,34 @@ const Locker = () => {
 
   useEffect(() => {
     if (user?.id) {
-      const verified = localStorage.getItem(`locker_verified_${user.id}`) === "true";
-      if (verified) setSessionVerified(true);
+      // Verification is intentionally memory-only. A remembered login may open
+      // the app, but a remembered locker unlock must never survive app close.
+      localStorage.removeItem(`locker_verified_${user.id}`);
+      setSessionVerified(false);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !sessionVerified) return;
+
+    const lockForExit = () => {
+      localStorage.removeItem(`locker_verified_${user.id}`);
+      localStorage.setItem(`doclocker_exit_needs_verify_${user.id}`, "1");
+      setSelectedDrawer(null);
+      setSessionVerified(false);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") lockForExit();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", lockForExit);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", lockForExit);
+    };
+  }, [user?.id, sessionVerified]);
 
   // ---- Pending vault file (from /view "Save to Secure Vault") ----
   const [pendingFile, setPendingFile] = useState<{ name: string; type: string; dataUrl: string } | null>(null);
@@ -147,7 +171,10 @@ const Locker = () => {
 
 
   const markVerified = () => {
-    if (user?.id) localStorage.setItem(`locker_verified_${user.id}`, "true");
+    if (user?.id) {
+      localStorage.removeItem(`locker_verified_${user.id}`);
+      localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
+    }
     setSessionVerified(true);
   };
 
@@ -374,6 +401,7 @@ const Locker = () => {
                   // behaviour. Sign-out is a separate, deliberate action.
                   if (user?.id) {
                     localStorage.removeItem(`locker_verified_${user.id}`);
+                    localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
                   }
                   setSessionVerified(false);
                   setSelectedDrawer(null);

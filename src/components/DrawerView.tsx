@@ -19,6 +19,7 @@ import DownloadQualityDialog from "@/components/DownloadQualityDialog";
 import { compressImage, canCompress } from "@/lib/compressImage";
 import { enhanceImageBlob } from "@/lib/enhanceImage";
 import DocumentUpgradeDialog, { needsUpgrade } from "@/components/DocumentUpgradeDialog";
+import { downloadBlob, downloadFileFromUrl } from "@/lib/downloadFile";
 
 interface Document {
   id: string;
@@ -210,20 +211,19 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
     const { data, error } = await supabase.storage
       .from("documents")
-      .download(doc.file_path);
+      .createSignedUrl(doc.file_path, 120, { download: doc.name } as any);
 
-    if (error) {
-      toast.error("Failed to download: " + error.message);
+    if (error || !data?.signedUrl) {
+      toast.error("Failed to download: " + (error?.message || "Could not create a download link"));
       return;
     }
 
-    const url = URL.createObjectURL(data);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = doc.name;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Downloaded " + doc.name);
+    try {
+      await downloadFileFromUrl(data.signedUrl, doc.name);
+      toast.success("Download started: " + doc.name);
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error("Download failed");
+    }
   };
 
   const handleDownloadClick = (doc: Document) => {
@@ -244,18 +244,18 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       return;
     }
 
-    const { data, error } = await supabase.storage
-      .from("documents")
-      .download(doc.file_path);
+    let downloadName: string;
+    if (highQuality && doc.file_type.startsWith("image/")) {
+      const { data, error } = await supabase.storage
+        .from("documents")
+        .download(doc.file_path);
 
-    if (error) {
-      toast.error("Failed to download: " + error.message);
-      return;
-    }
+      if (error) {
+        toast.error("Failed to download: " + error.message);
+        return;
+      }
 
-    let blobToDownload: Blob = data;
-
-    if (highQuality && data.type.startsWith("image/")) {
+      let blobToDownload: Blob = data;
       toast.info("Enhancing image quality…");
       try {
         blobToDownload = await enhanceImageBlob(data);
@@ -263,23 +263,38 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       } catch {
         toast.info("Could not enhance — downloading original");
       }
+
+      downloadName = doc.name.replace(/(\.\w+)$/, "_high_quality.png");
+      try {
+        await downloadBlob(blobToDownload, downloadName);
+        toast.success("Download started: " + downloadName);
+      } catch (err: any) {
+        if (err?.name !== "AbortError") toast.error("Download failed");
+      }
+      return;
     }
 
-    const url = URL.createObjectURL(blobToDownload);
-    const a = document.createElement("a");
-    a.href = url;
-    let downloadName: string;
-    if (highQuality && data.type.startsWith("image/")) {
-      downloadName = doc.name.replace(/(\.\w+)$/, "_high_quality.png");
-    } else if (!highQuality) {
+    if (!highQuality) {
       downloadName = doc.name.replace(/(\.\w+)$/, "_saved_quality$1");
     } else {
       downloadName = doc.name;
     }
-    a.download = downloadName;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Downloaded " + downloadName);
+
+    const { data, error } = await supabase.storage
+      .from("documents")
+      .createSignedUrl(doc.file_path, 120, { download: downloadName } as any);
+
+    if (error || !data?.signedUrl) {
+      toast.error("Failed to download: " + (error?.message || "Could not create a download link"));
+      return;
+    }
+
+    try {
+      await downloadFileFromUrl(data.signedUrl, downloadName);
+      toast.success("Download started: " + downloadName);
+    } catch (err: any) {
+      if (err?.name !== "AbortError") toast.error("Download failed");
+    }
   };
 
   const handleDeleteClick = (doc: Document) => {
@@ -511,6 +526,9 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         onClose={() => setPreviewDoc(null)}
         document={previewDoc}
         onDownload={() => previewDoc && performDownload(previewDoc)}
+        onDocumentSaved={(updates) =>
+          setPreviewDoc((current) => current ? { ...current, ...updates } : current)
+        }
       />
 
       <SecureDeleteDialog
