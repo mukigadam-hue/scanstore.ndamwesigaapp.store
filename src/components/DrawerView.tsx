@@ -214,7 +214,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       .createSignedUrl(doc.file_path, 120, { download: doc.name } as any);
 
     if (error || !data?.signedUrl) {
-      toast.error("Failed to download: " + error.message);
+      toast.error("Failed to download: " + (error?.message || "Could not create a download link"));
       return;
     }
 
@@ -285,7 +285,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       .createSignedUrl(doc.file_path, 120, { download: downloadName } as any);
 
     if (error || !data?.signedUrl) {
-      toast.error("Failed to download: " + error.message);
+      toast.error("Failed to download: " + (error?.message || "Could not create a download link"));
       return;
     }
 
