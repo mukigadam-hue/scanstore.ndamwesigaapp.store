@@ -526,6 +526,9 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         onClose={() => setPreviewDoc(null)}
         document={previewDoc}
         onDownload={() => previewDoc && performDownload(previewDoc)}
+        onDocumentSaved={(updates) =>
+          setPreviewDoc((current) => current ? { ...current, ...updates } : current)
+        }
       />
 
       <SecureDeleteDialog

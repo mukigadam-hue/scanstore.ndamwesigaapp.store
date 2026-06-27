@@ -22,6 +22,7 @@ interface FilePreviewDialogProps {
     file_type: string;
   } | null;
   onDownload: () => void;
+  onDocumentSaved?: (updates: { file_path: string; file_size: number; file_type: string; updated_at: string }) => void;
   localPreviewUrl?: string | null;
   localOfficeHtml?: string | null;
   localTextContent?: string | null;
@@ -73,7 +74,7 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
     let cancelled = false;
     const loadPdf = async () => {
       try {
-        const doc = await pdfjsLib.getDocument(url).promise;
+        const doc = await pdfjsLib.getDocument({ url, withCredentials: false }).promise;
         if (!cancelled) {
           setPdfDoc(doc);
           setNumPages(doc.numPages);
@@ -106,14 +107,15 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
         if (!container || cancelled) return;
         const containerWidth = container.clientWidth;
         const unscaledViewport = page.getViewport({ scale: 1 });
-        const baseScale = containerWidth / unscaledViewport.width;
-        const viewport = page.getViewport({ scale: baseScale * zoom });
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        const cssScale = (containerWidth / unscaledViewport.width) * zoom;
+        const viewport = page.getViewport({ scale: cssScale * dpr });
+        const cssViewport = page.getViewport({ scale: cssScale });
         const canvas = canvasRef.current!;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        // Set CSS size so the canvas actually grows visually past container width
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = `${Math.floor(cssViewport.width)}px`;
+        canvas.style.height = `${Math.floor(cssViewport.height)}px`;
         const ctx = canvas.getContext("2d")!;
         const task = page.render({ canvasContext: ctx, viewport });
         renderTaskRef.current = task;
@@ -139,8 +141,8 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
 
   return (
     <div ref={containerRef} className="w-full h-full overflow-auto bg-white">
-      <div className="min-w-full min-h-full flex flex-col items-center p-2">
-        <canvas ref={canvasRef} style={{ display: "block" }} />
+      <div className="min-w-full min-h-full flex flex-col items-center justify-center p-2">
+        <canvas ref={canvasRef} style={{ display: "block", margin: "auto" }} />
         {numPages > 1 && (
           <div className="sticky bottom-2 flex items-center gap-3 bg-black/70 rounded-full px-4 py-2 mt-2 z-10">
             <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>
@@ -158,7 +160,7 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
 };
 
 
-const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
+const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumentSaved, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -172,6 +174,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   const [editedText, setEditedText] = useState("");
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [storedFilePath, setStoredFilePath] = useState<string | null>(null);
   const controlsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const [pinchStartDist, setPinchStartDist] = useState<number | null>(null);
@@ -195,9 +198,17 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       setEditing(false);
       setEditedText("");
       setHasChanges(false);
+      setStoredFilePath(null);
       excelBufferRef.current = null;
       return;
     }
+
+    setStoredFilePath(doc.file_path);
+
+  }, [open, doc?.id]);
+
+  useEffect(() => {
+    if (!open || !doc || !storedFilePath) return;
 
     if (localPreviewUrl !== undefined) {
       setPreviewUrl(localPreviewUrl);
@@ -213,7 +224,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
       try {
         const { data, error } = await supabase.storage
           .from("documents")
-          .createSignedUrl(doc.file_path, 3600);
+          .createSignedUrl(storedFilePath, 3600);
 
         if (error || !data?.signedUrl) {
           toast.error("Failed to load preview");
@@ -294,7 +305,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
 
     loadPreview();
     return () => { revoked = true; };
-  }, [open, doc?.id, reloadKey]);
+  }, [open, doc?.id, storedFilePath, reloadKey]);
 
   const resetControlsTimer = useCallback(() => {
     setShowControls(true);
@@ -352,30 +363,43 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
   // re-fetches the freshly saved bytes (bypassing CDN/browser cache).
   const persistBlob = async (blob: Blob, contentType: string) => {
     if (!doc) throw new Error("No document");
-
-    // Remove the old object FIRST so the CDN can't keep serving stale bytes
-    // under the same key, then upload the new bytes. This is the only path
-    // that reliably gives the next signed URL fetch the freshly saved file.
-    await supabase.storage.from("documents").remove([doc.file_path]).catch(() => {
-      /* ignore — upload with upsert will create it */
-    });
+    const previousPath = storedFilePath || doc.file_path;
+    const folder = previousPath.includes("/") ? previousPath.slice(0, previousPath.lastIndexOf("/")) : user?.id || "documents";
+    const safeName = doc.name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "document";
+    const newFilePath = `${folder}/${Date.now()}_${safeName}`;
 
     const { error: upErr } = await supabase.storage
       .from("documents")
-      .upload(doc.file_path, blob, {
-        upsert: true,
+      .upload(newFilePath, blob, {
+        upsert: false,
         cacheControl: "0",
         contentType,
       });
     if (upErr) throw upErr;
 
     // Update DB row so file_size and updated_at reflect reality
+    const updatedAt = new Date().toISOString();
     if (user) {
-      await supabase
+      const { error: dbErr } = await supabase
         .from("documents")
-        .update({ file_size: blob.size, updated_at: new Date().toISOString() })
+        .update({ file_path: newFilePath, file_size: blob.size, file_type: contentType, updated_at: updatedAt })
         .eq("id", doc.id)
         .eq("user_id", user.id);
+      if (dbErr) throw dbErr;
+
+      queryClient.setQueryData(["documents", user.id], (old: any[] | undefined) =>
+        old?.map((item) =>
+          item.id === doc.id
+            ? { ...item, file_path: newFilePath, file_size: blob.size, file_type: contentType, updated_at: updatedAt }
+            : item
+        )
+      );
+    }
+
+    if (previousPath && previousPath !== newFilePath) {
+      await supabase.storage.from("documents").remove([previousPath]).catch(() => {
+        /* ignore cleanup failure; the saved document already points at the new file */
+      });
     }
 
     if (previewUrl && previewUrl.startsWith("blob:")) {
@@ -385,7 +409,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
     setOfficeHtml(null);
     setTextContent(null);
 
-    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    setStoredFilePath(newFilePath);
+    onDocumentSaved?.({ file_path: newFilePath, file_size: blob.size, file_type: contentType, updated_at: updatedAt });
+    queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
     setReloadKey((k) => k + 1);
   };
 
@@ -734,7 +760,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, localPrev
                   contentEditable={editing}
                   suppressContentEditableWarning
                   dangerouslySetInnerHTML={{ __html: officeHtml! }}
-                  onInput={() => setHasChanges(true)}
+                  onInput={(e) => {
+                    setOfficeHtml((e.target as HTMLDivElement).innerHTML);
+                    setHasChanges(true);
+                  }}
                   style={{
                     fontSize: "15px",
                     lineHeight: "1.7",
