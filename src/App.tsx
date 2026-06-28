@@ -14,6 +14,7 @@ import ViewerScreen from "./pages/ViewerScreen";
 import UtilityHome from "./pages/UtilityHome";
 import Privacy from "./pages/Privacy";
 import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
+import OfflineBanner from "./components/OfflineBanner";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           <InterstitialAdOverlay />
+          <OfflineBanner />
           <StartupInterstitial />
         </BrowserRouter>
       </AuthProvider>
