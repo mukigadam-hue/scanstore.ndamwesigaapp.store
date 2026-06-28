@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import "./i18n";
+import { registerPwa } from "./lib/pwaRegister";
+import { initOfflineSync } from "./lib/offlineQueue";
 
 // Polyfill Promise.withResolvers for older browsers/webviews (required by pdfjs-dist v4)
 if (typeof (Promise as any).withResolvers !== "function") {
