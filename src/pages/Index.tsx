@@ -45,7 +45,7 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-[60px]">
       {/* Top bar with language selector — always reachable */}
       <div className="absolute top-0 right-0 z-20 p-3">
         <LanguageSelector compact={false} />

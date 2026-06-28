@@ -299,7 +299,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 pb-[60px]">
       {/* Exit bar: leave verification or sign out completely */}
       <div className="w-full max-w-md flex items-center justify-between mb-3">
         <Button
