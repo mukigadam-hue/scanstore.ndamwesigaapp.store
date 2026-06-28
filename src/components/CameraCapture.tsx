@@ -2,10 +2,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight } from "lucide-react";
+import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight, Download } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
+import { downloadBlob } from "@/lib/downloadFile";
+import { triggerNativeAd } from "@/lib/nativeAd";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -545,6 +547,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     handleClose();
   };
 
+  // Save the captured photo directly to the user's phone (download manager
+  // / file picker / native bridge), bypassing the in-app vault flow.
+  const savePhotoToPhone = async () => {
+    if (!captured) return;
+    try {
+      const file = dataUrlToFile(captured, `photo_${Date.now()}.png`, "image/png");
+      await downloadBlob(file, file.name);
+      toast.success("Saved to your phone");
+      triggerNativeAd("scan-save-phone");
+      handleClose();
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error("Could not save to phone");
+    }
+  };
+
+  const savePdfToPhone = async () => {
+    if (!captured) return;
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = captured;
+      });
+      const pdf = new jsPDF({
+        orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+        unit: "mm",
+        compress: true,
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+      const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
+      const sw = img.width * ratio;
+      const sh = img.height * ratio;
+      const format = captured.includes("image/png") ? "PNG" : "JPEG";
+      pdf.addImage(captured, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
+      const blob = pdf.output("blob");
+      await downloadBlob(blob, `scan_${Date.now()}.pdf`);
+      toast.success("PDF saved to your phone");
+      triggerNativeAd("scan-save-phone");
+      handleClose();
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error("Could not save PDF to phone");
+    }
+  };
+
   const saveAsDocument = () => {
     if (!captured) return;
     try {
@@ -578,6 +627,30 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
       saveAsImage();
+    }
+  };
+
+  // Save the assembled two-sided ID directly to the user's phone.
+  const saveIdToPhone = async (asPdf: boolean) => {
+    try {
+      const combined = await combineIdSides();
+      if (!combined) return;
+      if (asPdf) {
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        pdf.addImage(combined, "JPEG", 0, 0, pageW, pageH, undefined, "FAST");
+        const blob = pdf.output("blob");
+        await downloadBlob(blob, `id_scan_${Date.now()}.pdf`);
+      } else {
+        const file = dataUrlToFile(combined, `id_scan_${Date.now()}.jpg`, "image/jpeg");
+        await downloadBlob(file, file.name);
+      }
+      toast.success("ID saved to your phone");
+      triggerNativeAd("scan-save-phone");
+      handleClose();
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error("Could not save to phone");
     }
   };
 
@@ -806,17 +879,27 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
         <div className="bg-black/80 backdrop-blur-sm px-4 py-3 safe-area-bottom">
           <div className="space-y-2 max-w-sm mx-auto">
+            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider">Save to Vault</p>
             <div className="flex gap-2">
               <Button onClick={saveIdAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <ImageIcon className="h-4 w-4 mr-2" />
-                Save Image
+                Image
               </Button>
               <Button onClick={saveIdAsPdf} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <FileText className="h-4 w-4 mr-2" />
-                Save as PDF
+                PDF
               </Button>
             </div>
+            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider pt-1">Save to Phone</p>
             <div className="flex gap-2">
+              <Button onClick={() => saveIdToPhone(false)} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
+                <Download className="h-4 w-4 mr-2" /> Image
+              </Button>
+              <Button onClick={() => saveIdToPhone(true)} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
+                <Download className="h-4 w-4 mr-2" /> PDF
+              </Button>
+            </div>
+            <div className="flex gap-2 pt-1">
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
@@ -1008,17 +1091,27 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           </div>
         ) : (
           <div className="space-y-2 max-w-sm mx-auto">
+            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider">Save to Vault</p>
             <div className="flex gap-2">
               <Button onClick={saveAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <ImageIcon className="h-4 w-4 mr-2" />
-                Save Photo
+                Photo
               </Button>
               <Button onClick={saveAsDocument} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <FileText className="h-4 w-4 mr-2" />
-                Save as PDF
+                PDF
               </Button>
             </div>
+            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider pt-1">Save to Phone</p>
             <div className="flex gap-2">
+              <Button onClick={savePhotoToPhone} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
+                <Download className="h-4 w-4 mr-2" /> Photo
+              </Button>
+              <Button onClick={savePdfToPhone} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
+                <Download className="h-4 w-4 mr-2" /> PDF
+              </Button>
+            </div>
+            <div className="flex gap-2 pt-1">
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { setCaptured(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake

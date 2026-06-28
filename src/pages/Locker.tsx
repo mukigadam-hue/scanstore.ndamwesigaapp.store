@@ -24,6 +24,7 @@ import LanguageSelector from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import { getPendingVaultFile, clearPendingVaultFile } from "@/lib/pendingVaultFile";
 import BannerAd from "@/components/BannerAd";
+import { triggerNativeAd } from "@/lib/nativeAd";
 
 interface Drawer {
   id: string;
@@ -90,6 +91,9 @@ const Locker = () => {
     onLock: () => {
       if (user?.id) {
         localStorage.removeItem(`locker_verified_${user.id}`);
+        // Mark that re-verification was triggered by auto-lock so we can
+        // fire a native interstitial ad on the next successful unlock.
+        localStorage.setItem(`autolock_pending_ad_${user.id}`, String(Date.now()));
       }
       setSessionVerified(false);
       toast.info("Locker auto-locked due to inactivity 🔒");
@@ -174,6 +178,12 @@ const Locker = () => {
     if (user?.id) {
       localStorage.removeItem(`locker_verified_${user.id}`);
       localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
+      // If this unlock followed an auto-lock, fire a native ad once.
+      const pendingKey = `autolock_pending_ad_${user.id}`;
+      if (localStorage.getItem(pendingKey)) {
+        localStorage.removeItem(pendingKey);
+        triggerNativeAd("autolock-reverify");
+      }
     }
     setSessionVerified(true);
   };
