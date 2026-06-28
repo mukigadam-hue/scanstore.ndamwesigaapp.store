@@ -19,3 +19,7 @@ if (typeof (Promise as any).withResolvers !== "function") {
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+// Kick off PWA registration + offline queue sync after mount.
+registerPwa();
+initOfflineSync();
