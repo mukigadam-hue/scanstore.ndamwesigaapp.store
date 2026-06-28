@@ -547,6 +547,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     handleClose();
   };
 
+  // Save the captured photo directly to the user's phone (download manager
+  // / file picker / native bridge), bypassing the in-app vault flow.
+  const savePhotoToPhone = async () => {
+    if (!captured) return;
+    try {
+      const file = dataUrlToFile(captured, `photo_${Date.now()}.png`, "image/png");
+      await downloadBlob(file, file.name);
+      toast.success("Saved to your phone");
+      triggerNativeAd("scan-save-phone");
+      handleClose();
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error("Could not save to phone");
+    }
+  };
+
+  const savePdfToPhone = async () => {
+    if (!captured) return;
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = captured;
+      });
+      const pdf = new jsPDF({
+        orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+        unit: "mm",
+        compress: true,
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 5;
+      const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
+      const sw = img.width * ratio;
+      const sh = img.height * ratio;
+      const format = captured.includes("image/png") ? "PNG" : "JPEG";
+      pdf.addImage(captured, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
+      const blob = pdf.output("blob");
+      await downloadBlob(blob, `scan_${Date.now()}.pdf`);
+      toast.success("PDF saved to your phone");
+      triggerNativeAd("scan-save-phone");
+      handleClose();
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error("Could not save PDF to phone");
+    }
+  };
+
   const saveAsDocument = () => {
     if (!captured) return;
     try {
@@ -580,6 +627,30 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
       saveAsImage();
+    }
+  };
+
+  // Save the assembled two-sided ID directly to the user's phone.
+  const saveIdToPhone = async (asPdf: boolean) => {
+    try {
+      const combined = await combineIdSides();
+      if (!combined) return;
+      if (asPdf) {
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        pdf.addImage(combined, "JPEG", 0, 0, pageW, pageH, undefined, "FAST");
+        const blob = pdf.output("blob");
+        await downloadBlob(blob, `id_scan_${Date.now()}.pdf`);
+      } else {
+        const file = dataUrlToFile(combined, `id_scan_${Date.now()}.jpg`, "image/jpeg");
+        await downloadBlob(file, file.name);
+      }
+      toast.success("ID saved to your phone");
+      triggerNativeAd("scan-save-phone");
+      handleClose();
+    } catch (e: any) {
+      if (e?.name !== "AbortError") toast.error("Could not save to phone");
     }
   };
 
