@@ -879,17 +879,27 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
         <div className="bg-black/80 backdrop-blur-sm px-4 py-3 safe-area-bottom">
           <div className="space-y-2 max-w-sm mx-auto">
+            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider">Save to Vault</p>
             <div className="flex gap-2">
               <Button onClick={saveIdAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <ImageIcon className="h-4 w-4 mr-2" />
-                Save Image
+                Image
               </Button>
               <Button onClick={saveIdAsPdf} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
                 <FileText className="h-4 w-4 mr-2" />
-                Save as PDF
+                PDF
               </Button>
             </div>
+            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider pt-1">Save to Phone</p>
             <div className="flex gap-2">
+              <Button onClick={() => saveIdToPhone(false)} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
+                <Download className="h-4 w-4 mr-2" /> Image
+              </Button>
+              <Button onClick={() => saveIdToPhone(true)} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
+                <Download className="h-4 w-4 mr-2" /> PDF
+              </Button>
+            </div>
+            <div className="flex gap-2 pt-1">
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
