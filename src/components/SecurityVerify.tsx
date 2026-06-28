@@ -14,6 +14,7 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { showInterstitial } from "@/lib/ads";
+import { triggerNativeAd } from "@/lib/nativeAd";
 import BannerAd from "@/components/BannerAd";
 
 interface SecuritySettingsRow {
@@ -71,8 +72,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setSchool("");
 
     if (updated.size >= requiredCount) {
-      // Show interstitial ad first, then reveal the success screen.
+      // Trigger native AdMob interstitial via WebViewGold (no-op when offline
+      // or outside the native shell), then fall through to the in-app
+      // interstitial host before revealing the success screen.
       setPhase("playing_ad");
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        triggerNativeAd("identity-verified");
+      }
       await showInterstitial("identity-verified");
       setPhase("verification_success");
     } else {
