@@ -83,21 +83,102 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setTorchSupported(false);
   }, []);
 
+  // Pick the best back camera on phones that expose multiple lenses
+  // (wide/ultrawide/telephoto/depth). Ultrawide and depth lenses often
+  // produce soft, distorted or low-light scans, so we prefer the main wide.
+  const pickBestVideoDeviceId = async (facing: "user" | "environment"): Promise<string | undefined> => {
+    try {
+      if (!navigator.mediaDevices?.enumerateDevices) return undefined;
+      // Permission must already be granted for labels to be populated.
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === "videoinput");
+      if (cams.length <= 1) return cams[0]?.deviceId;
+
+      const wantBack = facing === "environment";
+      const score = (label: string) => {
+        const l = label.toLowerCase();
+        let s = 0;
+        if (wantBack) {
+          if (/back|rear|environment/.test(l)) s += 50;
+          if (/front|user|face/.test(l)) s -= 50;
+        } else {
+          if (/front|user|face/.test(l)) s += 50;
+          if (/back|rear|environment/.test(l)) s -= 50;
+        }
+        // Strongly prefer the main wide lens over ultrawide / tele / depth / mono.
+        if (/\bultra[\s-]?wide|0\.5x|wide angle/.test(l)) s -= 40;
+        if (/tele|zoom|2x|3x|5x/.test(l)) s -= 30;
+        if (/depth|tof|mono|monochrome|infrared|ir\b/.test(l)) s -= 80;
+        if (/\bmain\b|\bwide\b|\b1x\b|standard|primary/.test(l)) s += 20;
+        // "camera2 0" on Android is usually the main back lens.
+        if (wantBack && /\b0\b/.test(l)) s += 5;
+        return s;
+      };
+      const ranked = [...cams].sort((a, b) => score(b.label) - score(a.label));
+      return ranked[0]?.deviceId;
+    } catch {
+      return undefined;
+    }
+  };
+
   const startCamera = useCallback(async (facing: "user" | "environment") => {
     try {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: facing,
-          width: { ideal: 1920 },
-          height: { ideal: 1440 },
+
+      // Try a cascade of constraints, from best quality to most permissive,
+      // so we work across iPhone Safari, Android Chrome, Samsung Internet,
+      // and in-app WebViews that reject strict constraints.
+      const deviceId = await pickBestVideoDeviceId(facing);
+      const baseFacing: MediaTrackConstraints = deviceId
+        ? { deviceId: { exact: deviceId } }
+        : { facingMode: { ideal: facing } };
+
+      const attempts: MediaStreamConstraints[] = [
+        {
+          video: {
+            ...baseFacing,
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
+            frameRate: { ideal: 30, max: 60 },
+            advanced: [
+              { focusMode: "continuous" },
+              { exposureMode: "continuous" },
+              { whiteBalanceMode: "continuous" },
+            ] as any,
+          },
+          audio: false,
         },
-      });
+        {
+          video: { ...baseFacing, width: { ideal: 1920 }, height: { ideal: 1440 } },
+          audio: false,
+        },
+        {
+          video: { ...baseFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        },
+        { video: { facingMode: facing }, audio: false },
+        { video: true, audio: false },
+      ];
+
+      let stream: MediaStream | null = null;
+      let lastErr: unknown = null;
+      for (const c of attempts) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(c);
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (!stream) throw lastErr ?? new Error("Camera unavailable");
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.muted = true;
         await videoRef.current.play();
       }
       setStreaming(true);
@@ -105,16 +186,25 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
       const track = stream.getVideoTracks()[0];
       const capabilities = track.getCapabilities?.() as any;
-      if (capabilities?.torch) {
-        setTorchSupported(true);
-      } else {
-        setTorchSupported(false);
-      }
+
+      // Apply continuous autofocus / exposure / white balance when supported.
+      // Many phones ignore these in the initial constraints but accept them
+      // via applyConstraints once the track is live.
+      try {
+        const advanced: any[] = [];
+        if (capabilities?.focusMode?.includes?.("continuous")) advanced.push({ focusMode: "continuous" });
+        if (capabilities?.exposureMode?.includes?.("continuous")) advanced.push({ exposureMode: "continuous" });
+        if (capabilities?.whiteBalanceMode?.includes?.("continuous")) advanced.push({ whiteBalanceMode: "continuous" });
+        if (advanced.length) await (track as any).applyConstraints({ advanced });
+      } catch { /* ignore — best effort */ }
+
+      setTorchSupported(!!capabilities?.torch);
     } catch (err) {
       console.error("Camera error:", err);
       toast.error("Camera access denied. Please allow camera permissions.");
     }
   }, []);
+
 
   const toggleTorch = async () => {
     if (!streamRef.current) return;
