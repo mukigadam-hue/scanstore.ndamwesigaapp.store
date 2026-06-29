@@ -142,12 +142,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             width: { ideal: 3840 },
             height: { ideal: 2160 },
             frameRate: { ideal: 30, max: 60 },
-            // @ts-ignore — advanced is non-standard but widely supported
             advanced: [
               { focusMode: "continuous" },
               { exposureMode: "continuous" },
               { whiteBalanceMode: "continuous" },
-            ],
+            ] as any,
           },
           audio: false,
         },
