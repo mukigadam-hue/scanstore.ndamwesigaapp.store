@@ -150,7 +150,7 @@ const watermarkPdf = async (blob: Blob): Promise<Blob> => {
       });
     }
     const out = await pdf.save();
-    return new Blob([out], { type: "application/pdf" });
+    return new Blob([out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer], { type: "application/pdf" });
   } catch {
     return blob;
   }
