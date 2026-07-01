@@ -1,3 +1,5 @@
+import { watermarkBlob } from "./watermark";
+
 type DownloadResult = "native" | "browser" | "file-picker" | "share";
 
 const safeFileName = (name: string) =>
@@ -16,31 +18,41 @@ const triggerBrowserDownload = (url: string, fileName: string) => {
 
 export const downloadFileFromUrl = async (url: string, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
-  const nativeDownloader = (window as any).DocLocker?.downloadFile || (window as any).Android?.downloadFile;
 
+  // Try to fetch + watermark image/PDF URLs; fall back to raw pipeline on failure.
+  try {
+    const resp = await fetch(url);
+    if (resp.ok) {
+      const raw = await resp.blob();
+      const stamped = await watermarkBlob(raw, safeName);
+      return await downloadBlob(stamped, safeName);
+    }
+  } catch { /* fall through */ }
+
+  const nativeDownloader = (window as any).DocLocker?.downloadFile || (window as any).Android?.downloadFile;
   if (typeof nativeDownloader === "function") {
     nativeDownloader(url, safeName);
     return "native";
   }
-
   triggerBrowserDownload(url, safeName);
   return "browser";
 };
 
 export const downloadBlob = async (blob: Blob, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
+  const stamped = await watermarkBlob(blob, safeName);
   const picker = (window as any).showSaveFilePicker;
 
   if (typeof picker === "function") {
     try {
       const handle = await picker({
         suggestedName: safeName,
-        types: blob.type
-          ? [{ description: "File", accept: { [blob.type]: [`.${safeName.split(".").pop() || "bin"}`] } }]
+        types: stamped.type
+          ? [{ description: "File", accept: { [stamped.type]: [`.${safeName.split(".").pop() || "bin"}`] } }]
           : undefined,
       });
       const writable = await handle.createWritable();
-      await writable.write(blob);
+      await writable.write(stamped);
       await writable.close();
       return "file-picker";
     } catch (error: any) {
@@ -48,7 +60,7 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     }
   }
 
-  const file = new File([blob], safeName, { type: blob.type || "application/octet-stream" });
+  const file = new File([stamped], safeName, { type: stamped.type || "application/octet-stream" });
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: safeName });
@@ -58,8 +70,12 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     }
   }
 
-  const objectUrl = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(stamped);
   triggerBrowserDownload(objectUrl, safeName);
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
   return "browser";
+};
+
+export const watermarkedShare = async (blob: Blob, fileName: string): Promise<Blob> => {
+  return watermarkBlob(blob, fileName);
 };
