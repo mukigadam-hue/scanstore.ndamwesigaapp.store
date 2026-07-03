@@ -124,3 +124,18 @@
     box-shadow: 0 0 15px hsl(var(--brass) / 0.3), 0 0 5px hsl(var(--brass) / 0.2);
   }
 }
+
+/* Reserve safe space at the bottom of every page on mobile so the
+   native banner ad (≈50px) never covers action buttons like
+   "Save to Phone" / "Save to Vault". Desktop is untouched. */
+@media (max-width: 1023px) {
+  body {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Keep fixed / sticky bottom bars floating above the banner too. */
+  .fixed.bottom-0,
+  .sticky.bottom-0 {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
