@@ -770,7 +770,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Mode selection screen
   if (scanMode === "select") {
     const selectOverlay = (
-      <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
+
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
           <h3 className="text-white text-sm font-medium">Choose Scan Mode</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
