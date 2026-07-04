@@ -418,7 +418,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!scanCtx) return null;
 
     return new Promise<string | null>((resolve) => {
-      const duration = isIdScan ? 420 : 560;
+      const duration = isIdScan ? 220 : 300;
       const startTime = Date.now();
       let lastRow = 0;
 
