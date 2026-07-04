@@ -642,8 +642,7 @@ const Locker = () => {
             )}
           </AnimatePresence>
         </main>
-        {/* Bottom banner ad — reserves its own space so nothing is covered. */}
-        <BannerAd slot="dashboard" />
+        {/* No banner ads inside the vault — protects sensitive user info. */}
       </div>
 
       <PricingDialog
