@@ -250,7 +250,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
     if (!qualityCanvasRef.current) qualityCanvasRef.current = document.createElement("canvas");
     const sampleCanvas = qualityCanvasRef.current;
-    const SAMPLE_W = 160, SAMPLE_H = 120;
+    const SAMPLE_W = 96, SAMPLE_H = 72;
     sampleCanvas.width = SAMPLE_W;
     sampleCanvas.height = SAMPLE_H;
     const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
@@ -328,7 +328,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
     };
 
-    const id = window.setInterval(tick, 350);
+    const id = window.setInterval(tick, 700);
     tick();
     return () => { cancelled = true; window.clearInterval(id); };
   }, [open, streaming, scanning, captured, scanMode]);
