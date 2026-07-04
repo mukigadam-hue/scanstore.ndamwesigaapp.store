@@ -1,32 +1,75 @@
-// Native interstitial trigger.
+// Native interstitial trigger + silent preloader.
 //
-// We NEVER navigate to any external URL (no window.location changes).
-// Instead we call the WebViewGold-style Android JavaScript bridge when
-// available. Outside the native shell (mobile browsers, iOS, desktop),
-// this is a silent no-op so app flow continues uninterrupted.
+// We NEVER navigate to any external URL. Instead we call the
+// WebViewGold-style Android JavaScript bridge when available.
+// Outside the native shell this is a silent no-op.
 //
-// Bridge contract (WebViewGold Android):
-//   Android.showInterstitial()  -> void
+// Bridge contract (best-effort; we probe multiple names so ads fire
+// as fast as possible on whatever wrapper is present):
+//   Android.showInterstitial() / preloadInterstitial() / loadInterstitial()
+//   Android.showBanner()       / preloadBanner()       / loadBanner()
+//   WebViewGold.*  (same method names)
 //
-// This function ALWAYS returns immediately and NEVER throws. Ad clicks
-// or ad-load failures never block the caller.
+// All calls ALWAYS return immediately and NEVER throw.
+
+type Bridge = any;
+
+function bridges(): Bridge[] {
+  if (typeof window === "undefined") return [];
+  const out: Bridge[] = [];
+  const A = (window as any).Android;
+  const W = (window as any).WebViewGold;
+  if (A) out.push(A);
+  if (W) out.push(W);
+  return out;
+}
+
+function callFirst(methods: string[]): boolean {
+  for (const b of bridges()) {
+    for (const m of methods) {
+      try {
+        if (typeof b[m] === "function") {
+          b[m]();
+          return true;
+        }
+      } catch {
+        /* ignore, try next */
+      }
+    }
+  }
+  return false;
+}
+
+/** Warm up the ad SDK as early as possible so triggers show instantly. */
+export function preloadNativeAds(): void {
+  try {
+    callFirst([
+      "preloadInterstitial",
+      "loadInterstitial",
+      "cacheInterstitial",
+      "prepareInterstitial",
+    ]);
+    callFirst([
+      "preloadBanner",
+      "loadBanner",
+      "showBanner", // some wrappers auto-cache on first show
+    ]);
+  } catch {
+    /* never throw */
+  }
+}
 
 export function triggerNativeAd(_trigger: string = "generic"): void {
   try {
-    const A: any = (window as any).Android;
-    if (A && typeof A.showInterstitial === "function") {
-      A.showInterstitial();
-      return;
+    const shown = callFirst(["showInterstitial", "displayInterstitial"]);
+    if (!shown) {
+      // Not in native shell — kick a preload for next time anyway.
+      preloadNativeAds();
+    } else {
+      // Immediately queue the next one so the following trigger is instant.
+      setTimeout(preloadNativeAds, 0);
     }
-    // Alternative bridge names some wrappers use.
-    const W: any = (window as any).WebViewGold;
-    if (W && typeof W.showInterstitial === "function") {
-      W.showInterstitial();
-      return;
-    }
-    console.log("Not running inside the WebViewGold native Android wrapper.");
   } catch (e) {
-    // Swallow — ads must never break app flow.
     console.log("Native ad bridge unavailable:", e);
   }
 }

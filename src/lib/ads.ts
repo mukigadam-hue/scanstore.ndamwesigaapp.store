@@ -12,7 +12,7 @@
 // This guarantees the app never freezes on an ad and never opens a
 // WebViewGold landing page.
 
-import { triggerNativeAd } from "./nativeAd";
+import { triggerNativeAd, preloadNativeAds } from "./nativeAd";
 
 // Kept for backwards compatibility with BannerAd. Banner ads are
 // disabled everywhere until a real SDK is wired.
@@ -27,8 +27,10 @@ export function registerInterstitialHost(l: Listener | null) {
 }
 
 export function prefetchInterstitial() {
-  // Native shell handles prefetching. No-op on the web.
+  // Warm the native ad cache so the next trigger renders instantly.
+  preloadNativeAds();
 }
+
 
 function hasNativeBridge(): boolean {
   const A: any = (typeof window !== "undefined" && (window as any).Android) || null;
