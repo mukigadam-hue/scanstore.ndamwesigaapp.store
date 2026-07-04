@@ -499,6 +499,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   };
 
   const scanDocument = async () => {
+    // Give instant visual feedback before the (sync) crop math runs.
+    setScanning(true);
+    setScanProgress(0);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const result = await performScan();
     if (result) {
       setCaptured(result);
@@ -507,6 +511,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // ID scanning functions
   const scanIdSide = async (side: "front" | "back") => {
+    setScanning(true);
+    setScanProgress(0);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const result = await performScan();
     if (!result) return;
 
