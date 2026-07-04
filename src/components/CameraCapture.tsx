@@ -1022,7 +1022,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const idSideLabel = scanMode === "id-front" ? "FRONT side" : "BACK side";
 
   const overlay = (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
       <canvas ref={canvasRef} className="hidden" />
       <canvas ref={scanCanvasRef} className="hidden" />
 
