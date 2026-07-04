@@ -418,7 +418,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!scanCtx) return null;
 
     return new Promise<string | null>((resolve) => {
-      const duration = isIdScan ? 420 : 560;
+      const duration = isIdScan ? 220 : 300;
       const startTime = Date.now();
       let lastRow = 0;
 
@@ -499,6 +499,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   };
 
   const scanDocument = async () => {
+    // Give instant visual feedback before the (sync) crop math runs.
+    setScanning(true);
+    setScanProgress(0);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const result = await performScan();
     if (result) {
       setCaptured(result);
@@ -507,6 +511,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // ID scanning functions
   const scanIdSide = async (side: "front" | "back") => {
+    setScanning(true);
+    setScanProgress(0);
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
     const result = await performScan();
     if (!result) return;
 
@@ -770,7 +777,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Mode selection screen
   if (scanMode === "select") {
     const selectOverlay = (
-      <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
+
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
           <h3 className="text-white text-sm font-medium">Choose Scan Mode</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
@@ -904,7 +912,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     };
 
     const layoutOverlay = (
-      <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
+
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
           <h3 className="text-white text-sm font-medium">Arrange on A4 — drag & resize</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
@@ -1020,7 +1029,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const idSideLabel = scanMode === "id-front" ? "FRONT side" : "BACK side";
 
   const overlay = (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
       <canvas ref={canvasRef} className="hidden" />
       <canvas ref={scanCanvasRef} className="hidden" />
 
