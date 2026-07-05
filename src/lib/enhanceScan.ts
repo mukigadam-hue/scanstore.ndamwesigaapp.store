@@ -12,6 +12,8 @@
 
 export interface EnhanceOptions {
   isIdScan?: boolean;
+  /** Skip the heavier shadow-removal and sharpening passes for instant phone capture. */
+  fast?: boolean;
   /** 0..1 – how aggressively to whiten the background. Default 0.85 */
   backgroundWhiteness?: number;
   /** 0..1 – sharpening strength. Default 0.35 */
@@ -26,11 +28,11 @@ export function enhanceScanCanvas(
   canvas: HTMLCanvasElement,
   options: EnhanceOptions = {}
 ): HTMLCanvasElement {
-  const { isIdScan = false } = options;
+  const { isIdScan = false, fast = false } = options;
   // Use much gentler settings for IDs to preserve original colors (photo, holograms, stamps).
   const {
     backgroundWhiteness = isIdScan ? 0.25 : 0.85,
-    sharpenAmount = isIdScan ? 0.12 : 0.35,
+    sharpenAmount = fast ? 0 : isIdScan ? 0.12 : 0.35,
   } = options;
 
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -76,56 +78,58 @@ export function enhanceScanCanvas(
     data[i + 2] = Math.min(255, data[i + 2] * cB);
   }
 
-  // ---------- 2. Shadow removal via downscaled background estimate ----------
-  // Downscale heavily, blur, upscale → background illumination map.
-  const bgScale = 0.08; // 8% size
-  const bgW = Math.max(8, Math.round(w * bgScale));
-  const bgH = Math.max(8, Math.round(h * bgScale));
-  const bgCanvas = document.createElement("canvas");
-  bgCanvas.width = bgW;
-  bgCanvas.height = bgH;
-  const bgCtx = bgCanvas.getContext("2d")!;
-  bgCtx.imageSmoothingEnabled = true;
-  bgCtx.imageSmoothingQuality = "high";
+  if (!fast) {
+    // ---------- 2. Shadow removal via downscaled background estimate ----------
+    // Downscale heavily, blur, upscale → background illumination map.
+    const bgScale = 0.08; // 8% size
+    const bgW = Math.max(8, Math.round(w * bgScale));
+    const bgH = Math.max(8, Math.round(h * bgScale));
+    const bgCanvas = document.createElement("canvas");
+    bgCanvas.width = bgW;
+    bgCanvas.height = bgH;
+    const bgCtx = bgCanvas.getContext("2d")!;
+    bgCtx.imageSmoothingEnabled = true;
+    bgCtx.imageSmoothingQuality = "high";
 
-  // Put current (white-balanced) data into a temporary canvas to draw scaled
-  ctx.putImageData(imageData, 0, 0);
-  bgCtx.drawImage(canvas, 0, 0, bgW, bgH);
-  // Slight blur via re-scaling for smoother background
-  const bgCanvas2 = document.createElement("canvas");
-  bgCanvas2.width = bgW;
-  bgCanvas2.height = bgH;
-  const bgCtx2 = bgCanvas2.getContext("2d")!;
-  bgCtx2.filter = "blur(2px)";
-  bgCtx2.drawImage(bgCanvas, 0, 0);
+    // Put current (white-balanced) data into a temporary canvas to draw scaled
+    ctx.putImageData(imageData, 0, 0);
+    bgCtx.drawImage(canvas, 0, 0, bgW, bgH);
+    // Slight blur via re-scaling for smoother background
+    const bgCanvas2 = document.createElement("canvas");
+    bgCanvas2.width = bgW;
+    bgCanvas2.height = bgH;
+    const bgCtx2 = bgCanvas2.getContext("2d")!;
+    bgCtx2.filter = "blur(2px)";
+    bgCtx2.drawImage(bgCanvas, 0, 0);
 
-  // Upscale background to full size
-  const bgFull = document.createElement("canvas");
-  bgFull.width = w;
-  bgFull.height = h;
-  const bgFullCtx = bgFull.getContext("2d")!;
-  bgFullCtx.imageSmoothingEnabled = true;
-  bgFullCtx.imageSmoothingQuality = "high";
-  bgFullCtx.drawImage(bgCanvas2, 0, 0, w, h);
+    // Upscale background to full size
+    const bgFull = document.createElement("canvas");
+    bgFull.width = w;
+    bgFull.height = h;
+    const bgFullCtx = bgFull.getContext("2d")!;
+    bgFullCtx.imageSmoothingEnabled = true;
+    bgFullCtx.imageSmoothingQuality = "high";
+    bgFullCtx.drawImage(bgCanvas2, 0, 0, w, h);
 
-  let bgData: ImageData;
-  try {
-    bgData = bgFullCtx.getImageData(0, 0, w, h);
-  } catch {
-    return canvas;
-  }
-  const bg = bgData.data;
+    let bgData: ImageData;
+    try {
+      bgData = bgFullCtx.getImageData(0, 0, w, h);
+    } catch {
+      return canvas;
+    }
+    const bg = bgData.data;
 
-  // Divide image by background, scale to white. Pixels brighter than bg become near-white.
-  const wMix = backgroundWhiteness;
-  for (let i = 0; i < data.length; i += 4) {
-    for (let c = 0; c < 3; c++) {
-      const px = data[i + c];
-      const bgPx = bg[i + c] || 1;
-      // Normalized: ratio of pixel to local background, scaled so background = 255
-      const corrected = (px / bgPx) * 255;
-      // Blend with original to avoid over-correction destroying ink
-      data[i + c] = Math.min(255, Math.max(0, corrected * wMix + px * (1 - wMix)));
+    // Divide image by background, scale to white. Pixels brighter than bg become near-white.
+    const wMix = backgroundWhiteness;
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        const px = data[i + c];
+        const bgPx = bg[i + c] || 1;
+        // Normalized: ratio of pixel to local background, scaled so background = 255
+        const corrected = (px / bgPx) * 255;
+        // Blend with original to avoid over-correction destroying ink
+        data[i + c] = Math.min(255, Math.max(0, corrected * wMix + px * (1 - wMix)));
+      }
     }
   }
 
