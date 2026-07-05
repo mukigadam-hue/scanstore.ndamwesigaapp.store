@@ -276,7 +276,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
     if (!qualityCanvasRef.current) qualityCanvasRef.current = document.createElement("canvas");
     const sampleCanvas = qualityCanvasRef.current;
-    const SAMPLE_W = 96, SAMPLE_H = 72;
+    const SAMPLE_W = 64, SAMPLE_H = 48;
     sampleCanvas.width = SAMPLE_W;
     sampleCanvas.height = SAMPLE_H;
     const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
@@ -354,7 +354,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
     };
 
-    const id = window.setInterval(tick, 700);
+    const id = window.setInterval(tick, 1200);
     tick();
     return () => { cancelled = true; window.clearInterval(id); };
   }, [open, streaming, scanning, captured, scanMode]);
@@ -376,7 +376,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     canvas.width = Math.max(1, Math.round(sourceW * scale));
     canvas.height = Math.max(1, Math.round(sourceH * scale));
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      setScanning(false);
+      setScanProgress(0);
+      return;
+    }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -456,7 +460,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     mainCanvas.height = targetH;
 
     const scanCtx = scanCanvas.getContext("2d");
-    if (!scanCtx) return null;
+    if (!scanCtx) {
+      setScanning(false);
+      setScanProgress(0);
+      return null;
+    }
 
     scanCtx.imageSmoothingEnabled = true;
     scanCtx.imageSmoothingQuality = "high";
@@ -509,10 +517,15 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Give instant visual feedback before the (sync) crop math runs.
     setScanning(true);
     setScanProgress(0);
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
-    const result = await performScan();
-    if (result) {
-      setCaptured(result);
+    await nextFrame();
+    try {
+      const result = await performScan();
+      if (result) {
+        setCaptured(result);
+      }
+    } finally {
+      setScanning(false);
+      setScanProgress(0);
     }
   };
 
@@ -520,9 +533,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const scanIdSide = async (side: "front" | "back") => {
     setScanning(true);
     setScanProgress(0);
-    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    await nextFrame();
     const result = await performScan();
-    if (!result) return;
+    if (!result) {
+      setScanning(false);
+      setScanProgress(0);
+      return;
+    }
 
     if (side === "front") {
       setIdFrontImage(result);
