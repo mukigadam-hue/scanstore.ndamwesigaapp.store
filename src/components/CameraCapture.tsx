@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight, Download } from "lucide-react";
+import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight, Download, Save } from "lucide-react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
@@ -23,6 +23,29 @@ const ID_ASPECT = 85.6 / 53.98; // width / height
 const A4_W_MM = 210;
 const A4_H_MM = 297;
 const DEFAULT_ID_WIDTH_MM = 110;
+const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
+
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+const canvasToDataUrl = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<string> => {
+  if (!canvas.toBlob) return Promise.resolve(canvas.toDataURL(type, quality));
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          resolve(canvas.toDataURL(type, quality));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(canvas.toDataURL(type, quality));
+        reader.readAsDataURL(blob);
+      },
+      type,
+      quality
+    );
+  });
+};
 
 const clampPlacement = (p: IdPlacement): IdPlacement => {
   const minW = 40;
@@ -53,6 +76,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanOrientation, setScanOrientation] = useState<"portrait" | "landscape">("portrait");
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [scanStatusText, setScanStatusText] = useState("Scanning document");
+  const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
 
@@ -139,9 +164,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         {
           video: {
             ...baseFacing,
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
-            frameRate: { ideal: 30, max: 60 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 30 },
             advanced: [
               { focusMode: "continuous" },
               { exposureMode: "continuous" },
@@ -151,11 +176,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           audio: false,
         },
         {
-          video: { ...baseFacing, width: { ideal: 1920 }, height: { ideal: 1440 } },
+          video: { ...baseFacing, width: { ideal: 1600 }, height: { ideal: 1200 }, frameRate: { ideal: 30, max: 30 } },
           audio: false,
         },
         {
-          video: { ...baseFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { ...baseFacing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
           audio: false,
         },
         { video: { facingMode: facing }, audio: false },
@@ -228,6 +253,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setCaptured(null);
       setScanning(false);
       setScanProgress(0);
+      setSaveChoicesOpen(null);
       setScanMode("select");
       setIdFrontImage(null);
       setIdBackImage(null);
@@ -334,25 +360,40 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   }, [open, streaming, scanning, captured, scanMode]);
 
 
-  const takePhoto = () => {
+  const takePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
+    onScanStart?.();
+    setScanStatusText("Taking photo");
+    setScanning(true);
+    setScanProgress(1);
+    await nextFrame();
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const maxDimension = 1800;
+    const sourceW = video.videoWidth || 1280;
+    const sourceH = video.videoHeight || 720;
+    const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
+    canvas.width = Math.max(1, Math.round(sourceW * scale));
+    canvas.height = Math.max(1, Math.round(sourceH * scale));
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/png", 1.0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = await canvasToDataUrl(canvas, "image/jpeg", 0.92);
     setCaptured(dataUrl);
     stopCamera();
+    setScanning(false);
+    setScanProgress(0);
   };
 
   const performScan = async (): Promise<string | null> => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return null;
     onScanStart?.();
+    setScanStatusText(`Scanning ${scanMode === "id-front" ? "ID front" : scanMode === "id-back" ? "ID back" : "document"}`);
     setScanning(true);
-    setScanProgress(0);
+    setScanProgress(1);
+    await nextFrame();
 
     const video = videoRef.current;
     const scanCanvas = scanCanvasRef.current;
@@ -399,7 +440,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Cap scan resolution to keep saving and AI cleaning fast on phones.
     let targetW = cropW;
     let targetH = cropH;
-    const maxDimension = isIdScan ? 820 : 1600;
+    const maxDimension = isIdScan ? 900 : 1400;
     if (targetW > maxDimension || targetH > maxDimension) {
       const scale = maxDimension / Math.max(targetW, targetH);
       targetW = Math.round(targetW * scale);
@@ -417,85 +458,51 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     const scanCtx = scanCanvas.getContext("2d");
     if (!scanCtx) return null;
 
-    return new Promise<string | null>((resolve) => {
-      const duration = isIdScan ? 220 : 300;
-      const startTime = Date.now();
-      let lastRow = 0;
+    scanCtx.imageSmoothingEnabled = true;
+    scanCtx.imageSmoothingQuality = "high";
+    scanCtx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
 
-      const animateScanning = async () => {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        setScanProgress(progress);
+    const mainCtx = mainCanvas.getContext("2d");
+    if (mainCtx) {
+      mainCtx.imageSmoothingEnabled = true;
+      mainCtx.imageSmoothingQuality = "high";
+      if (isIdScan) {
+        const radius = Math.max(14, Math.round(Math.min(targetW, targetH) * 0.06));
+        mainCtx.fillStyle = "#ffffff";
+        mainCtx.fillRect(0, 0, targetW, targetH);
+        mainCtx.save();
+        mainCtx.beginPath();
+        mainCtx.moveTo(radius, 0);
+        mainCtx.lineTo(targetW - radius, 0);
+        mainCtx.arcTo(targetW, 0, targetW, radius, radius);
+        mainCtx.lineTo(targetW, targetH - radius);
+        mainCtx.arcTo(targetW, targetH, targetW - radius, targetH, radius);
+        mainCtx.lineTo(radius, targetH);
+        mainCtx.arcTo(0, targetH, 0, targetH - radius, radius);
+        mainCtx.lineTo(0, radius);
+        mainCtx.arcTo(0, 0, radius, 0, radius);
+        mainCtx.closePath();
+        mainCtx.clip();
+        mainCtx.drawImage(scanCanvas, 0, 0);
+        mainCtx.restore();
+      } else {
+        mainCtx.drawImage(scanCanvas, 0, 0);
+      }
+    }
 
-        const currentRow = Math.floor(progress * targetH);
+    try {
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: true });
+    } catch {
+      // If enhancement fails for any reason, keep raw scan
+    }
 
-        if (currentRow > lastRow) {
-          const rowsToCopy = currentRow - lastRow;
-          scanCtx.drawImage(
-            video,
-            cropX, cropY + (lastRow / targetH) * cropH, cropW, (rowsToCopy / targetH) * cropH,
-            0, lastRow, targetW, rowsToCopy
-          );
-          lastRow = currentRow;
-        }
+    const jpegQuality = isIdScan ? 0.84 : 0.9;
+    const rawDataUrl = await canvasToDataUrl(mainCanvas, "image/jpeg", jpegQuality);
+    stopCamera();
+    setScanning(false);
+    setScanProgress(0);
 
-        if (progress < 1) {
-          requestAnimationFrame(animateScanning);
-        } else {
-          if (lastRow < targetH) {
-            scanCtx.drawImage(
-              video,
-              cropX, cropY + (lastRow / targetH) * cropH, cropW, ((targetH - lastRow) / targetH) * cropH,
-              0, lastRow, targetW, targetH - lastRow
-            );
-          }
-
-          const mainCtx = mainCanvas.getContext("2d");
-          if (mainCtx) {
-            if (isIdScan) {
-              const radius = Math.max(14, Math.round(Math.min(targetW, targetH) * 0.06));
-              mainCtx.fillStyle = "#ffffff";
-              mainCtx.fillRect(0, 0, targetW, targetH);
-              mainCtx.save();
-              mainCtx.beginPath();
-              mainCtx.moveTo(radius, 0);
-              mainCtx.lineTo(targetW - radius, 0);
-              mainCtx.arcTo(targetW, 0, targetW, radius, radius);
-              mainCtx.lineTo(targetW, targetH - radius);
-              mainCtx.arcTo(targetW, targetH, targetW - radius, targetH, radius);
-              mainCtx.lineTo(radius, targetH);
-              mainCtx.arcTo(0, targetH, 0, targetH - radius, radius);
-              mainCtx.lineTo(0, radius);
-              mainCtx.arcTo(0, 0, radius, 0, radius);
-              mainCtx.closePath();
-              mainCtx.clip();
-              mainCtx.drawImage(scanCanvas, 0, 0);
-              mainCtx.restore();
-            } else {
-              mainCtx.drawImage(scanCanvas, 0, 0);
-            }
-          }
-
-          // Apply fast in-browser enhancement: white balance, shadow removal,
-          // contrast stretch and sharpening — no AI / no network needed.
-          try {
-            enhanceScanCanvas(mainCanvas, { isIdScan });
-          } catch {
-            // If enhancement fails for any reason, keep raw scan
-          }
-
-          const jpegQuality = isIdScan ? 0.78 : 0.88;
-          const rawDataUrl = mainCanvas.toDataURL("image/jpeg", jpegQuality);
-          stopCamera();
-          setScanning(false);
-          setScanProgress(0);
-
-          resolve(rawDataUrl);
-        }
-      };
-
-      requestAnimationFrame(animateScanning);
-    });
+    return rawDataUrl;
   };
 
   const scanDocument = async () => {
@@ -639,7 +646,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const saveAsImage = () => {
     if (!captured) return;
-    const file = dataUrlToFile(captured, `photo_${Date.now()}.png`, "image/png");
+    const isPng = captured.startsWith("data:image/png");
+    const file = dataUrlToFile(captured, `photo_${Date.now()}.${isPng ? "png" : "jpg"}`, isPng ? "image/png" : "image/jpeg");
     onCapture(file);
     handleClose();
   };
@@ -649,7 +657,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const savePhotoToPhone = async () => {
     if (!captured) return;
     try {
-      const file = dataUrlToFile(captured, `photo_${Date.now()}.png`, "image/png");
+      const isPng = captured.startsWith("data:image/png");
+      const file = dataUrlToFile(captured, `photo_${Date.now()}.${isPng ? "png" : "jpg"}`, isPng ? "image/png" : "image/jpeg");
       await downloadBlob(file, file.name);
       toast.success("Saved to your phone");
       triggerNativeAd("scan-save-phone");
@@ -756,6 +765,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setCaptured(null);
     setScanning(false);
     setScanProgress(0);
+    setSaveChoicesOpen(null);
     setScanMode("select");
     setIdFrontImage(null);
     setIdBackImage(null);
@@ -774,10 +784,45 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   if (!open) return null;
 
+  const renderSaveChoices = (kind: "capture" | "id") => (
+    <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 px-4" onClick={() => setSaveChoicesOpen(null)}>
+      <div
+        className="w-full max-w-sm rounded-t-2xl border border-white/15 bg-black/95 p-4 shadow-2xl"
+        style={{ marginBottom: BANNER_SAFE_BOTTOM }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between pb-3">
+          <h4 className="text-sm font-semibold text-white">Save file</h4>
+          <Button size="icon" variant="ghost" onClick={() => setSaveChoicesOpen(null)} className="h-8 w-8 text-white/70 hover:bg-white/10 hover:text-white">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={kind === "id" ? saveIdAsImage : saveAsImage} className="brass-gradient text-primary-foreground hover:opacity-90">
+            <ImageIcon className="h-4 w-4 mr-2" />
+            Vault Photo
+          </Button>
+          <Button onClick={kind === "id" ? saveIdAsPdf : saveAsDocument} className="brass-gradient text-primary-foreground hover:opacity-90">
+            <FileText className="h-4 w-4 mr-2" />
+            Vault PDF
+          </Button>
+          <Button onClick={kind === "id" ? () => saveIdToPhone(false) : savePhotoToPhone} variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
+            <Download className="h-4 w-4 mr-2" />
+            Phone Photo
+          </Button>
+          <Button onClick={kind === "id" ? () => saveIdToPhone(true) : savePdfToPhone} variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
+            <Download className="h-4 w-4 mr-2" />
+            Phone PDF
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
   // Mode selection screen
   if (scanMode === "select") {
     const selectOverlay = (
-      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
 
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
           <h3 className="text-white text-sm font-medium">Choose Scan Mode</h3>
@@ -912,7 +957,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     };
 
     const layoutOverlay = (
-      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
+      <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
 
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
           <h3 className="text-white text-sm font-medium">Arrange on A4 — drag & resize</h3>
@@ -977,28 +1022,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         </div>
 
         <div className="bg-black/80 backdrop-blur-sm px-4 py-3 safe-area-bottom">
-          <div className="space-y-2 max-w-sm mx-auto">
-            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider">Save to Vault</p>
-            <div className="flex gap-2">
-              <Button onClick={saveIdAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
-                <ImageIcon className="h-4 w-4 mr-2" />
-                Image
-              </Button>
-              <Button onClick={saveIdAsPdf} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider pt-1">Save to Phone</p>
-            <div className="flex gap-2">
-              <Button onClick={() => saveIdToPhone(false)} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
-                <Download className="h-4 w-4 mr-2" /> Image
-              </Button>
-              <Button onClick={() => saveIdToPhone(true)} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
-                <Download className="h-4 w-4 mr-2" /> PDF
-              </Button>
-            </div>
-            <div className="flex gap-2 pt-1">
+          <div className="flex items-center gap-2 max-w-sm mx-auto">
+            <Button onClick={() => setSaveChoicesOpen("id")} className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90">
+              <Save className="h-4 w-4 mr-2" />
+              Save
+            </Button>
               <Button
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
@@ -1010,14 +1038,14 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 }}
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Rescan Both
+                Rescan
               </Button>
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
                 Cancel
               </Button>
-            </div>
           </div>
         </div>
+        {saveChoicesOpen === "id" && renderSaveChoices("id")}
       </div>
     );
     return createPortal(layoutOverlay, document.body);
@@ -1029,7 +1057,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const idSideLabel = scanMode === "id-front" ? "FRONT side" : "BACK side";
 
   const overlay = (
-    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))' }}>
+    <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
       <canvas ref={canvasRef} className="hidden" />
       <canvas ref={scanCanvasRef} className="hidden" />
 
@@ -1127,7 +1155,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 <div className="absolute left-0 right-0 h-1" style={{ top: `${scanProgress * 100}%`, boxShadow: "0 0 20px 6px hsl(var(--primary) / 0.7), 0 0 40px 12px hsl(var(--primary) / 0.3)", background: `linear-gradient(90deg, transparent 0%, hsl(var(--primary)) 15%, hsl(45 80% 70%) 50%, hsl(var(--primary)) 85%, transparent 100%)` }} />
                 <div className="absolute bottom-4 left-0 right-0 text-center">
                   <span className="text-white text-sm font-medium bg-black/60 px-3 py-1 rounded-full">
-                    Scanning {isIdMode ? idSideLabel : "document"}… {Math.round(scanProgress * 100)}%
+                    {scanStatusText}… {scanProgress < 1 ? `${Math.round(scanProgress * 100)}%` : ""}
                   </span>
                 </div>
               </div>
@@ -1189,39 +1217,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             )}
           </div>
         ) : (
-          <div className="space-y-2 max-w-sm mx-auto">
-            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider">Save to Vault</p>
-            <div className="flex gap-2">
-              <Button onClick={saveAsImage} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
-                <ImageIcon className="h-4 w-4 mr-2" />
-                Photo
+          <div className="flex items-center gap-2 max-w-sm mx-auto">
+              <Button onClick={() => setSaveChoicesOpen("capture")} className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90">
+                <Save className="h-4 w-4 mr-2" />
+                Save
               </Button>
-              <Button onClick={saveAsDocument} className="flex-1 brass-gradient text-primary-foreground hover:opacity-90">
-                <FileText className="h-4 w-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-            <p className="text-[11px] text-white/60 text-center uppercase tracking-wider pt-1">Save to Phone</p>
-            <div className="flex gap-2">
-              <Button onClick={savePhotoToPhone} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
-                <Download className="h-4 w-4 mr-2" /> Photo
-              </Button>
-              <Button onClick={savePdfToPhone} variant="outline" className="flex-1 border-white/30 text-white hover:bg-white/10 bg-transparent">
-                <Download className="h-4 w-4 mr-2" /> PDF
-              </Button>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { setCaptured(null); startCamera(facingMode); }}>
+              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { setCaptured(null); setSaveChoicesOpen(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake
               </Button>
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
                 Cancel
               </Button>
-            </div>
           </div>
         )}
       </div>
+      {saveChoicesOpen === "capture" && renderSaveChoices("capture")}
     </div>
   );
 
