@@ -59,14 +59,40 @@ export function preloadNativeAds(): void {
   }
 }
 
+/** True when the app is running inside an Android WebView shell (WebViewGold). */
+export function isAndroidWebView(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /\bwv\b|WebViewGold/i.test(navigator.userAgent);
+}
+
+/**
+ * Fire a WebViewGold interstitial trigger.
+ *
+ * - Calls the WebViewGold / Android JS bridge (`Android.showInterstitial()`)
+ *   when available — this is the real interstitial.
+ * - Also bumps a same-page hash change, which WebViewGold counts as a
+ *   navigation toward its built-in interstitial threshold. Using a hash
+ *   (not a full URL) means the app never leaves our domain and users
+ *   never see the WebViewGold landing page.
+ */
 export function triggerNativeAd(_trigger: string = "generic"): void {
   try {
     const shown = callFirst(["showInterstitial", "displayInterstitial"]);
+
+    if (isAndroidWebView() && typeof window !== "undefined") {
+      try {
+        const stamp = Date.now().toString(36);
+        const url = `${window.location.pathname}${window.location.search}#ad-${stamp}`;
+        window.history.replaceState(null, "", url);
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
+      } catch {
+        /* ignore */
+      }
+    }
+
     if (!shown) {
-      // Not in native shell — kick a preload for next time anyway.
       preloadNativeAds();
     } else {
-      // Immediately queue the next one so the following trigger is instant.
       setTimeout(preloadNativeAds, 0);
     }
   } catch (e) {
