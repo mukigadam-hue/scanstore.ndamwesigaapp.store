@@ -74,6 +74,7 @@ const App = () => (
           <InterstitialAdOverlay />
           <OfflineBanner />
           <StartupInterstitial />
+          <RouteChangeAdTrigger />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
