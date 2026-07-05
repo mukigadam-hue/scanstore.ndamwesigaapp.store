@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -16,8 +16,9 @@ import Privacy from "./pages/Privacy";
 import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
 import OfflineBanner from "./components/OfflineBanner";
 import NotFound from "./pages/NotFound";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
+import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,26 @@ const StartupInterstitial = () => {
   }, []);
   return null;
 };
+
+/**
+ * Fires the WebViewGold native ad bridge on every SPA route change so the
+ * native Android shell can count navigations toward its interstitial
+ * threshold and display the real ad. No-op outside the WebView shell.
+ */
+const RouteChangeAdTrigger = () => {
+  const location = useLocation();
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    if (!isAndroidWebView()) return;
+    triggerNativeAd(`route:${location.pathname}`);
+  }, [location.pathname]);
+  return null;
+};
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -53,6 +74,7 @@ const App = () => (
           <InterstitialAdOverlay />
           <OfflineBanner />
           <StartupInterstitial />
+          <RouteChangeAdTrigger />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
