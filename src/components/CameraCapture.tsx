@@ -360,26 +360,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   }, [open, streaming, scanning, captured, scanMode]);
 
 
-  // Drive the scan-line animation from 0 → 1 over `durationMs` while
-  // the heavy enhancement work runs concurrently. Returns a promise
-  // that resolves once BOTH the animation and the work are complete,
-  // so the user always sees the full sweep even on fast phones.
+  // Drive the scan-line animation from 0 → 1 over `durationMs`. Heavy
+  // enhancement work is kicked off on the very next frame and runs in
+  // parallel with the sweep; the promise resolves when BOTH complete.
+  // On fast phones the capture finishes the instant the sweep does — a
+  // true "blink of an eye" scan.
   const runScanAnimation = (durationMs: number, work: () => void): Promise<void> => {
     return new Promise((resolve) => {
       const start = performance.now();
-      let workStarted = false;
       let workDone = false;
+      requestAnimationFrame(() => {
+        try { work(); } catch { /* keep raw scan */ }
+        workDone = true;
+      });
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / durationMs);
         setScanProgress(t);
-        // Kick off the heavy work once the sweep is ~30% in — this hides
-        // the enhancement CPU cost behind the animation instead of
-        // freezing before it starts.
-        if (!workStarted && t >= 0.3) {
-          workStarted = true;
-          try { work(); } catch { /* keep raw scan */ }
-          workDone = true;
-        }
         if (t < 1) {
           requestAnimationFrame(tick);
         } else {
