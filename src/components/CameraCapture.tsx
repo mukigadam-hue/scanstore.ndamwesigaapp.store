@@ -473,7 +473,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Higher caps restore the crisp look of the previous scans.
     let targetW = cropW;
     let targetH = cropH;
-    const maxDimension = isIdScan ? 1200 : 2000;
+    const maxDimension = isIdScan ? 1000 : 1500;
     if (targetW > maxDimension || targetH > maxDimension) {
       const scale = maxDimension / Math.max(targetW, targetH);
       targetW = Math.round(targetW * scale);
