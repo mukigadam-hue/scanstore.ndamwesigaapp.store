@@ -529,12 +529,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
 
     // Full-quality enhancement (shadow removal + sharpening) restored,
-    // hidden behind the sweep animation so it feels instant.
-    await runScanAnimation(isIdScan ? 550 : 700, () => {
+    // hidden behind a short sweep so it feels instant.
+    await runScanAnimation(isIdScan ? 350 : 400, () => {
       enhanceScanCanvas(mainCanvas, { isIdScan, fast: false });
     });
 
-    const jpegQuality = isIdScan ? 0.9 : 0.94;
+    const jpegQuality = isIdScan ? 0.9 : 0.92;
     const rawDataUrl = await canvasToDataUrl(mainCanvas, "image/jpeg", jpegQuality);
     stopCamera();
     setScanning(false);
