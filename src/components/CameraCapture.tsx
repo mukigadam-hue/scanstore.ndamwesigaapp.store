@@ -396,7 +396,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     await nextFrame();
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const maxDimension = 2200;
+    const maxDimension = 1600;
     const sourceW = video.videoWidth || 1280;
     const sourceH = video.videoHeight || 720;
     const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
@@ -412,9 +412,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     ctx.imageSmoothingQuality = "high";
     // Grab the frame immediately so motion blur is minimised.
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    // Run the sweep animation over the JPEG encode so users see the scan line.
-    await runScanAnimation(500, () => { /* no enhancement on plain photos */ });
-    const dataUrl = await canvasToDataUrl(canvas, "image/jpeg", 0.94);
+    // Short sweep — capture finishes the instant the animation does.
+    await runScanAnimation(350, () => { /* no enhancement on plain photos */ });
+    const dataUrl = await canvasToDataUrl(canvas, "image/jpeg", 0.92);
     setCaptured(dataUrl);
     stopCamera();
     setScanning(false);
