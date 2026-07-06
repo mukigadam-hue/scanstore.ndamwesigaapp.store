@@ -360,26 +360,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   }, [open, streaming, scanning, captured, scanMode]);
 
 
-  // Drive the scan-line animation from 0 → 1 over `durationMs` while
-  // the heavy enhancement work runs concurrently. Returns a promise
-  // that resolves once BOTH the animation and the work are complete,
-  // so the user always sees the full sweep even on fast phones.
+  // Drive the scan-line animation from 0 → 1 over `durationMs`. Heavy
+  // enhancement work is kicked off on the very next frame and runs in
+  // parallel with the sweep; the promise resolves when BOTH complete.
+  // On fast phones the capture finishes the instant the sweep does — a
+  // true "blink of an eye" scan.
   const runScanAnimation = (durationMs: number, work: () => void): Promise<void> => {
     return new Promise((resolve) => {
       const start = performance.now();
-      let workStarted = false;
       let workDone = false;
+      requestAnimationFrame(() => {
+        try { work(); } catch { /* keep raw scan */ }
+        workDone = true;
+      });
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / durationMs);
         setScanProgress(t);
-        // Kick off the heavy work once the sweep is ~30% in — this hides
-        // the enhancement CPU cost behind the animation instead of
-        // freezing before it starts.
-        if (!workStarted && t >= 0.3) {
-          workStarted = true;
-          try { work(); } catch { /* keep raw scan */ }
-          workDone = true;
-        }
         if (t < 1) {
           requestAnimationFrame(tick);
         } else {
@@ -400,7 +396,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     await nextFrame();
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const maxDimension = 2200;
+    const maxDimension = 1600;
     const sourceW = video.videoWidth || 1280;
     const sourceH = video.videoHeight || 720;
     const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
@@ -416,9 +412,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     ctx.imageSmoothingQuality = "high";
     // Grab the frame immediately so motion blur is minimised.
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    // Run the sweep animation over the JPEG encode so users see the scan line.
-    await runScanAnimation(500, () => { /* no enhancement on plain photos */ });
-    const dataUrl = await canvasToDataUrl(canvas, "image/jpeg", 0.94);
+    // Short sweep — capture finishes the instant the animation does.
+    await runScanAnimation(350, () => { /* no enhancement on plain photos */ });
+    const dataUrl = await canvasToDataUrl(canvas, "image/jpeg", 0.92);
     setCaptured(dataUrl);
     stopCamera();
     setScanning(false);
@@ -477,7 +473,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Higher caps restore the crisp look of the previous scans.
     let targetW = cropW;
     let targetH = cropH;
-    const maxDimension = isIdScan ? 1200 : 2000;
+    const maxDimension = isIdScan ? 1000 : 1500;
     if (targetW > maxDimension || targetH > maxDimension) {
       const scale = maxDimension / Math.max(targetW, targetH);
       targetW = Math.round(targetW * scale);
@@ -533,12 +529,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
 
     // Full-quality enhancement (shadow removal + sharpening) restored,
-    // hidden behind the sweep animation so it feels instant.
-    await runScanAnimation(isIdScan ? 550 : 700, () => {
+    // hidden behind a short sweep so it feels instant.
+    await runScanAnimation(isIdScan ? 350 : 400, () => {
       enhanceScanCanvas(mainCanvas, { isIdScan, fast: false });
     });
 
-    const jpegQuality = isIdScan ? 0.9 : 0.94;
+    const jpegQuality = isIdScan ? 0.9 : 0.92;
     const rawDataUrl = await canvasToDataUrl(mainCanvas, "image/jpeg", jpegQuality);
     stopCamera();
     setScanning(false);
