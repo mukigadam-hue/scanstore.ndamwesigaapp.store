@@ -446,29 +446,32 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!videoRef.current || !canvasRef.current) return;
     onScanStart?.();
     setPhotoCapturing(true);
-    await nextFrame();
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const profile = getCaptureProfile();
-    const maxDimension = profile.photoMax;
-    const sourceW = video.videoWidth || 1280;
-    const sourceH = video.videoHeight || 720;
-    const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
-    canvas.width = Math.max(1, Math.round(sourceW * scale));
-    canvas.height = Math.max(1, Math.round(sourceH * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
+    try {
+      await nextFrame();
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) return;
+      const profile = getCaptureProfile();
+      const maxDimension = profile.photoMax;
+      const sourceW = video.videoWidth || 1280;
+      const sourceH = video.videoHeight || 720;
+      const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
+      canvas.width = Math.max(1, Math.round(sourceW * scale));
+      canvas.height = Math.max(1, Math.round(sourceH * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      // Grab the frame immediately so motion blur is minimised.
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality);
+      setCapturedPreview(file);
+      stopCamera();
+    } catch {
+      toast.error("Could not capture photo on this device");
+    } finally {
       setPhotoCapturing(false);
-      return;
     }
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    // Grab the frame immediately so motion blur is minimised.
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality);
-    setCapturedPreview(file);
-    stopCamera();
-    setPhotoCapturing(false);
   };
 
   const performScan = async (): Promise<File | null> => {
@@ -606,6 +609,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (result) {
         setCapturedPreview(result);
       }
+    } catch {
+      toast.error("Could not scan on this device");
     } finally {
       setScanning(false);
       setScanProgress(0);
@@ -617,7 +622,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setScanning(true);
     setScanProgress(0);
     await nextFrame();
-    const result = await performScan();
+    let result: File | null = null;
+    try {
+      result = await performScan();
+    } catch {
+      toast.error("Could not scan this ID side");
+    }
     if (!result) {
       setScanning(false);
       setScanProgress(0);
