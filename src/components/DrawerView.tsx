@@ -20,6 +20,7 @@ import { compressImage, canCompress } from "@/lib/compressImage";
 import { enhanceImageBlob } from "@/lib/enhanceImage";
 import DocumentUpgradeDialog, { needsUpgrade } from "@/components/DocumentUpgradeDialog";
 import { downloadBlob, downloadFileFromUrl } from "@/lib/downloadFile";
+import { inferFileType, withInferredType } from "@/lib/fileCompatibility";
 
 interface Document {
   id: string;
@@ -102,24 +103,30 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     });
   };
 
-  const uploadSingleFile = async (file: File, runningTotal: number): Promise<number> => {
+  const uploadSingleFile = async (inputFile: File, runningTotal: number): Promise<number> => {
+    const file = withInferredType(inputFile);
     let fileToUpload: File | Blob = file;
     let finalSize = file.size;
+    let finalType = inferFileType(file.name, file.type);
 
-    // Skip compression for PDFs (including scanned documents) — they're already optimized
-    const isPdf = file.type === "application/pdf";
+    // Skip compression for PDFs and camera-generated JPEGs — scanner output is already
+    // resized/encoded for old phones, and a second canvas pass makes vault saves slow.
+    const isPdf = finalType === "application/pdf";
+    const isCameraCapture = /^(photo|scan_image|id_scan|id_scan_side)_/i.test(file.name);
 
-    if (!isPdf) {
+    if (!isPdf && !isCameraCapture) {
       if (isFreeUser) {
         const result = await compressFile(file);
         fileToUpload = result.file;
         finalSize = result.size;
+        finalType = inferFileType(result.file.name, result.file.type);
       } else if (canCompress(file)) {
         const shouldCompress = await askPremiumCompression(file);
         if (shouldCompress) {
           const result = await compressFile(file);
           fileToUpload = result.file;
           finalSize = result.size;
+          finalType = inferFileType(result.file.name, result.file.type);
         }
       }
     }
@@ -132,7 +139,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     const filePath = `${user!.id}/${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage
       .from("documents")
-      .upload(filePath, fileToUpload);
+      .upload(filePath, fileToUpload, {
+        cacheControl: "31536000",
+        contentType: finalType,
+      });
 
     if (uploadError) {
       toast.error(`Failed to upload ${file.name}: ${uploadError.message}`);
@@ -144,7 +154,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       name: file.name,
       file_path: filePath,
       file_size: finalSize,
-      file_type: file.type,
+      file_type: finalType,
       drawer_name: drawerName,
     });
 
@@ -245,7 +255,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
 
     let downloadName: string;
-    if (highQuality && doc.file_type.startsWith("image/")) {
+    if (highQuality && inferFileType(doc.name, doc.file_type).startsWith("image/")) {
       const { data, error } = await supabase.storage
         .from("documents")
         .download(doc.file_path);

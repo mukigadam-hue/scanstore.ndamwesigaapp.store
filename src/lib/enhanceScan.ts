@@ -14,6 +14,8 @@ export interface EnhanceOptions {
   isIdScan?: boolean;
   /** Skip the heavier shadow-removal and sharpening passes for instant phone capture. */
   fast?: boolean;
+  /** Lower values are faster; higher values estimate shadows more precisely. Default 0.08. */
+  backgroundScale?: number;
   /** 0..1 – how aggressively to whiten the background. Default 0.85 */
   backgroundWhiteness?: number;
   /** 0..1 – sharpening strength. Default 0.35 */
@@ -81,7 +83,7 @@ export function enhanceScanCanvas(
   if (!fast) {
     // ---------- 2. Shadow removal via downscaled background estimate ----------
     // Downscale heavily, blur, upscale → background illumination map.
-    const bgScale = 0.08; // 8% size
+    const bgScale = Math.max(0.04, Math.min(0.1, options.backgroundScale ?? 0.08));
     const bgW = Math.max(8, Math.round(w * bgScale));
     const bgH = Math.max(8, Math.round(h * bgScale));
     const bgCanvas = document.createElement("canvas");
@@ -102,33 +104,31 @@ export function enhanceScanCanvas(
     bgCtx2.filter = "blur(2px)";
     bgCtx2.drawImage(bgCanvas, 0, 0);
 
-    // Upscale background to full size
-    const bgFull = document.createElement("canvas");
-    bgFull.width = w;
-    bgFull.height = h;
-    const bgFullCtx = bgFull.getContext("2d")!;
-    bgFullCtx.imageSmoothingEnabled = true;
-    bgFullCtx.imageSmoothingQuality = "high";
-    bgFullCtx.drawImage(bgCanvas2, 0, 0, w, h);
-
     let bgData: ImageData;
     try {
-      bgData = bgFullCtx.getImageData(0, 0, w, h);
+      bgData = bgCtx2.getImageData(0, 0, bgW, bgH);
     } catch {
       return canvas;
     }
     const bg = bgData.data;
 
-    // Divide image by background, scale to white. Pixels brighter than bg become near-white.
+    // Divide image by the low-resolution background map directly. Avoiding a full-size
+    // upscaled ImageData saves several MB and is much faster on older Android WebViews.
     const wMix = backgroundWhiteness;
-    for (let i = 0; i < data.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        const px = data[i + c];
-        const bgPx = bg[i + c] || 1;
-        // Normalized: ratio of pixel to local background, scaled so background = 255
-        const corrected = (px / bgPx) * 255;
-        // Blend with original to avoid over-correction destroying ink
-        data[i + c] = Math.min(255, Math.max(0, corrected * wMix + px * (1 - wMix)));
+    const xRatio = bgW / w;
+    const yRatio = bgH / h;
+    for (let y = 0; y < h; y++) {
+      const by = Math.min(bgH - 1, (y * yRatio) | 0);
+      let idx = y * w * 4;
+      for (let x = 0; x < w; x++, idx += 4) {
+        const bx = Math.min(bgW - 1, (x * xRatio) | 0);
+        const bIdx = (by * bgW + bx) * 4;
+        for (let c = 0; c < 3; c++) {
+          const px = data[idx + c];
+          const bgPx = bg[bIdx + c] || 1;
+          const corrected = (px / bgPx) * 255;
+          data[idx + c] = Math.min(255, Math.max(0, corrected * wMix + px * (1 - wMix)));
+        }
       }
     }
   }

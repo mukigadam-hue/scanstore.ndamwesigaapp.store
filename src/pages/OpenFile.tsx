@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadBlob } from "@/lib/downloadFile";
+import { inferFileType, isAudioFile, isImageFile, isPdfFile, isVideoFile, withInferredType } from "@/lib/fileCompatibility";
 
 const OpenFile = () => {
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ const OpenFile = () => {
   }, []);
 
   const processFile = async (f: File) => {
+    f = withInferredType(f);
     setFile(f);
     setLoading(true);
 
@@ -55,7 +57,7 @@ const OpenFile = () => {
     setPreviewUrl(url);
 
     const name = f.name.toLowerCase();
-    const type = f.type;
+    const type = inferFileType(f.name, f.type);
 
     // Excel
     if (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".ods") ||
@@ -120,10 +122,11 @@ const OpenFile = () => {
     }
   };
 
-  const isImage = file?.type.startsWith("image/");
-  const isPdf = file?.type.includes("pdf");
-  const isVideo = file?.type.startsWith("video/");
-  const isAudio = file?.type.startsWith("audio/");
+  const normalizedType = file ? inferFileType(file.name, file.type) : "";
+  const isImage = file ? isImageFile(file.name, normalizedType) : false;
+  const isPdf = file ? isPdfFile(file.name, normalizedType) : false;
+  const isVideo = file ? isVideoFile(file.name, normalizedType) : false;
+  const isAudio = file ? isAudioFile(file.name, normalizedType) : false;
   const hasOfficeHtml = officeHtml !== null;
   const hasText = textContent !== null;
 
@@ -134,7 +137,7 @@ const OpenFile = () => {
       name: file.name,
       file_path: "",
       file_size: file.size,
-      file_type: file.type,
+      file_type: normalizedType,
     };
     return (
       <FilePreviewDialog
