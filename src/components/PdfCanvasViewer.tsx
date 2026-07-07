@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import "@/lib/polyfills";
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import * as pdfjsLib from "pdfjs-dist";

@@ -141,6 +141,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setCapturedFile(null);
   }, []);
 
+  const clearIdPreviews = useCallback(() => {
+    if (idFrontImage?.startsWith("blob:")) URL.revokeObjectURL(idFrontImage);
+    if (idBackImage?.startsWith("blob:")) URL.revokeObjectURL(idBackImage);
+    setIdFrontImage(null);
+    setIdBackImage(null);
+  }, [idFrontImage, idBackImage]);
+
   const setCapturedPreview = useCallback((file: File) => {
     if (capturedObjectUrlRef.current) URL.revokeObjectURL(capturedObjectUrlRef.current);
     const url = URL.createObjectURL(file);
@@ -287,8 +294,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   useEffect(() => {
     if (open) {
       setScanMode("select");
-      setIdFrontImage(null);
-      setIdBackImage(null);
+      clearIdPreviews();
     } else {
       stopCamera();
       clearCapturedPreview();
@@ -297,10 +303,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setPhotoCapturing(false);
       setSaveChoicesOpen(null);
       setScanMode("select");
-      setIdFrontImage(null);
-      setIdBackImage(null);
+      clearIdPreviews();
     }
-  }, [open, clearCapturedPreview]);
+  }, [open, clearCapturedPreview, clearIdPreviews]);
 
   useEffect(() => {
     if (!open) return;
@@ -612,11 +617,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
 
     if (side === "front") {
+      if (idFrontImage?.startsWith("blob:")) URL.revokeObjectURL(idFrontImage);
       setIdFrontImage(URL.createObjectURL(result));
       setScanMode("id-back");
       // Restart camera for back side
       setTimeout(() => startCamera(facingMode), 300);
     } else {
+      if (idBackImage?.startsWith("blob:")) URL.revokeObjectURL(idBackImage);
       setIdBackImage(URL.createObjectURL(result));
       // Reset placements to defaults each time both sides are freshly captured
       setIdLayout({
@@ -852,8 +859,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setPhotoCapturing(false);
     setSaveChoicesOpen(null);
     setScanMode("select");
-    setIdFrontImage(null);
-    setIdBackImage(null);
+    clearIdPreviews();
     onClose();
   };
 
@@ -1116,8 +1122,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 variant="ghost"
                 className="flex-1 text-white/70 hover:text-white"
                 onClick={() => {
-                  setIdFrontImage(null);
-                  setIdBackImage(null);
+                  clearIdPreviews();
                   setScanMode("id-front");
                   startCamera(facingMode);
                 }}
