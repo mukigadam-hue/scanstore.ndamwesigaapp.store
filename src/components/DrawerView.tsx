@@ -109,10 +109,12 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     let finalSize = file.size;
     let finalType = inferFileType(file.name, file.type);
 
-    // Skip compression for PDFs (including scanned documents) — they're already optimized
+    // Skip compression for PDFs and camera-generated JPEGs — scanner output is already
+    // resized/encoded for old phones, and a second canvas pass makes vault saves slow.
     const isPdf = finalType === "application/pdf";
+    const isCameraCapture = /^(photo|scan_image|id_scan|id_scan_side)_/i.test(file.name);
 
-    if (!isPdf) {
+    if (!isPdf && !isCameraCapture) {
       if (isFreeUser) {
         const result = await compressFile(file);
         fileToUpload = result.file;
