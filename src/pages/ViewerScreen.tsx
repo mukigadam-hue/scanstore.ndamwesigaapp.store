@@ -7,13 +7,14 @@ import { showInterstitial } from "@/lib/ads";
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
 import { downloadBlob } from "@/lib/downloadFile";
+import { inferFileType, isImageFile, isPdfFile } from "@/lib/fileCompatibility";
 
 function dataUrlToFile(dataUrl: string, name: string, type: string): File {
   const [, b64] = dataUrl.split(",");
   const bin = atob(b64);
   const arr = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new File([arr], name, { type });
+  return new File([arr], name, { type: inferFileType(name, type) });
 }
 
 export default function ViewerScreen() {
@@ -172,8 +173,9 @@ export default function ViewerScreen() {
   }
 
   const isEditable = textContent !== null || officeHtml !== null;
-  const isImage = file.type.startsWith("image/");
-  const isPdf = file.type.includes("pdf");
+  const normalizedType = inferFileType(file.name, file.type);
+  const isImage = isImageFile(file.name, normalizedType);
+  const isPdf = isPdfFile(file.name, normalizedType);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

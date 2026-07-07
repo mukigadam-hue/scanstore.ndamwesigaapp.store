@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { getPendingVaultFile, clearPendingVaultFile } from "@/lib/pendingVaultFile";
 import BannerAd from "@/components/BannerAd";
 import { triggerNativeAd } from "@/lib/nativeAd";
+import { inferFileType } from "@/lib/fileCompatibility";
 
 interface Drawer {
   id: string;
@@ -149,16 +150,20 @@ const Locker = () => {
       const bin = atob(b64);
       const arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      const blob = new Blob([arr], { type: pendingFile.type });
+      const finalType = inferFileType(pendingFile.name, pendingFile.type);
+      const blob = new Blob([arr], { type: finalType });
       const filePath = `${user.id}/${Date.now()}_${pendingFile.name}`;
-      const { error: upErr } = await supabase.storage.from("documents").upload(filePath, blob);
+      const { error: upErr } = await supabase.storage.from("documents").upload(filePath, blob, {
+        cacheControl: "31536000",
+        contentType: finalType,
+      });
       if (upErr) throw upErr;
       const { error: dbErr } = await supabase.from("documents").insert({
         user_id: user.id,
         name: pendingFile.name,
         file_path: filePath,
         file_size: blob.size,
-        file_type: pendingFile.type,
+        file_type: finalType,
         drawer_name: drawerName,
       });
       if (dbErr) throw dbErr;

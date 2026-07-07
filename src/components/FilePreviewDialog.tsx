@@ -239,12 +239,13 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
         if (revoked) return;
 
         // For PDFs and images, fetch as blob to avoid Chrome blocking cross-origin iframes
-        const isPdfFile = doc.file_type.includes("pdf");
-        const isImageFile = doc.file_type.startsWith("image/");
-        const isVideoFile = doc.file_type.startsWith("video/");
-        const isAudioFile = doc.file_type.startsWith("audio/");
+        const fileType = inferFileType(doc.name, doc.file_type);
+        const isPdfPreview = isPdfFile(doc.name, fileType);
+        const isImagePreview = isImageFile(doc.name, fileType);
+        const isVideoPreview = isVideoFile(doc.name, fileType);
+        const isAudioPreview = isAudioFile(doc.name, fileType);
 
-        if (isPdfFile || isImageFile || isVideoFile || isAudioFile) {
+        if (isPdfPreview || isImagePreview || isVideoPreview || isAudioPreview) {
           try {
             const resp = await fetch(bustedUrl, { cache: "no-store" });
             const blob = await resp.blob();
@@ -592,14 +593,15 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
 
   if (!open || !doc) return null;
 
-  const isImage = doc.file_type.startsWith("image/");
-  const isPdf = doc.file_type.includes("pdf");
-  const isVideo = doc.file_type.startsWith("video/");
-  const isAudio = doc.file_type.startsWith("audio/");
-  const isText = isTextFile(doc.name, doc.file_type);
-  const isOffice = isOfficeFile(doc.name, doc.file_type);
+  const normalizedType = inferFileType(doc.name, doc.file_type);
+  const isImage = isImageFile(doc.name, normalizedType);
+  const isPdf = isPdfFile(doc.name, normalizedType);
+  const isVideo = isVideoFile(doc.name, normalizedType);
+  const isAudio = isAudioFile(doc.name, normalizedType);
+  const isText = isTextFile(doc.name, normalizedType);
+  const isOffice = isOfficeFile(doc.name, normalizedType);
   const hasClientRendered = isOffice && officeHtml !== null;
-  const isEditable = canEdit(doc.name, doc.file_type) && localPreviewUrl === undefined;
+  const isEditable = canEdit(doc.name, normalizedType) && localPreviewUrl === undefined;
   const isLocalFile = localPreviewUrl !== undefined;
 
   const overlay = (
