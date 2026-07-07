@@ -8,8 +8,10 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { inferFileType, isAudioFile, isImageFile, isPdfFile, isVideoFile } from "@/lib/fileCompatibility";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 interface FilePreviewDialogProps {
   open: boolean;
