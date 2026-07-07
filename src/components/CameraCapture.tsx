@@ -51,26 +51,6 @@ const canvasToFile = async (canvas: HTMLCanvasElement, filename: string, type: s
   return new File([blob], filename, { type, lastModified: Date.now() });
 };
 
-const canvasToDataUrl = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<string> => {
-  if (!canvas.toBlob) return Promise.resolve(canvas.toDataURL(type, quality));
-  return new Promise((resolve) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          resolve(canvas.toDataURL(type, quality));
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(canvas.toDataURL(type, quality));
-        reader.readAsDataURL(blob);
-      },
-      type,
-      quality
-    );
-  });
-};
-
 const clampPlacement = (p: IdPlacement): IdPlacement => {
   const minW = 40;
   const maxW = A4_W_MM - 10;
@@ -1169,7 +1149,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       {/* Top bar */}
       <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-2 safe-area-top z-10">
         <h3 className="text-white text-sm font-medium truncate flex-1">
-          {scanning ? "Scanning…" : captured ? "Preview" : isIdMode ? `Scan ID — ${idSideLabel}` : "Document Scanner"}
+          {scanning ? "Scanning…" : photoCapturing ? "Capturing…" : captured ? "Preview" : isIdMode ? `Scan ID — ${idSideLabel}` : "Document Scanner"}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
           {!captured && !scanning && !isIdMode && (
@@ -1266,7 +1246,15 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               </div>
             )}
 
-            {!streaming && !scanning && (
+            {photoCapturing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
+                <span className="text-white text-sm font-medium bg-black/60 px-3 py-1 rounded-full">
+                  Capturing…
+                </span>
+              </div>
+            )}
+
+            {!streaming && !scanning && !photoCapturing && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                 <p className="text-white/60 text-sm">Starting camera...</p>
               </div>
@@ -1294,7 +1282,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             )}
 
             {!isIdMode && (
-              <Button onClick={takePhoto} disabled={!streaming || scanning} className="brass-gradient text-primary-foreground h-16 w-16 rounded-full hover:opacity-90" title="Take photo">
+                <Button onClick={takePhoto} disabled={!streaming || scanning || photoCapturing} className="brass-gradient text-primary-foreground h-16 w-16 rounded-full hover:opacity-90" title="Take photo">
                 <Camera className="h-6 w-6" />
               </Button>
             )}
@@ -1302,7 +1290,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             {isIdMode ? (
               <Button
                 onClick={() => scanIdSide(scanMode === "id-front" ? "front" : "back")}
-                disabled={!streaming || scanning}
+                disabled={!streaming || scanning || photoCapturing}
                 className="h-14 rounded-full brass-gradient text-primary-foreground hover:opacity-90 px-6 text-sm font-bold gap-2"
               >
                 <ScanLine className="h-5 w-5" />
@@ -1311,7 +1299,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             ) : (
               <Button
                 onClick={scanDocument}
-                disabled={!streaming || scanning}
+                disabled={!streaming || scanning || photoCapturing}
                 variant="outline"
                 className="h-12 rounded-full border-primary/50 text-primary hover:bg-primary/10 px-5 text-sm font-semibold"
                 title="Scan document"
@@ -1327,7 +1315,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 <Save className="h-4 w-4 mr-2" />
                 Save
               </Button>
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { setCaptured(null); setSaveChoicesOpen(null); startCamera(facingMode); }}>
+              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { clearCapturedPreview(); setSaveChoicesOpen(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake
               </Button>
