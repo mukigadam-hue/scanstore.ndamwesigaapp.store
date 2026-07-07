@@ -703,7 +703,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (!combined) return;
 
       // Composite was rendered at exact A4 size — map 1:1 to the PDF page.
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: false });
       const pageW = pdf.internal.pageSize.getWidth();   // 210
       const pageH = pdf.internal.pageSize.getHeight();  // 297
       pdf.addImage(combined, "JPEG", 0, 0, pageW, pageH, undefined, "FAST");
@@ -781,7 +781,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const pdf = new jsPDF({
         orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
         unit: "mm",
-        compress: true,
+        format: "a4",
+        compress: false,
       });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -809,7 +810,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const pdf = new jsPDF({
           orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
           unit: "mm",
-          compress: true,
+          format: "a4",
+          compress: false,
         });
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
@@ -843,7 +845,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const combined = await combineIdSides();
       if (!combined) return;
       if (asPdf) {
-        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: false });
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
         pdf.addImage(combined, "JPEG", 0, 0, pageW, pageH, undefined, "FAST");
