@@ -39,7 +39,10 @@ const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number):
   }
   return new Promise((resolve) => {
     canvas.toBlob(
-      (blob) => resolve(blob || new Blob()),
+      (blob) => {
+        if (blob) resolve(blob);
+        else fetch(canvas.toDataURL(type, quality)).then((r) => r.blob()).then(resolve);
+      },
       type,
       quality
     );
