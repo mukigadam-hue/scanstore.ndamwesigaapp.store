@@ -208,13 +208,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const baseFacing: MediaTrackConstraints = deviceId
         ? { deviceId: { exact: deviceId } }
         : { facingMode: { ideal: facing } };
+      const profile = getCaptureProfile();
+      const streamMax = Math.max(profile.photoMax, profile.documentMax);
+      const primaryW = streamMax >= 1500 ? 1920 : streamMax >= 1300 ? 1600 : 1280;
+      const primaryH = streamMax >= 1500 ? 1080 : streamMax >= 1300 ? 900 : 720;
 
       const attempts: MediaStreamConstraints[] = [
         {
           video: {
             ...baseFacing,
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: primaryW },
+            height: { ideal: primaryH },
             frameRate: { ideal: 30, max: 30 },
             advanced: [
               { focusMode: "continuous" },
@@ -225,7 +229,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           audio: false,
         },
         {
-          video: { ...baseFacing, width: { ideal: 1600 }, height: { ideal: 1200 }, frameRate: { ideal: 30, max: 30 } },
+          video: { ...baseFacing, width: { ideal: Math.min(primaryW, 1360) }, height: { ideal: Math.min(primaryH, 900) }, frameRate: { ideal: 30, max: 30 } },
           audio: false,
         },
         {
