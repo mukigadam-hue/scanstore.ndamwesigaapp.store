@@ -110,7 +110,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     let finalType = inferFileType(file.name, file.type);
 
     // Skip compression for PDFs (including scanned documents) — they're already optimized
-    const isPdf = file.type === "application/pdf";
+    const isPdf = finalType === "application/pdf";
 
     if (!isPdf) {
       if (isFreeUser) {
@@ -253,7 +253,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
 
     let downloadName: string;
-    if (highQuality && doc.file_type.startsWith("image/")) {
+    if (highQuality && inferFileType(doc.name, doc.file_type).startsWith("image/")) {
       const { data, error } = await supabase.storage
         .from("documents")
         .download(doc.file_path);

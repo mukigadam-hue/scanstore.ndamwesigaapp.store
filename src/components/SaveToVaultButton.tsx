@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { setPendingVaultFile } from "@/lib/pendingVaultFile";
+import { inferFileType } from "@/lib/fileCompatibility";
 
 interface Props {
   file: File | null;
@@ -34,7 +35,7 @@ export default function SaveToVaultButton({ file, className, label }: Props) {
     setBusy(true);
     try {
       const dataUrl = await fileToDataUrl(file);
-      setPendingVaultFile({ name: file.name, type: file.type, dataUrl });
+      setPendingVaultFile({ name: file.name, type: inferFileType(file.name, file.type), dataUrl });
       // Always force through security verification at /locker.
       // /locker handles auth gate, MFA setup, SecurityVerify, then picks up pending file.
       navigate(user ? "/locker" : "/auth");

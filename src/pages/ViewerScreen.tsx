@@ -7,7 +7,7 @@ import { showInterstitial } from "@/lib/ads";
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
 import { downloadBlob } from "@/lib/downloadFile";
-import { inferFileType, isImageFile, isPdfFile } from "@/lib/fileCompatibility";
+import { inferFileType, isImageFile, isPdfFile, withInferredType } from "@/lib/fileCompatibility";
 
 function dataUrlToFile(dataUrl: string, name: string, type: string): File {
   const [, b64] = dataUrl.split(",");
@@ -27,6 +27,7 @@ export default function ViewerScreen() {
 
   useEffect(() => {
     const handleFile = async (f: File) => {
+      f = withInferredType(f);
       setFile(f);
       setPreviewUrl(URL.createObjectURL(f));
       const name = f.name.toLowerCase();

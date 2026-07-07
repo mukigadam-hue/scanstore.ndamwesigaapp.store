@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { inferFileType } from "@/lib/fileCompatibility";
 
 interface Document {
   id: string;
@@ -120,7 +121,7 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
       const results = await Promise.allSettled(
         batch.map(async (doc) => {
           setCurrentFile(doc.name);
-          const isImage = doc.file_type.startsWith("image/");
+          const isImage = inferFileType(doc.name, doc.file_type).startsWith("image/");
 
           if (isImage) {
             const { data, error } = await supabase.storage
