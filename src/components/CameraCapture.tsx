@@ -109,6 +109,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
   const [idBackImage, setIdBackImage] = useState<string | null>(null);
   const capturedObjectUrlRef = useRef<string | null>(null);
+  const idObjectUrlsRef = useRef<string[]>([]);
 
   // Live scan quality feedback (0-100)
   const [quality, setQuality] = useState(0);
@@ -142,11 +143,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   }, []);
 
   const clearIdPreviews = useCallback(() => {
-    if (idFrontImage?.startsWith("blob:")) URL.revokeObjectURL(idFrontImage);
-    if (idBackImage?.startsWith("blob:")) URL.revokeObjectURL(idBackImage);
+    idObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    idObjectUrlsRef.current = [];
     setIdFrontImage(null);
     setIdBackImage(null);
-  }, [idFrontImage, idBackImage]);
+  }, []);
 
   const setCapturedPreview = useCallback((file: File) => {
     if (capturedObjectUrlRef.current) URL.revokeObjectURL(capturedObjectUrlRef.current);
@@ -617,14 +618,16 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
 
     if (side === "front") {
-      if (idFrontImage?.startsWith("blob:")) URL.revokeObjectURL(idFrontImage);
-      setIdFrontImage(URL.createObjectURL(result));
+      const url = URL.createObjectURL(result);
+      idObjectUrlsRef.current.push(url);
+      setIdFrontImage(url);
       setScanMode("id-back");
       // Restart camera for back side
       setTimeout(() => startCamera(facingMode), 300);
     } else {
-      if (idBackImage?.startsWith("blob:")) URL.revokeObjectURL(idBackImage);
-      setIdBackImage(URL.createObjectURL(result));
+      const url = URL.createObjectURL(result);
+      idObjectUrlsRef.current.push(url);
+      setIdBackImage(url);
       // Reset placements to defaults each time both sides are freshly captured
       setIdLayout({
         front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
