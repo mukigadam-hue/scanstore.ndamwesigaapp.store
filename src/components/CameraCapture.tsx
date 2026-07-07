@@ -27,6 +27,30 @@ const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
+const idleTimeout = (ms = 80) => new Promise<void>((resolve) => {
+  const idle = (window as any).requestIdleCallback;
+  if (typeof idle === "function") idle(() => resolve(), { timeout: ms });
+  else window.setTimeout(resolve, 0);
+});
+
+const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
+  if (!canvas.toBlob) {
+    return fetch(canvas.toDataURL(type, quality)).then((r) => r.blob());
+  }
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      (blob) => resolve(blob || new Blob()),
+      type,
+      quality
+    );
+  });
+};
+
+const canvasToFile = async (canvas: HTMLCanvasElement, filename: string, type: string, quality: number): Promise<File> => {
+  const blob = await canvasToBlob(canvas, type, quality);
+  return new File([blob], filename, { type, lastModified: Date.now() });
+};
+
 const canvasToDataUrl = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<string> => {
   if (!canvas.toBlob) return Promise.resolve(canvas.toDataURL(type, quality));
   return new Promise((resolve) => {
@@ -57,6 +81,23 @@ const clampPlacement = (p: IdPlacement): IdPlacement => {
   return { xMm, yMm, widthMm };
 };
 
+const getCaptureProfile = () => {
+  const memory = (navigator as any).deviceMemory || 4;
+  const cores = navigator.hardwareConcurrency || 4;
+  const lowEnd = memory <= 2 || cores <= 4;
+  const midRange = memory <= 4 || cores <= 6;
+  return {
+    photoMax: lowEnd ? 1152 : midRange ? 1360 : 1600,
+    documentMax: lowEnd ? 1152 : midRange ? 1360 : 1500,
+    idMax: lowEnd ? 850 : midRange ? 950 : 1000,
+    documentQuality: lowEnd ? 0.86 : midRange ? 0.89 : 0.92,
+    photoQuality: lowEnd ? 0.86 : midRange ? 0.89 : 0.92,
+    idQuality: lowEnd ? 0.86 : 0.9,
+    backgroundScale: lowEnd ? 0.045 : midRange ? 0.06 : 0.08,
+    sweepMs: lowEnd ? 260 : midRange ? 320 : 400,
+  };
+};
+
 const qualityLabel = (score: number) => {
   if (score >= 90) return { label: "Best scan", tone: "text-emerald-300 bg-emerald-500/20 border-emerald-400/40" };
   if (score >= 60) return { label: "Good scan", tone: "text-lime-300 bg-lime-500/20 border-lime-400/40" };
@@ -77,6 +118,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatusText, setScanStatusText] = useState("Scanning document");
+  const [photoCapturing, setPhotoCapturing] = useState(false);
+  const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
@@ -85,6 +128,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanMode, setScanMode] = useState<ScanMode>("select");
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
   const [idBackImage, setIdBackImage] = useState<string | null>(null);
+  const capturedObjectUrlRef = useRef<string | null>(null);
 
   // Live scan quality feedback (0-100)
   const [quality, setQuality] = useState(0);
@@ -106,6 +150,23 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setStreaming(false);
     setTorchOn(false);
     setTorchSupported(false);
+  }, []);
+
+  const clearCapturedPreview = useCallback(() => {
+    if (capturedObjectUrlRef.current) {
+      URL.revokeObjectURL(capturedObjectUrlRef.current);
+      capturedObjectUrlRef.current = null;
+    }
+    setCaptured(null);
+    setCapturedFile(null);
+  }, []);
+
+  const setCapturedPreview = useCallback((file: File) => {
+    if (capturedObjectUrlRef.current) URL.revokeObjectURL(capturedObjectUrlRef.current);
+    const url = URL.createObjectURL(file);
+    capturedObjectUrlRef.current = url;
+    setCaptured(url);
+    setCapturedFile(file);
   }, []);
 
   // Pick the best back camera on phones that expose multiple lenses
@@ -207,7 +268,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         await videoRef.current.play();
       }
       setStreaming(true);
-      setCaptured(null);
+      clearCapturedPreview();
 
       const track = stream.getVideoTracks()[0];
       const capabilities = track.getCapabilities?.() as any;
@@ -228,7 +289,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       console.error("Camera error:", err);
       toast.error("Camera access denied. Please allow camera permissions.");
     }
-  }, []);
+  }, [clearCapturedPreview]);
 
 
   const toggleTorch = async () => {
@@ -250,15 +311,16 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setIdBackImage(null);
     } else {
       stopCamera();
-      setCaptured(null);
+      clearCapturedPreview();
       setScanning(false);
       setScanProgress(0);
+      setPhotoCapturing(false);
       setSaveChoicesOpen(null);
       setScanMode("select");
       setIdFrontImage(null);
       setIdBackImage(null);
     }
-  }, [open]);
+  }, [open, clearCapturedPreview]);
 
   useEffect(() => {
     if (!open) return;
@@ -270,7 +332,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Live quality monitor — samples the video feed periodically and scores
   // sharpness, brightness and edge symmetry to guide the user.
   useEffect(() => {
-    if (!open || !streaming || scanning || captured) {
+    if (!open || !streaming || scanning || photoCapturing || captured) {
       setQuality(0);
       return;
     }
@@ -357,7 +419,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     const id = window.setInterval(tick, 1200);
     tick();
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [open, streaming, scanning, captured, scanMode]);
+  }, [open, streaming, scanning, photoCapturing, captured, scanMode]);
 
 
   // Drive the scan-line animation from 0 → 1 over `durationMs`. Heavy
@@ -390,13 +452,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const takePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     onScanStart?.();
-    setScanStatusText("Capturing photo");
-    setScanning(true);
-    setScanProgress(0);
+    setPhotoCapturing(true);
     await nextFrame();
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const maxDimension = 1600;
+    const profile = getCaptureProfile();
+    const maxDimension = profile.photoMax;
     const sourceW = video.videoWidth || 1280;
     const sourceH = video.videoHeight || 720;
     const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
@@ -404,24 +465,20 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     canvas.height = Math.max(1, Math.round(sourceH * scale));
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      setScanning(false);
-      setScanProgress(0);
+      setPhotoCapturing(false);
       return;
     }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     // Grab the frame immediately so motion blur is minimised.
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    // Short sweep — capture finishes the instant the animation does.
-    await runScanAnimation(350, () => { /* no enhancement on plain photos */ });
-    const dataUrl = await canvasToDataUrl(canvas, "image/jpeg", 0.92);
-    setCaptured(dataUrl);
+    const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality);
+    setCapturedPreview(file);
     stopCamera();
-    setScanning(false);
-    setScanProgress(0);
+    setPhotoCapturing(false);
   };
 
-  const performScan = async (): Promise<string | null> => {
+  const performScan = async (): Promise<File | null> => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return null;
     onScanStart?.();
     setScanStatusText(`Scanning ${scanMode === "id-front" ? "ID front" : scanMode === "id-back" ? "ID back" : "document"}`);
@@ -473,7 +530,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Higher caps restore the crisp look of the previous scans.
     let targetW = cropW;
     let targetH = cropH;
-    const maxDimension = isIdScan ? 1000 : 1500;
+    const profile = getCaptureProfile();
+    const maxDimension = isIdScan ? profile.idMax : profile.documentMax;
     if (targetW > maxDimension || targetH > maxDimension) {
       const scale = maxDimension / Math.max(targetW, targetH);
       targetW = Math.round(targetW * scale);
@@ -530,17 +588,19 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
     // Full-quality enhancement (shadow removal + sharpening) restored,
     // hidden behind a short sweep so it feels instant.
-    await runScanAnimation(isIdScan ? 350 : 400, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: false });
+    await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: false, backgroundScale: profile.backgroundScale });
     });
 
-    const jpegQuality = isIdScan ? 0.9 : 0.92;
-    const rawDataUrl = await canvasToDataUrl(mainCanvas, "image/jpeg", jpegQuality);
+    await idleTimeout(60);
+    const jpegQuality = isIdScan ? profile.idQuality : profile.documentQuality;
+    const prefix = isIdScan ? "id_scan_side" : "scan_image";
+    const file = await canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality);
     stopCamera();
     setScanning(false);
     setScanProgress(0);
 
-    return rawDataUrl;
+    return file;
   };
 
   const scanDocument = async () => {
@@ -551,7 +611,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     try {
       const result = await performScan();
       if (result) {
-        setCaptured(result);
+        setCapturedPreview(result);
       }
     } finally {
       setScanning(false);
@@ -572,12 +632,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
 
     if (side === "front") {
-      setIdFrontImage(result);
+      setIdFrontImage(URL.createObjectURL(result));
       setScanMode("id-back");
       // Restart camera for back side
       setTimeout(() => startCamera(facingMode), 300);
     } else {
-      setIdBackImage(result);
+      setIdBackImage(URL.createObjectURL(result));
       // Reset placements to defaults each time both sides are freshly captured
       setIdLayout({
         front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
@@ -692,9 +752,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   };
 
   const saveAsImage = () => {
-    if (!captured) return;
-    const isPng = captured.startsWith("data:image/png");
-    const file = dataUrlToFile(captured, `photo_${Date.now()}.${isPng ? "png" : "jpg"}`, isPng ? "image/png" : "image/jpeg");
+    if (!capturedFile) return;
+    const file = capturedFile;
     onCapture(file);
     handleClose();
   };
@@ -702,11 +761,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Save the captured photo directly to the user's phone (download manager
   // / file picker / native bridge), bypassing the in-app vault flow.
   const savePhotoToPhone = async () => {
-    if (!captured) return;
+    if (!capturedFile) return;
     try {
-      const isPng = captured.startsWith("data:image/png");
-      const file = dataUrlToFile(captured, `photo_${Date.now()}.${isPng ? "png" : "jpg"}`, isPng ? "image/png" : "image/jpeg");
-      await downloadBlob(file, file.name);
+      await downloadBlob(capturedFile, capturedFile.name);
       toast.success("Saved to your phone");
       triggerNativeAd("scan-save-phone");
       handleClose();
@@ -716,7 +773,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   };
 
   const savePdfToPhone = async () => {
-    if (!captured) return;
+    if (!captured || !capturedFile) return;
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
         const i = new Image();
@@ -735,8 +792,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
       const sw = img.width * ratio;
       const sh = img.height * ratio;
-      const format = captured.includes("image/png") ? "PNG" : "JPEG";
-      pdf.addImage(captured, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
+      const format = capturedFile.type.includes("png") ? "PNG" : "JPEG";
+      pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
       const blob = pdf.output("blob");
       await downloadBlob(blob, `scan_${Date.now()}.pdf`);
       toast.success("PDF saved to your phone");
@@ -748,7 +805,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   };
 
   const saveAsDocument = () => {
-    if (!captured) return;
+    if (!captured || !capturedFile) return;
     try {
       const img = new Image();
       img.onload = () => {
@@ -767,8 +824,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const scaledHeight = img.height * ratio;
         const xOffset = (pageWidth - scaledWidth) / 2;
         const yOffset = (pageHeight - scaledHeight) / 2;
-        const format = captured.includes("image/png") ? "PNG" : "JPEG";
-        pdf.addImage(captured, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
+        const format = capturedFile.type.includes("png") ? "PNG" : "JPEG";
+        pdf.addImage(img, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
         const pdfBlob = pdf.output("blob");
         const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
         onCapture(pdfFile);
@@ -809,9 +866,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const handleClose = () => {
     stopCamera();
-    setCaptured(null);
+    clearCapturedPreview();
     setScanning(false);
     setScanProgress(0);
+    setPhotoCapturing(false);
     setSaveChoicesOpen(null);
     setScanMode("select");
     setIdFrontImage(null);
