@@ -30,12 +30,6 @@ const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-const idleTimeout = (ms = 80) => new Promise<void>((resolve) => {
-  const idle = (window as any).requestIdleCallback;
-  if (typeof idle === "function") idle(() => resolve(), { timeout: ms });
-  else window.setTimeout(resolve, 0);
-});
-
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
   if (!canvas.toBlob) {
     return fetch(canvas.toDataURL(type, quality)).then((r) => r.blob());
@@ -66,6 +60,11 @@ const downscaleCanvas = (canvas: HTMLCanvasElement, maxDimension: number) => {
   return small;
 };
 
+const canvasToDataUrlBlob = async (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
+  const dataUrl = canvas.toDataURL(type, quality);
+  return fetch(dataUrl).then((r) => r.blob());
+};
+
 const canvasToBlobQuick = (
   canvas: HTMLCanvasElement,
   type: string,
@@ -86,7 +85,7 @@ const canvasToBlobQuick = (
       if (settled || fallbackStarted) return;
       fallbackStarted = true;
       const small = downscaleCanvas(canvas, fallbackMaxDimension);
-      finish(await canvasToBlob(small, type, Math.min(quality, 0.84)));
+      finish(await canvasToDataUrlBlob(small, type, Math.min(quality, 0.84)));
     };
 
     if (!canvas.toBlob) {
