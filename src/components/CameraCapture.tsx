@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
 import { downloadBlob } from "@/lib/downloadFile";
-import { triggerNativeAd } from "@/lib/nativeAd";
+import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -19,9 +19,12 @@ interface CameraCaptureProps {
 type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview" | "id-layout";
 
 interface IdPlacement { xMm: number; yMm: number; widthMm: number; }
+interface FrameRect { x: number; y: number; width: number; height: number; }
 const ID_ASPECT = 85.6 / 53.98; // width / height
 const A4_W_MM = 210;
 const A4_H_MM = 297;
+const A4_PORTRAIT_ASPECT = A4_W_MM / A4_H_MM;
+const A4_LANDSCAPE_ASPECT = A4_H_MM / A4_W_MM;
 const DEFAULT_ID_WIDTH_MM = 110;
 const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
 
@@ -49,10 +52,101 @@ const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number):
   });
 };
 
-const canvasToFile = async (canvas: HTMLCanvasElement, filename: string, type: string, quality: number): Promise<File> => {
-  const blob = await canvasToBlob(canvas, type, quality);
+const downscaleCanvas = (canvas: HTMLCanvasElement, maxDimension: number) => {
+  const scale = Math.min(1, maxDimension / Math.max(canvas.width, canvas.height));
+  if (scale >= 1) return canvas;
+  const small = document.createElement("canvas");
+  small.width = Math.max(1, Math.round(canvas.width * scale));
+  small.height = Math.max(1, Math.round(canvas.height * scale));
+  const ctx = small.getContext("2d");
+  if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, 0, 0, small.width, small.height);
+  return small;
+};
+
+const canvasToBlobQuick = (
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+  timeoutMs: number,
+  fallbackMaxDimension: number
+): Promise<Blob> => {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (blob: Blob) => {
+      if (settled) return;
+      settled = true;
+      resolve(blob);
+    };
+
+    canvasToBlob(canvas, type, quality).then(finish).catch(async () => {
+      const small = downscaleCanvas(canvas, fallbackMaxDimension);
+      finish(await canvasToBlob(small, type, Math.min(quality, 0.84)));
+    });
+
+    window.setTimeout(async () => {
+      if (settled) return;
+      try {
+        const small = downscaleCanvas(canvas, fallbackMaxDimension);
+        finish(await canvasToBlob(small, type, Math.min(quality, 0.84)));
+      } catch {
+        finish(await canvasToBlob(canvas, type, Math.min(quality, 0.8)));
+      }
+    }, timeoutMs);
+  });
+};
+
+const canvasToFile = async (
+  canvas: HTMLCanvasElement,
+  filename: string,
+  type: string,
+  quality: number,
+  options?: { timeoutMs?: number; fallbackMaxDimension?: number }
+): Promise<File> => {
+  const blob = options?.timeoutMs && options?.fallbackMaxDimension
+    ? await canvasToBlobQuick(canvas, type, quality, options.timeoutMs, options.fallbackMaxDimension)
+    : await canvasToBlob(canvas, type, quality);
   return new File([blob], filename, { type, lastModified: Date.now() });
 };
+
+const getAndroidMajor = () => {
+  const match = (navigator.userAgent || "").match(/Android\s+(\d+)/i);
+  return match ? Number(match[1]) : null;
+};
+
+const getCenteredFrame = (displayW: number, displayH: number, aspect: number, widthRatio: number, heightRatio: number, maxWidth: number): FrameRect => {
+  const safeW = Math.max(1, displayW);
+  const safeH = Math.max(1, displayH);
+  let width = Math.min(safeW * widthRatio, maxWidth, safeH * heightRatio * aspect);
+  let height = width / aspect;
+  if (height > safeH * heightRatio) {
+    height = safeH * heightRatio;
+    width = height * aspect;
+  }
+  return {
+    x: (safeW - width) / 2,
+    y: (safeH - height) / 2,
+    width,
+    height,
+  };
+};
+
+const getDocumentFrame = (displayW: number, displayH: number, orientation: "portrait" | "landscape") => {
+  const landscape = orientation === "landscape";
+  return getCenteredFrame(
+    displayW,
+    displayH,
+    landscape ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT,
+    landscape ? 0.8 : 0.76,
+    landscape ? 0.54 : 0.68,
+    landscape ? 520 : 360
+  );
+};
+
+const getIdFrame = (displayW: number, displayH: number) =>
+  getCenteredFrame(displayW, displayH, ID_ASPECT, 0.76, 0.42, 320);
 
 const clampPlacement = (p: IdPlacement): IdPlacement => {
   const minW = 40;
@@ -65,21 +159,27 @@ const clampPlacement = (p: IdPlacement): IdPlacement => {
 };
 
 const getCaptureProfile = () => {
-  const memory = (navigator as any).deviceMemory || 4;
+  const rawMemory = (navigator as any).deviceMemory;
+  const memory = typeof rawMemory === "number" ? rawMemory : isAndroidWebView() ? 3 : 4;
   const cores = navigator.hardwareConcurrency || 4;
-  const lowEnd = memory <= 2 || cores <= 4;
-  const midRange = memory <= 4 || cores <= 6;
+  const androidMajor = getAndroidMajor();
+  const olderAndroid = !!androidMajor && androidMajor <= 10;
+  const webView = isAndroidWebView();
+  const lowEnd = memory <= 2 || cores <= 4 || olderAndroid;
+  const midRange = lowEnd || memory <= 4 || cores <= 6 || webView;
   return {
     lowEnd,
     midRange,
-    photoMax: lowEnd ? 1024 : midRange ? 1280 : 1600,
-    documentMax: lowEnd ? 1024 : midRange ? 1280 : 1500,
-    idMax: lowEnd ? 800 : midRange ? 900 : 1000,
-    documentQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
+    photoMax: lowEnd ? 900 : midRange ? 1200 : 1600,
+    documentMax: lowEnd ? 900 : midRange ? 1150 : 1500,
+    idMax: lowEnd ? 720 : midRange ? 850 : 1000,
+    documentQuality: lowEnd ? 0.82 : midRange ? 0.86 : 0.92,
     photoQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
-    idQuality: lowEnd ? 0.84 : 0.9,
-    backgroundScale: lowEnd ? 0.045 : midRange ? 0.06 : 0.08,
-    sweepMs: lowEnd ? 220 : midRange ? 300 : 380,
+    idQuality: lowEnd ? 0.82 : midRange ? 0.86 : 0.9,
+    backgroundScale: lowEnd ? 0.04 : midRange ? 0.05 : 0.08,
+    sweepMs: lowEnd ? 180 : midRange ? 240 : 360,
+    encodeTimeoutMs: lowEnd ? 120 : midRange ? 220 : 650,
+    fallbackMax: lowEnd ? 720 : midRange ? 900 : 1300,
     // On low-end phones the full enhance pass can freeze the UI thread
     // for many seconds — skip the heavy shadow removal / unsharp mask
     // so capture returns the instant the sweep animation finishes.
