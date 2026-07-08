@@ -70,14 +70,20 @@ const getCaptureProfile = () => {
   const lowEnd = memory <= 2 || cores <= 4;
   const midRange = memory <= 4 || cores <= 6;
   return {
-    photoMax: lowEnd ? 1152 : midRange ? 1360 : 1600,
-    documentMax: lowEnd ? 1152 : midRange ? 1360 : 1500,
-    idMax: lowEnd ? 850 : midRange ? 950 : 1000,
-    documentQuality: lowEnd ? 0.86 : midRange ? 0.89 : 0.92,
-    photoQuality: lowEnd ? 0.86 : midRange ? 0.89 : 0.92,
-    idQuality: lowEnd ? 0.86 : 0.9,
+    lowEnd,
+    midRange,
+    photoMax: lowEnd ? 1024 : midRange ? 1280 : 1600,
+    documentMax: lowEnd ? 1024 : midRange ? 1280 : 1500,
+    idMax: lowEnd ? 800 : midRange ? 900 : 1000,
+    documentQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
+    photoQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
+    idQuality: lowEnd ? 0.84 : 0.9,
     backgroundScale: lowEnd ? 0.045 : midRange ? 0.06 : 0.08,
-    sweepMs: lowEnd ? 260 : midRange ? 320 : 400,
+    sweepMs: lowEnd ? 220 : midRange ? 300 : 380,
+    // On low-end phones the full enhance pass can freeze the UI thread
+    // for many seconds — skip the heavy shadow removal / unsharp mask
+    // so capture returns the instant the sweep animation finishes.
+    fastEnhance: lowEnd,
   };
 };
 
