@@ -776,18 +776,21 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // / file picker / native bridge), bypassing the in-app vault flow.
   const savePhotoToPhone = async () => {
     if (!capturedFile) return;
+    const tid = toast.loading("Saving to your phone…");
     try {
       await downloadBlob(capturedFile, capturedFile.name);
-      toast.success("Saved to your phone");
+      toast.success("Saved to your phone", { id: tid });
       triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
-      if (e?.name !== "AbortError") toast.error("Could not save to phone");
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save to phone", { id: tid });
     }
   };
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
+    const tid = toast.loading("Preparing PDF…");
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
         const i = new Image();
@@ -811,11 +814,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
       const blob = pdf.output("blob");
       await downloadBlob(blob, `scan_${Date.now()}.pdf`);
-      toast.success("PDF saved to your phone");
+      toast.success("PDF saved to your phone", { id: tid });
       triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
-      if (e?.name !== "AbortError") toast.error("Could not save PDF to phone");
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save PDF to phone", { id: tid });
     }
   };
 
