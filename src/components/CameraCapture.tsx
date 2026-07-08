@@ -588,10 +588,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
     }
 
-    // Full-quality enhancement (shadow removal + sharpening) restored,
-    // hidden behind a short sweep so it feels instant.
+    // Full-quality enhancement (shadow removal + sharpening), hidden
+    // behind a short sweep so it feels instant. On low-end phones we run
+    // the fast path so capture returns the moment the sweep finishes.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: false, backgroundScale: profile.backgroundScale });
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
     });
 
     await idleTimeout(60);
