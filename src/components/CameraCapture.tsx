@@ -192,7 +192,7 @@ const getCaptureProfile = () => {
     // On low-end phones the full enhance pass can freeze the UI thread
     // for many seconds — skip the heavy shadow removal / unsharp mask
     // so capture returns the instant the sweep animation finishes.
-    fastEnhance: lowEnd,
+    fastEnhance: lowEnd || webView,
   };
 };
 
@@ -696,20 +696,24 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
     }
 
-    // Full-quality enhancement (shadow removal + sharpening), hidden
-    // behind a short sweep so it feels instant. On low-end phones we run
-    // the fast path so capture returns the moment the sweep finishes.
-    await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
-    });
-
-    await idleTimeout(0);
     const jpegQuality = isIdScan ? profile.idQuality : profile.documentQuality;
     const prefix = isIdScan ? "id_scan_side" : "scan_image";
-    const file = await canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
+    let filePromise: Promise<File> | null = null;
+
+    // Enhancement and JPEG encoding start during the first sweep frame so
+    // older WebViews do not sit on the camera screen after the animation ends.
+    await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
+        timeoutMs: profile.encodeTimeoutMs,
+        fallbackMaxDimension: profile.fallbackMax,
+      });
+    });
+
+    const file = await (filePromise ?? canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
       timeoutMs: profile.encodeTimeoutMs,
       fallbackMaxDimension: profile.fallbackMax,
-    });
+    }));
     stopCamera();
     setScanning(false);
     setScanProgress(0);
