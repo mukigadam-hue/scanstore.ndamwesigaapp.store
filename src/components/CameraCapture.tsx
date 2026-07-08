@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
 import { downloadBlob } from "@/lib/downloadFile";
-import { triggerNativeAd } from "@/lib/nativeAd";
+import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -19,19 +19,16 @@ interface CameraCaptureProps {
 type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview" | "id-layout";
 
 interface IdPlacement { xMm: number; yMm: number; widthMm: number; }
+interface FrameRect { x: number; y: number; width: number; height: number; }
 const ID_ASPECT = 85.6 / 53.98; // width / height
 const A4_W_MM = 210;
 const A4_H_MM = 297;
+const A4_PORTRAIT_ASPECT = A4_W_MM / A4_H_MM;
+const A4_LANDSCAPE_ASPECT = A4_H_MM / A4_W_MM;
 const DEFAULT_ID_WIDTH_MM = 110;
 const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-const idleTimeout = (ms = 80) => new Promise<void>((resolve) => {
-  const idle = (window as any).requestIdleCallback;
-  if (typeof idle === "function") idle(() => resolve(), { timeout: ms });
-  else window.setTimeout(resolve, 0);
-});
 
 const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
   if (!canvas.toBlob) {
@@ -49,10 +46,115 @@ const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number):
   });
 };
 
-const canvasToFile = async (canvas: HTMLCanvasElement, filename: string, type: string, quality: number): Promise<File> => {
-  const blob = await canvasToBlob(canvas, type, quality);
+const downscaleCanvas = (canvas: HTMLCanvasElement, maxDimension: number) => {
+  const scale = Math.min(1, maxDimension / Math.max(canvas.width, canvas.height));
+  if (scale >= 1) return canvas;
+  const small = document.createElement("canvas");
+  small.width = Math.max(1, Math.round(canvas.width * scale));
+  small.height = Math.max(1, Math.round(canvas.height * scale));
+  const ctx = small.getContext("2d");
+  if (!ctx) return canvas;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(canvas, 0, 0, small.width, small.height);
+  return small;
+};
+
+const canvasToDataUrlBlob = async (canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> => {
+  const dataUrl = canvas.toDataURL(type, quality);
+  return fetch(dataUrl).then((r) => r.blob());
+};
+
+const canvasToBlobQuick = (
+  canvas: HTMLCanvasElement,
+  type: string,
+  quality: number,
+  timeoutMs: number,
+  fallbackMaxDimension: number
+): Promise<Blob> => {
+  return new Promise((resolve) => {
+    let settled = false;
+    let fallbackStarted = false;
+    const finish = (blob: Blob) => {
+      if (settled) return;
+      settled = true;
+      resolve(blob);
+    };
+
+    const runFallback = async () => {
+      if (settled || fallbackStarted) return;
+      fallbackStarted = true;
+      const small = downscaleCanvas(canvas, fallbackMaxDimension);
+      finish(await canvasToDataUrlBlob(small, type, Math.min(quality, 0.84)));
+    };
+
+    if (!canvas.toBlob) {
+      void runFallback();
+      return;
+    }
+
+    canvas.toBlob((blob) => {
+      if (blob) finish(blob);
+      else void runFallback();
+    }, type, quality);
+
+    window.setTimeout(async () => {
+      if (settled) return;
+      try { await runFallback(); }
+      catch { finish(await canvasToBlob(canvas, type, Math.min(quality, 0.8))); }
+    }, timeoutMs);
+  });
+};
+
+const canvasToFile = async (
+  canvas: HTMLCanvasElement,
+  filename: string,
+  type: string,
+  quality: number,
+  options?: { timeoutMs?: number; fallbackMaxDimension?: number }
+): Promise<File> => {
+  const blob = options?.timeoutMs && options?.fallbackMaxDimension
+    ? await canvasToBlobQuick(canvas, type, quality, options.timeoutMs, options.fallbackMaxDimension)
+    : await canvasToBlob(canvas, type, quality);
   return new File([blob], filename, { type, lastModified: Date.now() });
 };
+
+const getAndroidMajor = () => {
+  const match = (navigator.userAgent || "").match(/Android\s+(\d+)/i);
+  return match ? Number(match[1]) : null;
+};
+
+const getCenteredFrame = (displayW: number, displayH: number, aspect: number, widthRatio: number, heightRatio: number, maxWidth: number): FrameRect => {
+  const safeW = Math.max(1, displayW);
+  const safeH = Math.max(1, displayH);
+  let width = Math.min(safeW * widthRatio, maxWidth, safeH * heightRatio * aspect);
+  let height = width / aspect;
+  if (height > safeH * heightRatio) {
+    height = safeH * heightRatio;
+    width = height * aspect;
+  }
+  return {
+    x: (safeW - width) / 2,
+    y: (safeH - height) / 2,
+    width,
+    height,
+  };
+};
+
+const getDocumentFrame = (displayW: number, displayH: number, orientation: "portrait" | "landscape") => {
+  const landscape = orientation === "landscape";
+  return getCenteredFrame(
+    displayW,
+    displayH,
+    landscape ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT,
+    landscape ? 0.8 : 0.76,
+    landscape ? 0.54 : 0.68,
+    landscape ? 520 : 360
+  );
+};
+
+const getIdFrame = (displayW: number, displayH: number) =>
+  getCenteredFrame(displayW, displayH, ID_ASPECT, 0.76, 0.42, 320);
 
 const clampPlacement = (p: IdPlacement): IdPlacement => {
   const minW = 40;
@@ -65,25 +167,31 @@ const clampPlacement = (p: IdPlacement): IdPlacement => {
 };
 
 const getCaptureProfile = () => {
-  const memory = (navigator as any).deviceMemory || 4;
+  const rawMemory = (navigator as any).deviceMemory;
+  const memory = typeof rawMemory === "number" ? rawMemory : isAndroidWebView() ? 3 : 4;
   const cores = navigator.hardwareConcurrency || 4;
-  const lowEnd = memory <= 2 || cores <= 4;
-  const midRange = memory <= 4 || cores <= 6;
+  const androidMajor = getAndroidMajor();
+  const olderAndroid = !!androidMajor && androidMajor <= 10;
+  const webView = isAndroidWebView();
+  const lowEnd = memory <= 2 || cores <= 4 || olderAndroid;
+  const midRange = lowEnd || memory <= 4 || cores <= 6 || webView;
   return {
     lowEnd,
     midRange,
-    photoMax: lowEnd ? 1024 : midRange ? 1280 : 1600,
-    documentMax: lowEnd ? 1024 : midRange ? 1280 : 1500,
-    idMax: lowEnd ? 800 : midRange ? 900 : 1000,
-    documentQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
+    photoMax: lowEnd ? 900 : midRange ? 1200 : 1600,
+    documentMax: lowEnd ? 900 : midRange ? 1150 : 1500,
+    idMax: lowEnd ? 720 : midRange ? 850 : 1000,
+    documentQuality: lowEnd ? 0.82 : midRange ? 0.86 : 0.92,
     photoQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
-    idQuality: lowEnd ? 0.84 : 0.9,
-    backgroundScale: lowEnd ? 0.045 : midRange ? 0.06 : 0.08,
-    sweepMs: lowEnd ? 220 : midRange ? 300 : 380,
+    idQuality: lowEnd ? 0.82 : midRange ? 0.86 : 0.9,
+    backgroundScale: lowEnd ? 0.04 : midRange ? 0.05 : 0.08,
+    sweepMs: lowEnd ? 180 : midRange ? 240 : 360,
+    encodeTimeoutMs: lowEnd ? 120 : midRange ? 220 : 650,
+    fallbackMax: lowEnd ? 720 : midRange ? 900 : 1300,
     // On low-end phones the full enhance pass can freeze the UI thread
     // for many seconds — skip the heavy shadow removal / unsharp mask
     // so capture returns the instant the sweep animation finishes.
-    fastEnhance: lowEnd,
+    fastEnhance: lowEnd || webView,
   };
 };
 
@@ -470,7 +578,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       ctx.imageSmoothingQuality = "high";
       // Grab the frame immediately so motion blur is minimised.
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality);
+      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality, {
+        timeoutMs: profile.encodeTimeoutMs,
+        fallbackMaxDimension: profile.fallbackMax,
+      });
       setCapturedPreview(file);
       stopCamera();
     } catch {
@@ -512,21 +623,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     let cropX: number, cropY: number, cropW: number, cropH: number;
 
     if (isIdScan) {
-      const cardDisplayW = Math.min(displayW * 0.9, 380);
-      const cardDisplayH = cardDisplayW / 1.586;
-      const cardCenterX = displayW / 2;
-      const cardCenterY = displayH / 2;
-
-      cropX = offsetX + (cardCenterX - cardDisplayW / 2) * coverScale;
-      cropY = offsetY + (cardCenterY - cardDisplayH / 2) * coverScale;
-      cropW = cardDisplayW * coverScale;
-      cropH = cardDisplayH * coverScale;
+      const frame = getIdFrame(displayW, displayH);
+      cropX = offsetX + frame.x * coverScale;
+      cropY = offsetY + frame.y * coverScale;
+      cropW = frame.width * coverScale;
+      cropH = frame.height * coverScale;
     } else {
-      const insetPx = 24;
-      cropX = offsetX + insetPx * coverScale;
-      cropY = offsetY + insetPx * coverScale;
-      cropW = visibleW - insetPx * 2 * coverScale;
-      cropH = visibleH - insetPx * 2 * coverScale;
+      const frame = getDocumentFrame(displayW, displayH, scanOrientation);
+      cropX = offsetX + frame.x * coverScale;
+      cropY = offsetY + frame.y * coverScale;
+      cropW = frame.width * coverScale;
+      cropH = frame.height * coverScale;
     }
 
     // Higher caps restore the crisp look of the previous scans.
@@ -588,17 +695,24 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
     }
 
-    // Full-quality enhancement (shadow removal + sharpening), hidden
-    // behind a short sweep so it feels instant. On low-end phones we run
-    // the fast path so capture returns the moment the sweep finishes.
-    await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
-    });
-
-    await idleTimeout(60);
     const jpegQuality = isIdScan ? profile.idQuality : profile.documentQuality;
     const prefix = isIdScan ? "id_scan_side" : "scan_image";
-    const file = await canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality);
+    let filePromise: Promise<File> | null = null;
+
+    // Enhancement and JPEG encoding start during the first sweep frame so
+    // older WebViews do not sit on the camera screen after the animation ends.
+    await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
+        timeoutMs: profile.encodeTimeoutMs,
+        fallbackMaxDimension: profile.fallbackMax,
+      });
+    });
+
+    const file = await (filePromise ?? canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
+      timeoutMs: profile.encodeTimeoutMs,
+      fallbackMaxDimension: profile.fallbackMax,
+    }));
     stopCamera();
     setScanning(false);
     setScanProgress(0);
@@ -1178,6 +1292,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Determine labels for ID scanning
   const isIdMode = scanMode === "id-front" || scanMode === "id-back";
   const idSideLabel = scanMode === "id-front" ? "FRONT side" : "BACK side";
+  const documentFrameAspect = scanOrientation === "landscape" ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT;
+  const documentFrameWidthCss = scanOrientation === "landscape" ? "80%" : "76%";
+  const documentFrameMaxWidth = scanOrientation === "landscape" ? "520px" : "360px";
 
   const overlay = (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
@@ -1214,8 +1331,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 /* ID card frame: only the card area is visible, rest is dark overlay */
               <>
                   {/* Card cutout: box-shadow darkens everything outside */}
-                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
-                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px' }}>
+                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '76%', maxWidth: '320px', aspectRatio: `${ID_ASPECT}/1`, border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
+                  <div className="absolute" style={{ width: '76%', maxWidth: '320px', aspectRatio: `${ID_ASPECT}/1` }}>
                     <div className="absolute top-0 left-0 w-8 h-8 border-amber-400 rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
                     <div className="absolute top-0 right-0 w-8 h-8 border-amber-400 rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
                     <div className="absolute bottom-0 left-0 w-8 h-8 border-amber-400 rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
@@ -1225,11 +1342,28 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               ) : (
                 /* Full document frame */
                 <>
-                  <div className="absolute inset-6 border-2 border-white/30 rounded-lg" />
-                  <div className="absolute top-6 left-6 w-8 h-8 border-primary rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
-                  <div className="absolute top-6 right-6 w-8 h-8 border-primary rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
-                  <div className="absolute bottom-6 left-6 w-8 h-8 border-primary rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
-                  <div className="absolute bottom-6 right-6 w-8 h-8 border-primary rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+                  <div
+                    className="absolute rounded-lg border-2 border-white/35"
+                    style={{
+                      width: documentFrameWidthCss,
+                      maxWidth: documentFrameMaxWidth,
+                      aspectRatio: `${documentFrameAspect}/1`,
+                      boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+                    }}
+                  />
+                  <div
+                    className="absolute"
+                    style={{
+                      width: documentFrameWidthCss,
+                      maxWidth: documentFrameMaxWidth,
+                      aspectRatio: `${documentFrameAspect}/1`,
+                    }}
+                  >
+                    <div className="absolute top-0 left-0 w-8 h-8 border-primary rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-primary rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-primary rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-primary rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+                  </div>
                 </>
               )}
             </div>
