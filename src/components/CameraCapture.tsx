@@ -70,14 +70,20 @@ const getCaptureProfile = () => {
   const lowEnd = memory <= 2 || cores <= 4;
   const midRange = memory <= 4 || cores <= 6;
   return {
-    photoMax: lowEnd ? 1152 : midRange ? 1360 : 1600,
-    documentMax: lowEnd ? 1152 : midRange ? 1360 : 1500,
-    idMax: lowEnd ? 850 : midRange ? 950 : 1000,
-    documentQuality: lowEnd ? 0.86 : midRange ? 0.89 : 0.92,
-    photoQuality: lowEnd ? 0.86 : midRange ? 0.89 : 0.92,
-    idQuality: lowEnd ? 0.86 : 0.9,
+    lowEnd,
+    midRange,
+    photoMax: lowEnd ? 1024 : midRange ? 1280 : 1600,
+    documentMax: lowEnd ? 1024 : midRange ? 1280 : 1500,
+    idMax: lowEnd ? 800 : midRange ? 900 : 1000,
+    documentQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
+    photoQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
+    idQuality: lowEnd ? 0.84 : 0.9,
     backgroundScale: lowEnd ? 0.045 : midRange ? 0.06 : 0.08,
-    sweepMs: lowEnd ? 260 : midRange ? 320 : 400,
+    sweepMs: lowEnd ? 220 : midRange ? 300 : 380,
+    // On low-end phones the full enhance pass can freeze the UI thread
+    // for many seconds — skip the heavy shadow removal / unsharp mask
+    // so capture returns the instant the sweep animation finishes.
+    fastEnhance: lowEnd,
   };
 };
 
@@ -582,10 +588,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
     }
 
-    // Full-quality enhancement (shadow removal + sharpening) restored,
-    // hidden behind a short sweep so it feels instant.
+    // Full-quality enhancement (shadow removal + sharpening), hidden
+    // behind a short sweep so it feels instant. On low-end phones we run
+    // the fast path so capture returns the moment the sweep finishes.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: false, backgroundScale: profile.backgroundScale });
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
     });
 
     await idleTimeout(60);
@@ -769,18 +776,21 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // / file picker / native bridge), bypassing the in-app vault flow.
   const savePhotoToPhone = async () => {
     if (!capturedFile) return;
+    const tid = toast.loading("Saving to your phone…");
     try {
       await downloadBlob(capturedFile, capturedFile.name);
-      toast.success("Saved to your phone");
+      toast.success("Saved to your phone", { id: tid });
       triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
-      if (e?.name !== "AbortError") toast.error("Could not save to phone");
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save to phone", { id: tid });
     }
   };
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
+    const tid = toast.loading("Preparing PDF…");
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
         const i = new Image();
@@ -804,11 +814,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
       const blob = pdf.output("blob");
       await downloadBlob(blob, `scan_${Date.now()}.pdf`);
-      toast.success("PDF saved to your phone");
+      toast.success("PDF saved to your phone", { id: tid });
       triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
-      if (e?.name !== "AbortError") toast.error("Could not save PDF to phone");
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save PDF to phone", { id: tid });
     }
   };
 
