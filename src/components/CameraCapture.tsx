@@ -1325,8 +1325,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 /* ID card frame: only the card area is visible, rest is dark overlay */
               <>
                   {/* Card cutout: box-shadow darkens everything outside */}
-                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px', border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
-                  <div className="absolute" style={{ width: '90%', aspectRatio: '1.586/1', maxWidth: '380px' }}>
+                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '76%', aspectRatio: '1.586/1', maxWidth: '320px', maxHeight: '42%', border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
+                  <div className="absolute" style={{ width: '76%', aspectRatio: '1.586/1', maxWidth: '320px', maxHeight: '42%' }}>
                     <div className="absolute top-0 left-0 w-8 h-8 border-amber-400 rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
                     <div className="absolute top-0 right-0 w-8 h-8 border-amber-400 rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
                     <div className="absolute bottom-0 left-0 w-8 h-8 border-amber-400 rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
@@ -1336,11 +1336,30 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               ) : (
                 /* Full document frame */
                 <>
-                  <div className="absolute inset-6 border-2 border-white/30 rounded-lg" />
-                  <div className="absolute top-6 left-6 w-8 h-8 border-primary rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
-                  <div className="absolute top-6 right-6 w-8 h-8 border-primary rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
-                  <div className="absolute bottom-6 left-6 w-8 h-8 border-primary rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
-                  <div className="absolute bottom-6 right-6 w-8 h-8 border-primary rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+                  <div
+                    className="absolute rounded-lg border-2 border-white/35"
+                    style={{
+                      width: scanOrientation === "landscape" ? "80%" : "76%",
+                      aspectRatio: scanOrientation === "landscape" ? `${A4_LANDSCAPE_ASPECT}/1` : `${A4_PORTRAIT_ASPECT}/1`,
+                      maxWidth: scanOrientation === "landscape" ? "520px" : "360px",
+                      maxHeight: scanOrientation === "landscape" ? "54%" : "68%",
+                      boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+                    }}
+                  />
+                  <div
+                    className="absolute"
+                    style={{
+                      width: scanOrientation === "landscape" ? "80%" : "76%",
+                      aspectRatio: scanOrientation === "landscape" ? `${A4_LANDSCAPE_ASPECT}/1` : `${A4_PORTRAIT_ASPECT}/1`,
+                      maxWidth: scanOrientation === "landscape" ? "520px" : "360px",
+                      maxHeight: scanOrientation === "landscape" ? "54%" : "68%",
+                    }}
+                  >
+                    <div className="absolute top-0 left-0 w-8 h-8 border-primary rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-primary rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-primary rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-primary rounded-br-lg" style={{borderBottomWidth: 3, borderRightWidth: 3}} />
+                  </div>
                 </>
               )}
             </div>
