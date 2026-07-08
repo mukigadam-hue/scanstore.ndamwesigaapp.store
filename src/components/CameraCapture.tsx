@@ -75,25 +75,34 @@ const canvasToBlobQuick = (
 ): Promise<Blob> => {
   return new Promise((resolve) => {
     let settled = false;
+    let fallbackStarted = false;
     const finish = (blob: Blob) => {
       if (settled) return;
       settled = true;
       resolve(blob);
     };
 
-    canvasToBlob(canvas, type, quality).then(finish).catch(async () => {
+    const runFallback = async () => {
+      if (settled || fallbackStarted) return;
+      fallbackStarted = true;
       const small = downscaleCanvas(canvas, fallbackMaxDimension);
       finish(await canvasToBlob(small, type, Math.min(quality, 0.84)));
-    });
+    };
+
+    if (!canvas.toBlob) {
+      void runFallback();
+      return;
+    }
+
+    canvas.toBlob((blob) => {
+      if (blob) finish(blob);
+      else void runFallback();
+    }, type, quality);
 
     window.setTimeout(async () => {
       if (settled) return;
-      try {
-        const small = downscaleCanvas(canvas, fallbackMaxDimension);
-        finish(await canvasToBlob(small, type, Math.min(quality, 0.84)));
-      } catch {
-        finish(await canvasToBlob(canvas, type, Math.min(quality, 0.8)));
-      }
+      try { await runFallback(); }
+      catch { finish(await canvasToBlob(canvas, type, Math.min(quality, 0.8))); }
     }, timeoutMs);
   });
 };
