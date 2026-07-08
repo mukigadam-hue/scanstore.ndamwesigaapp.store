@@ -40,7 +40,12 @@ export const downloadFileFromUrl = async (url: string, fileName: string): Promis
 
 export const downloadBlob = async (blob: Blob, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
-  const stamped = await watermarkBlob(blob, safeName);
+  // Watermarking can hang on very large blobs / old WebViews. Race it
+  // against a hard timeout so the save button always resolves quickly.
+  const stamped: Blob = await Promise.race([
+    watermarkBlob(blob, safeName).catch(() => blob),
+    new Promise<Blob>((resolve) => setTimeout(() => resolve(blob), 2500)),
+  ]);
   const picker = (window as any).showSaveFilePicker;
 
   if (typeof picker === "function") {
@@ -60,6 +65,25 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     }
   }
 
+  // Native Android bridge (WebViewGold / custom shell). Pass a data URL
+  // so the shell can hand it to the platform DownloadManager.
+  const nativeDownloader =
+    (window as any).DocLocker?.downloadFile ||
+    (window as any).Android?.downloadFile ||
+    (window as any).AndroidBridge?.downloadFile;
+  if (typeof nativeDownloader === "function") {
+    try {
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = reject;
+        r.readAsDataURL(stamped);
+      });
+      nativeDownloader(dataUrl, safeName);
+      return "native";
+    } catch { /* fall through */ }
+  }
+
   const file = new File([stamped], safeName, { type: stamped.type || "application/octet-stream" });
   if (navigator.canShare?.({ files: [file] })) {
     try {
@@ -71,7 +95,17 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
   }
 
   const objectUrl = URL.createObjectURL(stamped);
-  triggerBrowserDownload(objectUrl, safeName);
+  try {
+    triggerBrowserDownload(objectUrl, safeName);
+  } catch { /* ignore */ }
+  // Last-resort fallback for Android WebViews that swallow anchor
+  // downloads — navigate to the blob URL so the shell shows the file.
+  const ua = navigator.userAgent || "";
+  if (/wv|Version\/.+Chrome/i.test(ua) && !/showSaveFilePicker/.test(String(picker))) {
+    setTimeout(() => {
+      try { window.open(objectUrl, "_blank"); } catch { /* ignore */ }
+    }, 300);
+  }
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
   return "browser";
 };
