@@ -579,7 +579,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       ctx.imageSmoothingQuality = "high";
       // Grab the frame immediately so motion blur is minimised.
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality);
+      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality, {
+        timeoutMs: profile.encodeTimeoutMs,
+        fallbackMaxDimension: profile.fallbackMax,
+      });
       setCapturedPreview(file);
       stopCamera();
     } catch {
@@ -621,21 +624,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     let cropX: number, cropY: number, cropW: number, cropH: number;
 
     if (isIdScan) {
-      const cardDisplayW = Math.min(displayW * 0.9, 380);
-      const cardDisplayH = cardDisplayW / 1.586;
-      const cardCenterX = displayW / 2;
-      const cardCenterY = displayH / 2;
-
-      cropX = offsetX + (cardCenterX - cardDisplayW / 2) * coverScale;
-      cropY = offsetY + (cardCenterY - cardDisplayH / 2) * coverScale;
-      cropW = cardDisplayW * coverScale;
-      cropH = cardDisplayH * coverScale;
+      const frame = getIdFrame(displayW, displayH);
+      cropX = offsetX + frame.x * coverScale;
+      cropY = offsetY + frame.y * coverScale;
+      cropW = frame.width * coverScale;
+      cropH = frame.height * coverScale;
     } else {
-      const insetPx = 24;
-      cropX = offsetX + insetPx * coverScale;
-      cropY = offsetY + insetPx * coverScale;
-      cropW = visibleW - insetPx * 2 * coverScale;
-      cropH = visibleH - insetPx * 2 * coverScale;
+      const frame = getDocumentFrame(displayW, displayH, scanOrientation);
+      cropX = offsetX + frame.x * coverScale;
+      cropY = offsetY + frame.y * coverScale;
+      cropW = frame.width * coverScale;
+      cropH = frame.height * coverScale;
     }
 
     // Higher caps restore the crisp look of the previous scans.
@@ -704,10 +703,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
     });
 
-    await idleTimeout(60);
+    await idleTimeout(0);
     const jpegQuality = isIdScan ? profile.idQuality : profile.documentQuality;
     const prefix = isIdScan ? "id_scan_side" : "scan_image";
-    const file = await canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality);
+    const file = await canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
+      timeoutMs: profile.encodeTimeoutMs,
+      fallbackMaxDimension: profile.fallbackMax,
+    });
     stopCamera();
     setScanning(false);
     setScanProgress(0);
