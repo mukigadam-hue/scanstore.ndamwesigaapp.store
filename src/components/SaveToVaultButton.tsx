@@ -36,6 +36,18 @@ export default function SaveToVaultButton({ file, className, label }: Props) {
     try {
       const dataUrl = await fileToDataUrl(file);
       setPendingVaultFile({ name: file.name, type: inferFileType(file.name, file.type), dataUrl });
+
+      // Offline: keep the file staged and tell the user it will be
+      // saved to the vault the moment the connection returns. Do NOT
+      // navigate to /auth (which asks the user to sign in again) or to
+      // /locker (which needs a live session to verify security).
+      const online = typeof navigator === "undefined" ? true : navigator.onLine;
+      if (!online) {
+        toast.success("Saved offline — will move into your vault when you're back online");
+        setBusy(false);
+        return;
+      }
+
       // Always force through security verification at /locker.
       // /locker handles auth gate, MFA setup, SecurityVerify, then picks up pending file.
       navigate(user ? "/locker" : "/auth");
