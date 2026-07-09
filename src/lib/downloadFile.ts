@@ -10,6 +10,7 @@ const triggerBrowserDownload = (url: string, fileName: string) => {
   a.href = url;
   a.download = safeFileName(fileName);
   a.rel = "noopener";
+  a.target = "_blank";
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();
@@ -18,8 +19,6 @@ const triggerBrowserDownload = (url: string, fileName: string) => {
 
 export const downloadFileFromUrl = async (url: string, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
-
-  // Try to fetch + watermark image/PDF URLs; fall back to raw pipeline on failure.
   try {
     const resp = await fetch(url);
     if (resp.ok) {
@@ -40,33 +39,17 @@ export const downloadFileFromUrl = async (url: string, fileName: string): Promis
 
 export const downloadBlob = async (blob: Blob, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
-  // Watermarking can hang on very large blobs / old WebViews. Race it
-  // against a hard timeout so the save button always resolves quickly.
+  // Watermarking can hang on huge blobs or old WebViews — race it against a
+  // short timeout so the button always resolves quickly.
   const stamped: Blob = await Promise.race([
     watermarkBlob(blob, safeName).catch(() => blob),
     new Promise<Blob>((resolve) => setTimeout(() => resolve(blob), 2500)),
   ]);
-  const picker = (window as any).showSaveFilePicker;
+  const mime = stamped.type || "application/octet-stream";
+  const ua = navigator.userAgent || "";
+  const isWebView = /\bwv\b|; wv\)|Version\/[\d.]+ Chrome\/[\d.]+ Mobile/i.test(ua);
 
-  if (typeof picker === "function") {
-    try {
-      const handle = await picker({
-        suggestedName: safeName,
-        types: stamped.type
-          ? [{ description: "File", accept: { [stamped.type]: [`.${safeName.split(".").pop() || "bin"}`] } }]
-          : undefined,
-      });
-      const writable = await handle.createWritable();
-      await writable.write(stamped);
-      await writable.close();
-      return "file-picker";
-    } catch (error: any) {
-      if (error?.name === "AbortError") throw error;
-    }
-  }
-
-  // Native Android bridge (WebViewGold / custom shell). Pass a data URL
-  // so the shell can hand it to the platform DownloadManager.
+  // 1. Native Android bridge (WebViewGold / custom shell) — best UX.
   const nativeDownloader =
     (window as any).DocLocker?.downloadFile ||
     (window as any).Android?.downloadFile ||
@@ -84,7 +67,29 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     } catch { /* fall through */ }
   }
 
-  const file = new File([stamped], safeName, { type: stamped.type || "application/octet-stream" });
+  // 2. Desktop / capable browser: showSaveFilePicker.
+  const picker = (window as any).showSaveFilePicker;
+  if (typeof picker === "function" && !isWebView) {
+    try {
+      const handle = await picker({
+        suggestedName: safeName,
+        types: mime
+          ? [{ description: "File", accept: { [mime]: [`.${safeName.split(".").pop() || "bin"}`] } }]
+          : undefined,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(stamped);
+      await writable.close();
+      return "file-picker";
+    } catch (error: any) {
+      if (error?.name === "AbortError") throw error;
+    }
+  }
+
+  // 3. Web Share API with files — most reliable path on Android Chrome
+  //    and most in-app WebViews. Surfaces the system "Save to files /
+  //    Downloads" action so the user can store the file locally.
+  const file = new File([stamped], safeName, { type: mime });
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: safeName });
@@ -94,18 +99,14 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     }
   }
 
+  // 4. Anchor download + blob URL navigation fallback. Android WebViews
+  //    often swallow anchor downloads, so also open the blob URL so the
+  //    shell's DownloadListener picks it up and shows the save prompt.
   const objectUrl = URL.createObjectURL(stamped);
-  try {
-    triggerBrowserDownload(objectUrl, safeName);
-  } catch { /* ignore */ }
-  // Last-resort fallback for Android WebViews that swallow anchor
-  // downloads — navigate to the blob URL so the shell shows the file.
-  const ua = navigator.userAgent || "";
-  if (/wv|Version\/.+Chrome/i.test(ua) && !/showSaveFilePicker/.test(String(picker))) {
-    setTimeout(() => {
-      try { window.open(objectUrl, "_blank"); } catch { /* ignore */ }
-    }, 300);
-  }
+  try { triggerBrowserDownload(objectUrl, safeName); } catch { /* ignore */ }
+  setTimeout(() => {
+    try { window.open(objectUrl, "_blank"); } catch { /* ignore */ }
+  }, 200);
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
   return "browser";
 };

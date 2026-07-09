@@ -702,7 +702,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Enhancement and JPEG encoding start during the first sweep frame so
     // older WebViews do not sit on the camera screen after the animation ends.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      // Always run the full clean (shadow removal + contrast stretch + unsharp)
+      // so scanned pages come out crisp and white — the sweep animation runs
+      // in parallel, so this no longer stalls the UI on older phones.
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: false, backgroundScale: profile.backgroundScale });
       filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
