@@ -18,35 +18,17 @@ import OfflineBanner from "./components/OfflineBanner";
 import NotFound from "./pages/NotFound";
 import { useEffect, useRef } from "react";
 import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
-import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
 
 const queryClient = new QueryClient();
 
-const StartupInterstitial = () => {
+const StartupPrefetch = () => {
   useEffect(() => {
+    // Warm the native ad cache so the first explicit trigger (identity
+    // verified / auto-lock re-verify) renders instantly. We intentionally
+    // do NOT show an interstitial on app open — ads only fire at the
+    // specific inner moments configured in the app.
     prefetchInterstitial();
-    // Fire-and-forget; user can skip after the countdown.
-    showInterstitial("app-open");
   }, []);
-  return null;
-};
-
-/**
- * Fires the WebViewGold native ad bridge on every SPA route change so the
- * native Android shell can count navigations toward its interstitial
- * threshold and display the real ad. No-op outside the WebView shell.
- */
-const RouteChangeAdTrigger = () => {
-  const location = useLocation();
-  const firstRun = useRef(true);
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
-    if (!isAndroidWebView()) return;
-    triggerNativeAd(`route:${location.pathname}`);
-  }, [location.pathname]);
   return null;
 };
 
