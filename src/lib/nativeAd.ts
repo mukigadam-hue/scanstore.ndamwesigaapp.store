@@ -78,18 +78,13 @@ export function isAndroidWebView(): boolean {
 export function triggerNativeAd(_trigger: string = "generic"): void {
   try {
     const shown = callFirst(["showInterstitial", "displayInterstitial"]);
-
-    if (isAndroidWebView() && typeof window !== "undefined") {
-      try {
-        const stamp = Date.now().toString(36);
-        const url = `${window.location.pathname}${window.location.search}#ad-${stamp}`;
-        window.history.replaceState(null, "", url);
-        window.dispatchEvent(new HashChangeEvent("hashchange"));
-      } catch {
-        /* ignore */
-      }
-    }
-
+    // NOTE: we intentionally do NOT bump window.history / hashchange here.
+    // The WebViewGold shell counts navigations toward its own built-in
+    // interstitial threshold — bumping history on every trigger caused
+    // ads to fire on random screens and on the phone back button. Ads
+    // now only show when we explicitly call the JS bridge from the
+    // designated inner moments (identity verified, auto-lock re-verify,
+    // etc.), which keeps ad placement predictable.
     if (!shown) {
       preloadNativeAds();
     } else {
