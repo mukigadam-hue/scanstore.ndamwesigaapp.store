@@ -55,8 +55,7 @@ const App = () => (
           </Routes>
           <InterstitialAdOverlay />
           <OfflineBanner />
-          <StartupInterstitial />
-          <RouteChangeAdTrigger />
+          <StartupPrefetch />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
