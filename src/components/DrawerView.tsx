@@ -72,6 +72,9 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [renameDoc, setRenameDoc] = useState<Document | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
