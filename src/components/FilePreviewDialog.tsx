@@ -264,6 +264,12 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
           setPreviewUrl(bustedUrl);
         }
 
+        // Show preview immediately for PDFs/images/media — don't block on
+        // Office/text processing below.
+        if (isPdfPreview || isImagePreview || isVideoPreview || isAudioPreview) {
+          setLoading(false);
+        }
+
         if (isExcelFile(doc.name, doc.file_type)) {
           try {
             const resp = await fetch(bustedUrl, { cache: "no-store" });
