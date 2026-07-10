@@ -136,10 +136,11 @@ export function enhanceScanCanvas(
 
   // ---------- 3. Contrast stretch (percentile based, per channel) ----------
   // Find low/high percentile to remap. Use gentler cuts on IDs to keep colors.
-  const lowPct = isIdScan ? 0.005 : 0.02;
-  const highPct = isIdScan ? 0.995 : 0.98;
-  // For IDs, blend stretched result with original so colors are preserved.
-  const stretchMix = isIdScan ? 0.4 : 1.0;
+  const lowPct = isIdScan ? 0.01 : 0.02;
+  const highPct = isIdScan ? 0.99 : 0.98;
+  // For IDs, blend stretched result with original so colors are preserved,
+  // but keep enough of the stretch to lift shadows.
+  const stretchMix = isIdScan ? 0.7 : 1.0;
   for (let c = 0; c < 3; c++) {
     const hist = new Uint32Array(256);
     for (let i = c; i < data.length; i += 4) {
