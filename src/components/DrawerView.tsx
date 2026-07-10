@@ -654,6 +654,43 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         onClose={() => setShowUpgrade(false)}
         documents={documents}
       />
+
+      <Dialog open={!!renameDoc} onOpenChange={(o) => !o && !renaming && setRenameDoc(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-display brass-text">Rename file</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !renaming) performRename();
+            }}
+            placeholder="New file name"
+            autoFocus
+            disabled={renaming}
+          />
+          <p className="text-xs text-muted-foreground">
+            Tip: keep the file extension (e.g. .pdf, .jpg) so the file opens correctly.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRenameDoc(null)}
+              disabled={renaming}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={performRename}
+              disabled={renaming}
+              className="brass-gradient text-primary-foreground"
+            >
+              {renaming ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };
