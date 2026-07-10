@@ -352,10 +352,56 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
   };
 
+  const openRename = (doc: Document) => {
+    if (!canAccess) {
+      toast.error("Documents are frozen. Please unlock access first.");
+      return;
+    }
+    setRenameDoc(doc);
+    setRenameValue(doc.name);
+  };
+
+  const performRename = async () => {
+    if (!renameDoc) return;
+    const doc = renameDoc;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      toast.error("Name cannot be empty");
+      return;
+    }
+    if (trimmed === doc.name) {
+      setRenameDoc(null);
+      return;
+    }
+    // Preserve original extension if the user removed it
+    const origExt = doc.name.match(/\.[^.]+$/)?.[0] ?? "";
+    const hasExt = /\.[^.]+$/.test(trimmed);
+    const newName = hasExt ? trimmed : `${trimmed}${origExt}`;
+
+    setRenaming(true);
+    // Optimistic update
+    queryClient.setQueryData(
+      ["documents", user?.id],
+      (old: Document[] = []) =>
+        old.map((d) => (d.id === doc.id ? { ...d, name: newName } : d))
+    );
+
+    const { error } = await supabase
+      .from("documents")
+      .update({ name: newName })
+      .eq("id", doc.id);
+
+    setRenaming(false);
+    if (error) {
+      toast.error("Failed to rename: " + error.message);
+      refreshDocs();
+    } else {
+      toast.success("Renamed to " + newName);
+      setRenameDoc(null);
+    }
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 50 }}
-      animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -50 }}
       className="space-y-6"
     >
