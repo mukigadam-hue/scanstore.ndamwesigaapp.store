@@ -2,8 +2,10 @@ import { useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
-  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw,
+  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw, Pencil,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
