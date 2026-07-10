@@ -2,8 +2,10 @@ import { useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
-  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw,
+  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw, Pencil,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -70,6 +72,9 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [renameDoc, setRenameDoc] = useState<Document | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
@@ -347,6 +352,55 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
   };
 
+  const openRename = (doc: Document) => {
+    if (!canAccess) {
+      toast.error("Documents are frozen. Please unlock access first.");
+      return;
+    }
+    setRenameDoc(doc);
+    setRenameValue(doc.name);
+  };
+
+  const performRename = async () => {
+    if (!renameDoc) return;
+    const doc = renameDoc;
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      toast.error("Name cannot be empty");
+      return;
+    }
+    if (trimmed === doc.name) {
+      setRenameDoc(null);
+      return;
+    }
+    // Preserve original extension if the user removed it
+    const origExt = doc.name.match(/\.[^.]+$/)?.[0] ?? "";
+    const hasExt = /\.[^.]+$/.test(trimmed);
+    const newName = hasExt ? trimmed : `${trimmed}${origExt}`;
+
+    setRenaming(true);
+    // Optimistic update
+    queryClient.setQueryData(
+      ["documents", user?.id],
+      (old: Document[] = []) =>
+        old.map((d) => (d.id === doc.id ? { ...d, name: newName } : d))
+    );
+
+    const { error } = await supabase
+      .from("documents")
+      .update({ name: newName })
+      .eq("id", doc.id);
+
+    setRenaming(false);
+    if (error) {
+      toast.error("Failed to rename: " + error.message);
+      refreshDocs();
+    } else {
+      toast.success("Renamed to " + newName);
+      setRenameDoc(null);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 50 }}
@@ -504,6 +558,16 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => openRename(doc)}
+                    className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
+                    title="Rename"
+                  >
+                    <Pencil className="h-3.5 w-3.5 sm:mr-1" />
+                    <span className="hidden sm:inline">Rename</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleDownloadClick(doc)}
                     className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
                     title="Download"
@@ -590,6 +654,43 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         onClose={() => setShowUpgrade(false)}
         documents={documents}
       />
+
+      <Dialog open={!!renameDoc} onOpenChange={(o) => !o && !renaming && setRenameDoc(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-display brass-text">Rename file</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !renaming) performRename();
+            }}
+            placeholder="New file name"
+            autoFocus
+            disabled={renaming}
+          />
+          <p className="text-xs text-muted-foreground">
+            Tip: keep the file extension (e.g. .pdf, .jpg) so the file opens correctly.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRenameDoc(null)}
+              disabled={renaming}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={performRename}
+              disabled={renaming}
+              className="brass-gradient text-primary-foreground"
+            >
+              {renaming ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };
