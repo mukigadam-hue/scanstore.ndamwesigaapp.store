@@ -1,6 +1,6 @@
 import { watermarkBlob } from "./watermark";
 
-type DownloadResult = "native" | "browser" | "file-picker" | "share" | "data-url";
+type DownloadResult = "native" | "direct" | "browser" | "file-picker" | "share" | "data-url";
 
 const safeFileName = (name: string) =>
   (name || "download").replace(/[\\/:*?"<>|]+/g, "_").trim() || "download";
@@ -17,6 +17,30 @@ const triggerAnchorDownload = (url: string, fileName: string) => {
   setTimeout(() => a.remove(), 0);
 };
 
+const isAndroidWebView = () => {
+  const ua = navigator.userAgent || "";
+  return /Android/i.test(ua) && (/\bwv\b|; wv\)|WebView|WebViewGold/i.test(ua));
+};
+
+const looksLikeImage = (fileName: string) => /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(fileName);
+
+const triggerDirectUrlDownload = (url: string, fileName: string) => {
+  const safeName = safeFileName(fileName);
+
+  // WebViewGold's downloader works with real HTTP(S) links that end in a
+  // downloadable file type / Content-Disposition. Do not convert those links
+  // to blob: URLs inside the WebView — blob: URLs are not saved by its native
+  // download manager.
+  if (isAndroidWebView() && looksLikeImage(safeName)) {
+    try {
+      window.location.href = `savethisimage://?url=${encodeURIComponent(url)}`;
+      return;
+    } catch { /* fall through to normal link */ }
+  }
+
+  triggerAnchorDownload(url, safeName);
+};
+
 const blobToDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -25,11 +49,41 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     r.readAsDataURL(blob);
   });
 
+const writeWithFilePicker = async (blob: Blob, fileName: string): Promise<boolean> => {
+  const picker = (window as any).showSaveFilePicker;
+  if (typeof picker !== "function") return false;
+  try {
+    const handle = await picker({ suggestedName: safeFileName(fileName) });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return true;
+  } catch (e: any) {
+    if (e?.name === "AbortError") throw e;
+    return false;
+  }
+};
+
+const shareFile = async (blob: Blob, fileName: string): Promise<boolean> => {
+  try {
+    const file = new File([blob], safeFileName(fileName), { type: blob.type || "application/octet-stream" });
+    const nav: any = navigator;
+    if (typeof nav.canShare === "function" && nav.canShare({ files: [file] }) && typeof nav.share === "function") {
+      await nav.share({ files: [file], title: file.name });
+      return true;
+    }
+  } catch (e: any) {
+    if (e?.name === "AbortError") throw e;
+  }
+  return false;
+};
+
 /**
- * Try to hand the file to a native downloader exposed by the WebView shell.
- * WebViewGold-style shells commonly expose one of these bridges.
+ * Try explicit native file bridges only. Generic Android.downloadFile methods
+ * are used for real URLs below; passing them data: URLs often reports success
+ * while nothing is written to Downloads.
  */
-const tryNativeBridge = async (blob: Blob, fileName: string): Promise<boolean> => {
+const tryNativeBase64Bridge = async (blob: Blob, fileName: string): Promise<boolean> => {
   const bridges: any[] = [
     (window as any).DocLocker,
     (window as any).Android,
@@ -43,8 +97,8 @@ const tryNativeBridge = async (blob: Blob, fileName: string): Promise<boolean> =
     for (const b of bridges) {
       try {
         if (typeof b.downloadBase64 === "function") { b.downloadBase64(dataUrl, fileName); return true; }
-        if (typeof b.downloadFile === "function") { b.downloadFile(dataUrl, fileName); return true; }
-        if (typeof b.saveFile === "function") { b.saveFile(dataUrl, fileName); return true; }
+        if (typeof b.saveBase64 === "function") { b.saveBase64(dataUrl, fileName); return true; }
+        if (typeof b.saveFileBase64 === "function") { b.saveFileBase64(dataUrl, fileName); return true; }
         if (typeof b.postMessage === "function") { b.postMessage({ action: "download", dataUrl, fileName }); return true; }
       } catch { /* try next */ }
     }
@@ -54,22 +108,29 @@ const tryNativeBridge = async (blob: Blob, fileName: string): Promise<boolean> =
 
 export const downloadFileFromUrl = async (url: string, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
-  try {
-    const resp = await fetch(url);
-    if (resp.ok) {
-      const raw = await resp.blob();
-      const stamped = await watermarkBlob(raw, safeName).catch(() => raw);
-      return await downloadBlob(stamped, safeName);
-    }
-  } catch { /* fall through */ }
-
-  // Last-ditch: hand the remote URL to a native bridge if present.
-  const nativeDownloader = (window as any).DocLocker?.downloadFile || (window as any).Android?.downloadFile;
+  // Vault files already have a real HTTPS download URL with the backend's
+  // download flag. Hand that URL directly to the phone/browser download
+  // manager. Fetching it into a Blob first breaks Android WebView/WebViewGold
+  // because blob: URLs are not persisted to local storage there.
+  const nativeDownloader =
+    (window as any).DocLocker?.downloadUrl ||
+    (window as any).DocLocker?.downloadFile ||
+    (window as any).Android?.downloadUrl ||
+    (window as any).Android?.downloadFile ||
+    (window as any).WebViewGold?.downloadUrl ||
+    (window as any).WebViewGold?.downloadFile;
   if (typeof nativeDownloader === "function") {
-    try { nativeDownloader(url, safeName); return "native"; } catch { /* fall through */ }
+    try {
+      nativeDownloader(url, safeName);
+      // Also fire the real link in case the generic bridge is present for a
+      // different feature but does not actually save files.
+      setTimeout(() => triggerDirectUrlDownload(url, safeName), 150);
+      return "native";
+    } catch { /* fall through */ }
   }
-  triggerAnchorDownload(url, safeName);
-  return "browser";
+
+  triggerDirectUrlDownload(url, safeName);
+  return "direct";
 };
 
 /**
@@ -91,12 +152,20 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
   ]);
   const ua = navigator.userAgent || "";
   const isAndroid = /Android/i.test(ua);
-  const isWebView = /wv|; wv\)/i.test(ua) || /WebView/i.test(ua);
+  const isWebView = isAndroidWebView();
 
-  // 1. Native bridge (best: writes to phone Downloads folder).
-  if (await tryNativeBridge(stamped, safeName)) return "native";
+  // 1. Desktop / capable Chromium: write the file, not just open a link.
+  if (!isAndroid && !isWebView && await writeWithFilePicker(stamped, safeName)) return "file-picker";
 
-  // 2. Anchor blob URL — the standard cross-browser download path.
+  // 2. Explicit native base64 bridge, when the shell provides one.
+  if (await tryNativeBase64Bridge(stamped, safeName)) return "native";
+
+  // 3. Android browsers/WebViews cannot reliably save generated blob: URLs.
+  // The system share sheet is the only standards-based way to hand a generated
+  // in-memory file to local Files/Downloads without a native downloader bridge.
+  if ((isAndroid || isWebView) && await shareFile(stamped, safeName)) return "share";
+
+  // 4. Anchor blob URL — standard browser fallback.
   const objectUrl = URL.createObjectURL(stamped);
   try {
     triggerAnchorDownload(objectUrl, safeName);
@@ -104,24 +173,14 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     setTimeout(() => { try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ } }, 60000);
   }
 
-  // 3. On Android WebViews, blob: URLs are often ignored by the shell's
-  //    DownloadListener. As a belt-and-braces backup, also fire a data:
-  //    URL anchor for files under 8 MB — many shells intercept data: URLs
-  //    and save them. Skipping for larger files to avoid memory pressure.
-  if ((isAndroid || isWebView) && stamped.size < 8 * 1024 * 1024) {
+  // 5. Last backup for small files only. Keep the size low because data: URLs
+  // duplicate the file in memory and can crash older Android WebViews.
+  if (!isWebView && stamped.size < 4 * 1024 * 1024) {
     try {
       const dataUrl = await blobToDataUrl(stamped);
-      // Slight delay so the two downloads don't collapse into one intent.
       setTimeout(() => triggerAnchorDownload(dataUrl, safeName), 250);
       return "data-url";
     } catch { /* ignore */ }
-  }
-
-  // 4. Desktop capable browsers: also offer a save picker if nothing has
-  //    caught the download yet. (Non-blocking — anchor already fired.)
-  const picker = (window as any).showSaveFilePicker;
-  if (typeof picker === "function" && !isAndroid && !isWebView) {
-    // Anchor already handled it in browsers; picker path is optional.
   }
 
   return "browser";
