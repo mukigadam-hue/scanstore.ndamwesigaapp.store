@@ -62,6 +62,19 @@ export default defineConfig(({ mode }) => ({
               expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
+          {
+            // One-time local download URLs created from in-memory public scans.
+            // Android WebViews do not save blob: URLs, but they do handle normal
+            // same-origin file URLs with a real extension and download headers.
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && url.pathname.startsWith("/local-downloads/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "local-downloads",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
         ],
       },
     }),

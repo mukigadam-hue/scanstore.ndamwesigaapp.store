@@ -147,14 +147,14 @@ const getDocumentFrame = (displayW: number, displayH: number, orientation: "port
     displayW,
     displayH,
     landscape ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT,
-    landscape ? 0.8 : 0.76,
-    landscape ? 0.54 : 0.68,
-    landscape ? 520 : 360
+    landscape ? 0.94 : 0.94,
+    landscape ? 0.68 : 0.82,
+    landscape ? 760 : 640
   );
 };
 
 const getIdFrame = (displayW: number, displayH: number) =>
-  getCenteredFrame(displayW, displayH, ID_ASPECT, 0.76, 0.42, 320);
+  getCenteredFrame(displayW, displayH, ID_ASPECT, 0.92, 0.5, 540);
 
 const clampPlacement = (p: IdPlacement): IdPlacement => {
   const minW = 40;
@@ -178,16 +178,16 @@ const getCaptureProfile = () => {
   return {
     lowEnd,
     midRange,
-    photoMax: lowEnd ? 900 : midRange ? 1200 : 1600,
-    documentMax: lowEnd ? 900 : midRange ? 1150 : 1500,
-    idMax: lowEnd ? 720 : midRange ? 850 : 1000,
-    documentQuality: lowEnd ? 0.82 : midRange ? 0.86 : 0.92,
-    photoQuality: lowEnd ? 0.84 : midRange ? 0.88 : 0.92,
-    idQuality: lowEnd ? 0.82 : midRange ? 0.86 : 0.9,
+    photoMax: lowEnd ? 1280 : midRange ? 1800 : 2400,
+    documentMax: lowEnd ? 1280 : midRange ? 1800 : 2400,
+    idMax: lowEnd ? 1100 : midRange ? 1400 : 1800,
+    documentQuality: lowEnd ? 0.86 : midRange ? 0.9 : 0.94,
+    photoQuality: lowEnd ? 0.86 : midRange ? 0.9 : 0.94,
+    idQuality: lowEnd ? 0.86 : midRange ? 0.9 : 0.93,
     backgroundScale: lowEnd ? 0.04 : midRange ? 0.05 : 0.08,
     sweepMs: lowEnd ? 180 : midRange ? 240 : 360,
     encodeTimeoutMs: lowEnd ? 120 : midRange ? 220 : 650,
-    fallbackMax: lowEnd ? 720 : midRange ? 900 : 1300,
+    fallbackMax: lowEnd ? 1100 : midRange ? 1400 : 1800,
     // On low-end phones the full enhance pass can freeze the UI thread
     // for many seconds — skip the heavy shadow removal / unsharp mask
     // so capture returns the instant the sweep animation finishes.
@@ -326,9 +326,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         ? { deviceId: { exact: deviceId } }
         : { facingMode: { ideal: facing } };
       const profile = getCaptureProfile();
-      const streamMax = Math.max(profile.photoMax, profile.documentMax);
-      const primaryW = streamMax >= 1500 ? 1920 : streamMax >= 1300 ? 1600 : 1280;
-      const primaryH = streamMax >= 1500 ? 1080 : streamMax >= 1300 ? 900 : 720;
+      const portraitViewport = typeof window !== "undefined" && window.innerHeight >= window.innerWidth;
+      const primaryW = portraitViewport ? 2160 : 3840;
+      const primaryH = portraitViewport ? 3840 : 2160;
+      const secondaryW = portraitViewport ? 1440 : 1920;
+      const secondaryH = portraitViewport ? 1920 : 1080;
 
       const attempts: MediaStreamConstraints[] = [
         {
@@ -336,6 +338,23 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             ...baseFacing,
             width: { ideal: primaryW },
             height: { ideal: primaryH },
+            aspectRatio: { ideal: portraitViewport ? 3 / 4 : 16 / 9 },
+            frameRate: { ideal: 30, max: 30 },
+            advanced: [
+              { focusMode: "continuous" },
+              { exposureMode: "continuous" },
+              { whiteBalanceMode: "continuous" },
+              { resizeMode: "none" },
+            ] as any,
+          },
+          audio: false,
+        },
+        {
+          video: {
+            ...baseFacing,
+            width: { ideal: primaryW },
+            height: { ideal: primaryH },
+            aspectRatio: { ideal: portraitViewport ? 3 / 4 : 16 / 9 },
             frameRate: { ideal: 30, max: 30 },
             advanced: [
               { focusMode: "continuous" },
@@ -345,10 +364,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           },
           audio: false,
         },
-        {
-          video: { ...baseFacing, width: { ideal: Math.min(primaryW, 1360) }, height: { ideal: Math.min(primaryH, 900) }, frameRate: { ideal: 30, max: 30 } },
-          audio: false,
-        },
+        { video: { ...baseFacing, width: { ideal: secondaryW }, height: { ideal: secondaryH }, aspectRatio: { ideal: portraitViewport ? 3 / 4 : 16 / 9 }, frameRate: { ideal: 30, max: 30 } }, audio: false },
+        { video: { ...baseFacing, width: { ideal: 1600 }, height: { ideal: 1200 }, frameRate: { ideal: 30, max: 30 } }, audio: false },
         {
           video: { ...baseFacing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
           audio: false,
@@ -390,6 +407,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         if (capabilities?.focusMode?.includes?.("continuous")) advanced.push({ focusMode: "continuous" });
         if (capabilities?.exposureMode?.includes?.("continuous")) advanced.push({ exposureMode: "continuous" });
         if (capabilities?.whiteBalanceMode?.includes?.("continuous")) advanced.push({ whiteBalanceMode: "continuous" });
+        if (capabilities?.zoom) advanced.push({ zoom: Math.max(capabilities.zoom.min ?? 1, 1) });
         if (advanced.length) await (track as any).applyConstraints({ advanced });
       } catch { /* ignore — best effort */ }
 
@@ -1296,8 +1314,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const isIdMode = scanMode === "id-front" || scanMode === "id-back";
   const idSideLabel = scanMode === "id-front" ? "FRONT side" : "BACK side";
   const documentFrameAspect = scanOrientation === "landscape" ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT;
-  const documentFrameWidthCss = scanOrientation === "landscape" ? "80%" : "76%";
-  const documentFrameMaxWidth = scanOrientation === "landscape" ? "520px" : "360px";
+  const documentFrameWidthCss = "94%";
+  const documentFrameMaxWidth = scanOrientation === "landscape" ? "760px" : "640px";
 
   const overlay = (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
@@ -1334,8 +1352,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 /* ID card frame: only the card area is visible, rest is dark overlay */
               <>
                   {/* Card cutout: box-shadow darkens everything outside */}
-                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '76%', maxWidth: '320px', aspectRatio: `${ID_ASPECT}/1`, border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
-                  <div className="absolute" style={{ width: '76%', maxWidth: '320px', aspectRatio: `${ID_ASPECT}/1` }}>
+                  <div className="absolute rounded-xl overflow-hidden" style={{ width: '92%', maxWidth: '540px', aspectRatio: `${ID_ASPECT}/1`, border: '2.5px solid rgba(255,255,255,0.6)', borderRadius: '12px', boxShadow: '0 0 0 9999px rgba(0,0,0,0.75)' }} />
+                  <div className="absolute" style={{ width: '92%', maxWidth: '540px', aspectRatio: `${ID_ASPECT}/1` }}>
                     <div className="absolute top-0 left-0 w-8 h-8 border-amber-400 rounded-tl-lg" style={{borderTopWidth: 3, borderLeftWidth: 3}} />
                     <div className="absolute top-0 right-0 w-8 h-8 border-amber-400 rounded-tr-lg" style={{borderTopWidth: 3, borderRightWidth: 3}} />
                     <div className="absolute bottom-0 left-0 w-8 h-8 border-amber-400 rounded-bl-lg" style={{borderBottomWidth: 3, borderLeftWidth: 3}} />
