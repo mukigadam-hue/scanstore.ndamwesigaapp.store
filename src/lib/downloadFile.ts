@@ -158,14 +158,10 @@ export const downloadFileFromUrl = async (url: string, fileName: string): Promis
 };
 
 /**
- * Save a blob to the user's device. Order is tuned so files actually land
- * in phone storage (not just "shared"):
- *   1. Native bridge exposed by the WebView shell (real save-to-Downloads).
- *   2. Anchor download of a blob URL (standard browsers + modern WebViews).
- *   3. Data-URL anchor download for smaller files (WebViewGold intercepts data: URLs).
- *   4. File System Access picker on capable desktop browsers.
- * Web Share is intentionally NOT auto-used here — it "shares" instead of
- * saving to phone storage, which is not what the user wants.
+ * Save a generated in-memory file to the user's device. Vault files use
+ * downloadFileFromUrl above so Android gets a real HTTP(S) file URL. Generated
+ * scans/photos use the best available local-save path and avoid blob: URLs in
+ * Android WebViews whenever possible.
  */
 export const downloadBlob = async (blob: Blob, fileName: string): Promise<DownloadResult> => {
   const safeName = safeFileName(fileName);
