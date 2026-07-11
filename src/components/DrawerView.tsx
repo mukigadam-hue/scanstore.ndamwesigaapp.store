@@ -185,18 +185,31 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       return;
     }
 
+    // Pause auto-lock for the whole batch so long / multi-file uploads
+    // never kick the user back to the two-step verification screen.
+    onScanStart?.();
     setUploading(true);
     let runningTotal = storageUsed;
+    const total = files.length;
+    if (total > 1) toast.info(`Storing ${total} files…`);
 
+    let ok = 0;
     try {
       for (const file of Array.from(files)) {
-        const added = await uploadSingleFile(file, runningTotal);
-        runningTotal += added;
+        try {
+          const added = await uploadSingleFile(file, runningTotal);
+          runningTotal += added;
+          ok += 1;
+        } catch (err) {
+          console.error("Upload failed for", file.name, err);
+        }
       }
       refreshDocs();
+      if (total > 1) toast.success(`Stored ${ok} of ${total} files`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      onScanEnd?.();
     }
   };
 
