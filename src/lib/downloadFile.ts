@@ -49,6 +49,30 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     r.readAsDataURL(blob);
   });
 
+const tryCachedDownloadUrl = async (blob: Blob, fileName: string): Promise<boolean> => {
+  if (!("caches" in window) || !navigator.serviceWorker?.controller) return false;
+  try {
+    const safeName = safeFileName(fileName);
+    const cache = await caches.open("local-downloads");
+    const url = `${window.location.origin}/local-downloads/${Date.now()}-${encodeURIComponent(safeName)}`;
+    await cache.put(
+      url,
+      new Response(blob, {
+        status: 200,
+        headers: {
+          "Content-Type": blob.type || "application/octet-stream",
+          "Content-Disposition": `attachment; filename="${safeName.replace(/"/g, "'")}"`,
+          "Cache-Control": "no-store",
+        },
+      })
+    );
+    triggerAnchorDownload(url, safeName);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const writeWithFilePicker = async (blob: Blob, fileName: string): Promise<boolean> => {
   const picker = (window as any).showSaveFilePicker;
   if (typeof picker !== "function") return false;
@@ -160,12 +184,17 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
   // 2. Explicit native base64 bridge, when the shell provides one.
   if (await tryNativeBase64Bridge(stamped, safeName)) return "native";
 
-  // 3. Android browsers/WebViews cannot reliably save generated blob: URLs.
+  // 3. Published PWA/native WebView path for generated scans: put the file
+  // behind a same-origin URL that ends with the actual extension, then let the
+  // service worker serve it with Content-Disposition. This avoids blob: URLs.
+  if ((isAndroid || isWebView) && await tryCachedDownloadUrl(stamped, safeName)) return "direct";
+
+  // 4. Android browsers/WebViews cannot reliably save generated blob: URLs.
   // The system share sheet is the only standards-based way to hand a generated
   // in-memory file to local Files/Downloads without a native downloader bridge.
   if ((isAndroid || isWebView) && await shareFile(stamped, safeName)) return "share";
 
-  // 4. Anchor blob URL — standard browser fallback.
+  // 5. Anchor blob URL — standard browser fallback.
   const objectUrl = URL.createObjectURL(stamped);
   try {
     triggerAnchorDownload(objectUrl, safeName);
@@ -173,7 +202,7 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
     setTimeout(() => { try { URL.revokeObjectURL(objectUrl); } catch { /* ignore */ } }, 60000);
   }
 
-  // 5. Last backup for small files only. Keep the size low because data: URLs
+  // 6. Last backup for small files only. Keep the size low because data: URLs
   // duplicate the file in memory and can crash older Android WebViews.
   if (!isWebView && stamped.size < 4 * 1024 * 1024) {
     try {

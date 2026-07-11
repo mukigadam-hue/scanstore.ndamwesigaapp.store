@@ -326,15 +326,19 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         ? { deviceId: { exact: deviceId } }
         : { facingMode: { ideal: facing } };
       const profile = getCaptureProfile();
-      const primaryW = 3840;
-      const primaryH = 2160;
+      const portraitViewport = typeof window !== "undefined" && window.innerHeight >= window.innerWidth;
+      const primaryW = portraitViewport ? 2160 : 3840;
+      const primaryH = portraitViewport ? 3840 : 2160;
+      const secondaryW = portraitViewport ? 1440 : 1920;
+      const secondaryH = portraitViewport ? 1920 : 1080;
 
       const attempts: MediaStreamConstraints[] = [
         {
           video: {
             ...baseFacing,
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: primaryW },
+            height: { ideal: primaryH },
+            aspectRatio: { ideal: portraitViewport ? 3 / 4 : 16 / 9 },
             frameRate: { ideal: 30, max: 30 },
             advanced: [
               { focusMode: "continuous" },
@@ -350,6 +354,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             ...baseFacing,
             width: { ideal: primaryW },
             height: { ideal: primaryH },
+            aspectRatio: { ideal: portraitViewport ? 3 / 4 : 16 / 9 },
             frameRate: { ideal: 30, max: 30 },
             advanced: [
               { focusMode: "continuous" },
@@ -359,7 +364,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           },
           audio: false,
         },
-        { video: { ...baseFacing, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 30 } }, audio: false },
+        { video: { ...baseFacing, width: { ideal: secondaryW }, height: { ideal: secondaryH }, aspectRatio: { ideal: portraitViewport ? 3 / 4 : 16 / 9 }, frameRate: { ideal: 30, max: 30 } }, audio: false },
         { video: { ...baseFacing, width: { ideal: 1600 }, height: { ideal: 1200 }, frameRate: { ideal: 30, max: 30 } }, audio: false },
         {
           video: { ...baseFacing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
