@@ -2,3 +2,6 @@ project_id = "kvszglovdoecnocxuzhe"
 
 [functions.compress-document]
 verify_jwt = false
+
+[functions.phone-download]
+verify_jwt = false
