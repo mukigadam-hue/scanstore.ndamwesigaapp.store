@@ -16,7 +16,7 @@ const triggerAnchorDownload = (url: string, fileName: string) => {
   a.href = url;
   a.download = safeFileName(fileName);
   a.rel = "noopener";
-  a.target = "_self";
+  a.target = (isAndroid() || isWebViewGold()) ? "_blank" : "_self";
   a.style.display = "none";
   document.body.appendChild(a);
   a.click();

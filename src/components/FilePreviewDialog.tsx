@@ -250,19 +250,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
         // PDFs stream directly via pdf.js from the signed URL — pre-fetching
         // the whole blob was the main cause of long "loading" black screens
         // on large scans. Videos and audio also stream better from the URL.
-        if (isImagePreview) {
-          try {
-            const resp = await fetch(bustedUrl, { cache: "no-store" });
-            const blob = await resp.blob();
-            if (revoked) return;
-            const blobUrl = URL.createObjectURL(blob);
-            setPreviewUrl(blobUrl);
-          } catch {
-            if (!revoked) setPreviewUrl(bustedUrl);
-          }
-        } else {
-          setPreviewUrl(bustedUrl);
-        }
+        setPreviewUrl(bustedUrl);
 
         // Show preview immediately for PDFs/images/media — don't block on
         // Office/text processing below.

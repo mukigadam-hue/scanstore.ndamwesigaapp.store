@@ -147,14 +147,14 @@ const getDocumentFrame = (displayW: number, displayH: number, orientation: "port
     displayW,
     displayH,
     landscape ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT,
-    landscape ? 0.94 : 0.94,
-    landscape ? 0.68 : 0.82,
+    landscape ? 0.92 : 0.90,
+    landscape ? 0.65 : 0.80,
     landscape ? 760 : 640
   );
 };
 
 const getIdFrame = (displayW: number, displayH: number) =>
-  getCenteredFrame(displayW, displayH, ID_ASPECT, 0.92, 0.5, 540);
+  getCenteredFrame(displayW, displayH, ID_ASPECT, 0.88, 0.48, 540);
 
 const clampPlacement = (p: IdPlacement): IdPlacement => {
   const minW = 40;
