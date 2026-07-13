@@ -141,6 +141,41 @@ const getCenteredFrame = (displayW: number, displayH: number, aspect: number, wi
   };
 };
 
+const getObjectCoverSourceRect = (
+  videoW: number,
+  videoH: number,
+  displayW: number,
+  displayH: number
+) => {
+  const sourcePerCssPixel = Math.min(videoW / Math.max(1, displayW), videoH / Math.max(1, displayH));
+  const visibleW = Math.min(videoW, displayW * sourcePerCssPixel);
+  const visibleH = Math.min(videoH, displayH * sourcePerCssPixel);
+  return {
+    sourcePerCssPixel,
+    offsetX: Math.max(0, (videoW - visibleW) / 2),
+    offsetY: Math.max(0, (videoH - visibleH) / 2),
+    visibleW,
+    visibleH,
+  };
+};
+
+const expandSourceRect = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  maxW: number,
+  maxH: number,
+  ratio: number
+) => {
+  const pad = Math.min(width, height) * ratio;
+  const nextX = Math.max(0, x - pad);
+  const nextY = Math.max(0, y - pad);
+  const nextRight = Math.min(maxW, x + width + pad);
+  const nextBottom = Math.min(maxH, y + height + pad);
+  return { x: nextX, y: nextY, width: nextRight - nextX, height: nextBottom - nextY };
+};
+
 const getDocumentFrame = (displayW: number, displayH: number, orientation: "portrait" | "landscape") => {
   const landscape = orientation === "landscape";
   return getCenteredFrame(
@@ -587,15 +622,18 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const maxDimension = profile.photoMax;
       const sourceW = video.videoWidth || 1280;
       const sourceH = video.videoHeight || 720;
-      const scale = Math.min(1, maxDimension / Math.max(sourceW, sourceH));
-      canvas.width = Math.max(1, Math.round(sourceW * scale));
-      canvas.height = Math.max(1, Math.round(sourceH * scale));
+      const displayW = video.clientWidth || sourceW;
+      const displayH = video.clientHeight || sourceH;
+      const visible = getObjectCoverSourceRect(sourceW, sourceH, displayW, displayH);
+      const scale = Math.min(1, maxDimension / Math.max(visible.visibleW, visible.visibleH));
+      canvas.width = Math.max(1, Math.round(visible.visibleW * scale));
+      canvas.height = Math.max(1, Math.round(visible.visibleH * scale));
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      // Grab the frame immediately so motion blur is minimised.
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Save exactly the visible camera area, not the full wide sensor frame.
+      ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, canvas.width, canvas.height);
       const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
@@ -627,14 +665,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     const videoW = video.videoWidth;
     const videoH = video.videoHeight;
 
-    const scaleX = videoW / displayW;
-    const scaleY = videoH / displayH;
-    const coverScale = Math.min(scaleX, scaleY);
-
-    const visibleW = displayW * coverScale;
-    const visibleH = displayH * coverScale;
-    const offsetX = (videoW - visibleW) / 2;
-    const offsetY = (videoH - visibleH) / 2;
+    const visible = getObjectCoverSourceRect(videoW, videoH, displayW, displayH);
 
     const isIdScan = scanMode === "id-front" || scanMode === "id-back";
 
@@ -642,17 +673,23 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
     if (isIdScan) {
       const frame = getIdFrame(displayW, displayH);
-      cropX = offsetX + frame.x * coverScale;
-      cropY = offsetY + frame.y * coverScale;
-      cropW = frame.width * coverScale;
-      cropH = frame.height * coverScale;
+      cropX = visible.offsetX + frame.x * visible.sourcePerCssPixel;
+      cropY = visible.offsetY + frame.y * visible.sourcePerCssPixel;
+      cropW = frame.width * visible.sourcePerCssPixel;
+      cropH = frame.height * visible.sourcePerCssPixel;
     } else {
       const frame = getDocumentFrame(displayW, displayH, scanOrientation);
-      cropX = offsetX + frame.x * coverScale;
-      cropY = offsetY + frame.y * coverScale;
-      cropW = frame.width * coverScale;
-      cropH = frame.height * coverScale;
+      cropX = visible.offsetX + frame.x * visible.sourcePerCssPixel;
+      cropY = visible.offsetY + frame.y * visible.sourcePerCssPixel;
+      cropW = frame.width * visible.sourcePerCssPixel;
+      cropH = frame.height * visible.sourcePerCssPixel;
     }
+
+    const expanded = expandSourceRect(cropX, cropY, cropW, cropH, videoW, videoH, isIdScan ? 0.025 : 0.035);
+    cropX = expanded.x;
+    cropY = expanded.y;
+    cropW = expanded.width;
+    cropH = expanded.height;
 
     // Higher caps restore the crisp look of the previous scans.
     let targetW = cropW;
@@ -720,10 +757,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // Enhancement and JPEG encoding start during the first sweep frame so
     // older WebViews do not sit on the camera screen after the animation ends.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      // Always run the full clean (shadow removal + contrast stretch + unsharp)
-      // so scanned pages come out crisp and white — the sweep animation runs
-      // in parallel, so this no longer stalls the UI on older phones.
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: false, backgroundScale: profile.backgroundScale });
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
       filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
