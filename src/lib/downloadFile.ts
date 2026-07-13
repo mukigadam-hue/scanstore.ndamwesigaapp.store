@@ -22,6 +22,24 @@ const getMimeType = (fileName: string, fallback = "application/octet-stream") =>
 const nativeDownloadBridge = (url: string, fileName: string, mimeType?: string): boolean => {
   const safeName = safeFileName(fileName);
   const mime = mimeType || getMimeType(safeName);
+  const call = (fn: Function) => {
+    const payload = JSON.stringify({ url, fileName: safeName, mimeType: mime });
+    const attempts = [
+      () => fn(url, safeName, mime),
+      () => fn(url, safeName),
+      () => fn(url),
+      () => fn(payload),
+    ];
+    for (const attempt of attempts) {
+      try {
+        attempt();
+        return true;
+      } catch {
+        // Try the next common bridge signature.
+      }
+    }
+    return false;
+  };
   const bridges = [
     (window as any).DocLocker,
     (window as any).Android,
@@ -34,16 +52,13 @@ const nativeDownloadBridge = (url: string, fileName: string, mimeType?: string):
   for (const bridge of bridges) {
     try {
       if (typeof bridge?.downloadFile === "function") {
-        bridge.downloadFile(url, safeName, mime);
-        return true;
+        if (call(bridge.downloadFile.bind(bridge))) return true;
       }
       if (typeof bridge?.download === "function") {
-        bridge.download(url, safeName, mime);
-        return true;
+        if (call(bridge.download.bind(bridge))) return true;
       }
       if (typeof bridge?.saveFile === "function") {
-        bridge.saveFile(url, safeName, mime);
-        return true;
+        if (call(bridge.saveFile.bind(bridge))) return true;
       }
       if (typeof bridge?.postMessage === "function") {
         bridge.postMessage({ url, fileName: safeName, mimeType: mime });
