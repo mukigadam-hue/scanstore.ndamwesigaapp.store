@@ -87,8 +87,7 @@ export default function ViewerScreen() {
       const t = e.target as HTMLInputElement;
       const f = t.files?.[0];
       if (!f) return;
-      // Ad trigger 4: switching to another file
-      if (file) await showInterstitial("switch-file");
+      // No ad on switching files — ads only fire at explicit save/verify actions.
       // Reset state then load new
       setFile(null);
       setPreviewUrl(null);
