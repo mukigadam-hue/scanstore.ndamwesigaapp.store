@@ -41,28 +41,32 @@ function hasNativeBridge(): boolean {
   );
 }
 
-export function showInterstitial(trigger: string): Promise<void> {
+// Per-trigger cooldown map (in-memory + localStorage for cross-reload).
+const COOLDOWN_KEY = "ad_cooldown_";
+function withinCooldown(trigger: string, cooldownMs: number): boolean {
+  if (!cooldownMs) return false;
+  try {
+    const raw = localStorage.getItem(COOLDOWN_KEY + trigger);
+    if (!raw) return false;
+    const last = parseInt(raw, 10);
+    if (Number.isNaN(last)) return false;
+    return Date.now() - last < cooldownMs;
+  } catch { return false; }
+}
+function markShown(trigger: string) {
+  try { localStorage.setItem(COOLDOWN_KEY + trigger, String(Date.now())); } catch {}
+}
+
+export function showInterstitial(trigger: string, cooldownMs = 0): Promise<void> {
   return new Promise((resolve) => {
-    // 1. Real native ad via WebViewGold bridge (fire-and-forget).
+    if (withinCooldown(trigger, cooldownMs)) { resolve(); return; }
+    if (typeof navigator !== "undefined" && !navigator.onLine) { resolve(); return; }
     if (hasNativeBridge()) {
       triggerNativeAd(trigger);
-      resolve();
-      return;
+      markShown(trigger);
     }
-    // 2. Offline or no listener → skip instantly.
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      resolve();
-      return;
-    }
-    // 3. No native shell and no real web SDK yet → skip silently.
-    //    (We intentionally do NOT open the in-app overlay to avoid
-    //    showing users an empty "Advertisement" placeholder.)
+    // No native shell → skip silently (no in-app placeholder overlay).
     resolve();
-    return;
-    // eslint-disable-next-line no-unreachable
-    if (!listener) return;
-    const safety = setTimeout(() => resolve(), 6000);
-    listener(trigger, () => { clearTimeout(safety); resolve(); });
   });
 }
 

@@ -945,11 +945,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // / file picker / native bridge), bypassing the in-app vault flow.
   const savePhotoToPhone = async () => {
     if (!capturedFile) return;
+    // Fire the interstitial ad IMMEDIATELY as the save action starts, so
+    // it plays while the file is being written in the background.
+    triggerNativeAd("scan-save-phone");
     const tid = toast.loading("Saving to your phone…");
     try {
       await downloadBlob(capturedFile, capturedFile.name);
       toast.success("Saved to your phone", { id: tid });
-      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
@@ -959,6 +961,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
+    // Fire the interstitial immediately while we build the PDF in the background.
+    triggerNativeAd("scan-save-phone");
     const tid = toast.loading("Preparing PDF…");
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -984,7 +988,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const blob = pdf.output("blob");
       await downloadBlob(blob, `scan_${Date.now()}.pdf`);
       toast.success("PDF saved to your phone", { id: tid });
-      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
@@ -1031,6 +1034,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // Save the assembled two-sided ID directly to the user's phone.
   const saveIdToPhone = async (asPdf: boolean) => {
+    // Fire the interstitial immediately as the save starts, so it plays
+    // while we assemble the ID sides and write the file in the background.
+    triggerNativeAd("scan-save-phone");
     try {
       const combined = await combineIdSides();
       if (!combined) return;
@@ -1046,7 +1052,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         await downloadBlob(file, file.name);
       }
       toast.success("ID saved to your phone");
-      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name !== "AbortError") toast.error("Could not save to phone");

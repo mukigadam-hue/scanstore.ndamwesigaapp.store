@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FileText, X, Save, Download, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { showInterstitial } from "@/lib/ads";
+
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
 import { downloadBlob } from "@/lib/downloadFile";
@@ -87,8 +87,7 @@ export default function ViewerScreen() {
       const t = e.target as HTMLInputElement;
       const f = t.files?.[0];
       if (!f) return;
-      // Ad trigger 4: switching to another file
-      if (file) await showInterstitial("switch-file");
+      // No ad on switching files — ads only fire at explicit save/verify actions.
       // Reset state then load new
       setFile(null);
       setPreviewUrl(null);
@@ -114,8 +113,7 @@ export default function ViewerScreen() {
   };
 
   const handleClose = async () => {
-    // Ad Trigger 4: Close Document
-    await showInterstitial("close-document");
+    // No ad on close — back navigation must never trigger interstitials.
     navigate("/");
   };
 
@@ -139,8 +137,7 @@ export default function ViewerScreen() {
     setFile(newFile);
     setPreviewUrl(URL.createObjectURL(newFile));
     toast.success("Changes saved to the working copy");
-    // Ad Trigger 3: after Save Changes
-    await showInterstitial("save-changes");
+    // No ad on save-changes — ads only fire at explicit save-to-phone / last-verify.
   };
 
   const handleDownload = async () => {
