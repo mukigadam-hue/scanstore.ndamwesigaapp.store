@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { ScanLine, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CameraCapture from "@/components/CameraCapture";
-import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
-import { triggerNativeAd } from "@/lib/nativeAd";
 
 export default function ScanScreen() {
   const navigate = useNavigate();
@@ -12,9 +10,7 @@ export default function ScanScreen() {
 
   const handleCapture = async (file: File) => {
     setOpen(false);
-    // Ad Trigger 2: after Done / Finish Scan — native via WebViewGold (no-op offline / outside shell)
-    triggerNativeAd("finish-scan");
-    await showInterstitial("finish-scan");
+    // No ad on finish-scan — ads only fire at save-to-phone / last-verify.
     // Stage the scanned file for the public viewer (no auth required).
     const r = new FileReader();
     r.onload = () => {
