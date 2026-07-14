@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { KeyRound, Shield, Download, Upload, ScanLine, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { useEffect } from "react";
+
 import { useTranslation } from "react-i18next";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
 import LanguageSelector from "@/components/LanguageSelector";
