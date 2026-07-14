@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FileText, X, Save, Download, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { showInterstitial } from "@/lib/ads";
+
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
 import { downloadBlob } from "@/lib/downloadFile";
