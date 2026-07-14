@@ -162,6 +162,128 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   );
 };
 
+/**
+ * AsyncImage — fetches the given URL into a binary Blob, creates a
+ * temporary Object URL, and calls the native `img.decode()` API so the
+ * bitmap is fully decoded off the main thread BEFORE we attach the
+ * element to the DOM. A lightweight spinner is shown while decoding.
+ *
+ * On unmount / src change the Object URL is revoked to free WebView
+ * tile memory. The <img> is only rendered once decode() resolves.
+ */
+const AsyncImage = ({
+  src,
+  alt,
+  zoom,
+  pinching,
+}: { src: string; alt: string; zoom: number; pinching: boolean }) => {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [decoding, setDecoding] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let localUrl: string | null = null;
+    setDecoding(true);
+    setFailed(false);
+    setObjectUrl(null);
+
+    (async () => {
+      try {
+        // 1. Pull the file down as a binary Blob (avoids base64 bloat).
+        const resp = await fetch(src, { cache: "no-store" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        if (cancelled) return;
+
+        // 2. Create a temporary Object URL for instant WebView load.
+        localUrl = URL.createObjectURL(blob);
+
+        // 3. Decode off the main thread before showing the element.
+        const probe = new Image();
+        probe.src = localUrl;
+        if (typeof probe.decode === "function") {
+          try { await probe.decode(); } catch { /* fall through — render anyway */ }
+        } else {
+          await new Promise<void>((r) => {
+            probe.onload = () => r();
+            probe.onerror = () => r();
+          });
+        }
+        if (cancelled) {
+          URL.revokeObjectURL(localUrl);
+          return;
+        }
+        setObjectUrl(localUrl);
+        setDecoding(false);
+      } catch {
+        if (!cancelled) {
+          setFailed(true);
+          setDecoding(false);
+        }
+      }
+    })();
+
+    // Cleanup: revoke the Object URL so the WebView releases the bitmap tiles.
+    return () => {
+      cancelled = true;
+      if (localUrl) {
+        URL.revokeObjectURL(localUrl);
+      }
+    };
+  }, [src]);
+
+  if (decoding) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+  if (failed || !objectUrl) {
+    return (
+      <div className="flex flex-col items-center gap-3 p-8 text-white/60">
+        <FileText className="h-12 w-12 text-white/30" />
+        <p className="text-sm">Unable to load image</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        minWidth: "100%",
+        minHeight: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: zoom > 1 ? "16px" : "0",
+      }}
+    >
+      <img
+        src={objectUrl}
+        alt={alt}
+        className="select-none"
+        // decoding=async is a hint for the browser's own image pipeline
+        // (already pre-decoded above, but keeps large re-layouts non-blocking).
+        decoding="async"
+        loading="eager"
+        style={{
+          width: `${zoom * 100}%`,
+          height: "auto",
+          maxWidth: zoom <= 1 ? "100%" : "none",
+          maxHeight: zoom <= 1 ? "100%" : "none",
+          objectFit: "contain",
+          transition: pinching ? "none" : "width 0.15s ease",
+        }}
+        draggable={false}
+      />
+    </div>
+  );
+};
+
+
+
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumentSaved, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
@@ -685,31 +807,12 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
         ) : previewUrl ? (
           <>
             {isImage && (
-              <div
-                style={{
-                  minWidth: "100%",
-                  minHeight: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: zoom > 1 ? "16px" : "0",
-                }}
-              >
-                <img
-                  src={previewUrl}
-                  alt={doc.name}
-                  className="select-none"
-                  style={{
-                    width: `${zoom * 100}%`,
-                    height: "auto",
-                    maxWidth: zoom <= 1 ? "100%" : "none",
-                    maxHeight: zoom <= 1 ? "100%" : "none",
-                    objectFit: "contain",
-                    transition: pinchStartDist ? "none" : "width 0.15s ease",
-                  }}
-                  draggable={false}
-                />
-              </div>
+              <AsyncImage
+                src={previewUrl}
+                alt={doc.name}
+                zoom={zoom}
+                pinching={!!pinchStartDist}
+              />
             )}
 
             {isPdf && (
