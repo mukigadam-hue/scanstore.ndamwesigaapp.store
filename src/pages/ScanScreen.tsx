@@ -39,7 +39,6 @@ export default function ScanScreen() {
         <div className="flex gap-2">
           <Button
             onClick={() => {
-              prefetchInterstitial();
               setOpen(true);
             }}
             className="brass-gradient text-primary-foreground font-display"
