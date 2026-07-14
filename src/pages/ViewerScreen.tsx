@@ -137,8 +137,7 @@ export default function ViewerScreen() {
     setFile(newFile);
     setPreviewUrl(URL.createObjectURL(newFile));
     toast.success("Changes saved to the working copy");
-    // Ad Trigger 3: after Save Changes
-    await showInterstitial("save-changes");
+    // No ad on save-changes — ads only fire at explicit save-to-phone / last-verify.
   };
 
   const handleDownload = async () => {
