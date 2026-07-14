@@ -9,22 +9,13 @@ import { useTranslation } from "react-i18next";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
 import LanguageSelector from "@/components/LanguageSelector";
 
-import { showInterstitial, prefetchInterstitial } from "@/lib/ads";
 
 const Index = () => {
   const { user, loading } = useAuth();
   const { t } = useTranslation();
 
-  useEffect(() => {
-    // Ad Trigger 1: app launch, once per session, only when online.
-    if (sessionStorage.getItem("launchAdShown") === "1") return;
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    sessionStorage.setItem("launchAdShown", "1");
-    prefetchInterstitial();
-    // Small delay so the host overlay registers first.
-    const t = setTimeout(() => { showInterstitial("app-launch"); }, 250);
-    return () => clearTimeout(t);
-  }, []);
+  // Note: no app-launch or navigation-based interstitial ads.
+  // Ads only fire at explicit user actions (identity verified, save-to-phone).
 
 
   if (loading) {
