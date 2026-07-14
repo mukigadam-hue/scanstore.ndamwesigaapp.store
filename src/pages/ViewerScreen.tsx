@@ -113,8 +113,7 @@ export default function ViewerScreen() {
   };
 
   const handleClose = async () => {
-    // Ad Trigger 4: Close Document
-    await showInterstitial("close-document");
+    // No ad on close — back navigation must never trigger interstitials.
     navigate("/");
   };
 
