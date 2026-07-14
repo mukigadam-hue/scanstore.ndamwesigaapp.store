@@ -807,31 +807,12 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
         ) : previewUrl ? (
           <>
             {isImage && (
-              <div
-                style={{
-                  minWidth: "100%",
-                  minHeight: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: zoom > 1 ? "16px" : "0",
-                }}
-              >
-                <img
-                  src={previewUrl}
-                  alt={doc.name}
-                  className="select-none"
-                  style={{
-                    width: `${zoom * 100}%`,
-                    height: "auto",
-                    maxWidth: zoom <= 1 ? "100%" : "none",
-                    maxHeight: zoom <= 1 ? "100%" : "none",
-                    objectFit: "contain",
-                    transition: pinchStartDist ? "none" : "width 0.15s ease",
-                  }}
-                  draggable={false}
-                />
-              </div>
+              <AsyncImage
+                src={previewUrl}
+                alt={doc.name}
+                zoom={zoom}
+                pinching={!!pinchStartDist}
+              />
             )}
 
             {isPdf && (
