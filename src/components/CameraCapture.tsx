@@ -1034,6 +1034,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // Save the assembled two-sided ID directly to the user's phone.
   const saveIdToPhone = async (asPdf: boolean) => {
+    // Fire the interstitial immediately as the save starts, so it plays
+    // while we assemble the ID sides and write the file in the background.
+    triggerNativeAd("scan-save-phone");
     try {
       const combined = await combineIdSides();
       if (!combined) return;
@@ -1049,7 +1052,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         await downloadBlob(file, file.name);
       }
       toast.success("ID saved to your phone");
-      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name !== "AbortError") toast.error("Could not save to phone");
