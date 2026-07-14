@@ -988,7 +988,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const blob = pdf.output("blob");
       await downloadBlob(blob, `scan_${Date.now()}.pdf`);
       toast.success("PDF saved to your phone", { id: tid });
-      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
