@@ -961,6 +961,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
+    // Fire the interstitial immediately while we build the PDF in the background.
+    triggerNativeAd("scan-save-phone");
     const tid = toast.loading("Preparing PDF…");
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
