@@ -72,14 +72,21 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setSchool("");
 
     if (updated.size >= requiredCount) {
-      // Trigger native AdMob interstitial via WebViewGold (no-op when offline
-      // or outside the native shell), then fall through to the in-app
-      // interstitial host before revealing the success screen.
+      // Fire the interstitial ad on final verification, with a strict
+      // 2-minute per-trigger cooldown so rapid re-verifies don't re-show.
       setPhase("playing_ad");
-      if (typeof navigator !== "undefined" && navigator.onLine) {
+      const COOLDOWN_MS = 2 * 60 * 1000;
+      const key = "ad_cooldown_identity-verified";
+      let inCooldown = false;
+      try {
+        const last = parseInt(localStorage.getItem(key) || "0", 10);
+        inCooldown = last > 0 && Date.now() - last < COOLDOWN_MS;
+      } catch {}
+      if (!inCooldown && typeof navigator !== "undefined" && navigator.onLine) {
         triggerNativeAd("identity-verified");
+        try { localStorage.setItem(key, String(Date.now())); } catch {}
+        await showInterstitial("identity-verified", COOLDOWN_MS);
       }
-      await showInterstitial("identity-verified");
       setPhase("verification_success");
     } else {
       const remaining = requiredCount - updated.size;
