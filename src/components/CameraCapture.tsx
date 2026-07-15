@@ -1773,7 +1773,58 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               </div>
             )}
 
+            {/* Live corner detection overlay (Scan mode only) */}
+            {scanMode === "document" && liveCorners && !scanning && !photoCapturing && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 4 }}>
+                <polygon
+                  points={liveCorners.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="rgba(74, 222, 128, 0.15)"
+                  stroke="#4ade80"
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                />
+                {liveCorners.map((p, i) => (
+                  <circle key={i} cx={p.x} cy={p.y} r={8} fill="#4ade80" stroke="#000" strokeWidth={2} />
+                ))}
+              </svg>
+            )}
+
+            {/* Helpful on-screen instructions */}
+            {streaming && !scanning && !photoCapturing && !captured && (
+              <div className="absolute bottom-24 left-0 right-0 flex justify-center pointer-events-none px-4">
+                <span className="text-[11px] text-white/85 bg-black/55 px-3 py-1 rounded-full text-center">
+                  {scanMode === "photo"
+                    ? "Center the document, then tap the shutter"
+                    : liveConfidence >= 0.55
+                    ? "Hold still — auto-scanning…"
+                    : "Keep document within frame — auto-scan when 4 corners are found"}
+                </span>
+              </div>
+            )}
+
+            {/* Frozen frame for instant capture feedback */}
+            {frozenFrame && (
+              <img
+                src={frozenFrame}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                style={{ zIndex: 6 }}
+              />
+            )}
+
+            {/* Shutter flash — 300ms hardware-accelerated animation */}
+            <div
+              key={flashKey}
+              className="absolute inset-0 pointer-events-none bg-white"
+              style={{
+                zIndex: 7,
+                opacity: 0,
+                animation: flashKey > 0 ? "capture-flash 300ms ease-out forwards" : undefined,
+              }}
+            />
+
             {photoCapturing && (
+
               <div className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
                 <span className="text-white text-sm font-medium bg-black/60 px-3 py-1 rounded-full">
                   Capturing…
