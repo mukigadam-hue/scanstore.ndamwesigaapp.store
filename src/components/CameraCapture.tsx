@@ -8,6 +8,8 @@ import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
 import { downloadBlob } from "@/lib/downloadFile";
 import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
+import { detectDocumentCorners, warpDocument, estimateOutputSize, type Quad } from "@/lib/documentProcessor";
+import ManualCropScreen from "@/components/ManualCropScreen";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -16,7 +18,8 @@ interface CameraCaptureProps {
   onScanStart?: () => void;
 }
 
-type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview" | "id-layout";
+type ScanMode = "select" | "document" | "photo" | "photo-crop" | "id-front" | "id-back" | "id-preview" | "id-layout";
+
 
 interface IdPlacement { xMm: number; yMm: number; widthMm: number; }
 interface FrameRect { x: number; y: number; width: number; height: number; }
