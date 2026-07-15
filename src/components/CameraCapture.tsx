@@ -1035,12 +1035,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // Save the assembled two-sided ID directly to the user's phone.
   const saveIdToPhone = async (asPdf: boolean) => {
-    // Fire the interstitial immediately as the save starts, so it plays
-    // while we assemble the ID sides and write the file in the background.
-    triggerNativeAd("scan-save-phone");
+    const tid = toast.loading("Saving ID to your phone…");
     try {
       const combined = await combineIdSides();
-      if (!combined) return;
+      if (!combined) { toast.dismiss(tid); return; }
       if (asPdf) {
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: false });
         const pageW = pdf.internal.pageSize.getWidth();
@@ -1052,12 +1050,16 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const file = dataUrlToFile(combined, `id_scan_${Date.now()}.jpg`, "image/jpeg");
         await downloadBlob(file, file.name);
       }
-      toast.success("ID saved to your phone");
+      toast.success("ID saved successfully", { id: tid });
+      // Ad fires ONLY after the ID has been saved successfully.
+      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
-      if (e?.name !== "AbortError") toast.error("Could not save to phone");
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save to phone", { id: tid });
     }
   };
+
 
   const handleClose = () => {
     stopCamera();
