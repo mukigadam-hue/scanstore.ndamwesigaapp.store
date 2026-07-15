@@ -1425,6 +1425,28 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               </div>
             </button>
 
+            {/* Take Photo (manual crop, color preserved) */}
+            <button
+              onClick={startPhotoMode}
+              className="group relative overflow-hidden rounded-2xl border-2 border-sky-400/30 bg-gradient-to-br from-sky-400/10 to-sky-500/5 p-6 text-left transition-all hover:border-sky-400 hover:shadow-lg hover:shadow-sky-400/20 active:scale-[0.98]"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-sky-400/20">
+                  <Camera className="h-7 w-7 text-sky-400" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-bold text-white">Take Photo</h4>
+                  <p className="text-sm text-white/60 mt-1">
+                    Capture in full color — then drag 4 corners to straighten. Keeps stamps &amp; signatures.
+                  </p>
+                </div>
+              </div>
+              <div className="absolute bottom-3 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ArrowRight className="h-5 w-5 text-sky-400" />
+              </div>
+            </button>
+
+
             {/* ID Two-Sided */}
             <button
               onClick={startIdMode}
