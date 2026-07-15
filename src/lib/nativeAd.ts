@@ -49,15 +49,19 @@ export function preloadNativeAds(): void {
       "cacheInterstitial",
       "prepareInterstitial",
     ]);
+    // NOTE: do NOT include "showBanner" here — some wrappers actually
+    // render a banner when that method is called, which caused abrupt
+    // ads to appear on app start / back navigation. Preload only.
     callFirst([
       "preloadBanner",
       "loadBanner",
-      "showBanner", // some wrappers auto-cache on first show
+      "cacheBanner",
     ]);
   } catch {
     /* never throw */
   }
 }
+
 
 /** True when the app is running inside an Android WebView shell (WebViewGold). */
 export function isAndroidWebView(): boolean {
