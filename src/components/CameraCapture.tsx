@@ -1285,12 +1285,75 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     startCamera(facingMode);
   };
 
+  const startPhotoMode = () => {
+    setScanMode("photo");
+    startCamera(facingMode);
+  };
+
   const startIdMode = () => {
     setScanMode("id-front");
     startCamera(facingMode);
   };
 
+  // Called from the manual crop screen after the user positions the 4 dots.
+  const handlePhotoCropConfirm = async (corners: Quad, imageSize: { width: number; height: number }) => {
+    if (!photoRawUrl) return;
+    const tid = toast.loading("Straightening…");
+    try {
+      const res = await fetch(photoRawUrl);
+      const blob = await res.blob();
+      const bitmap = await createImageBitmap(blob);
+      const c = document.createElement("canvas");
+      c.width = imageSize.width;
+      c.height = imageSize.height;
+      const ctx = c.getContext("2d");
+      if (!ctx) throw new Error("no ctx");
+      ctx.drawImage(bitmap, 0, 0);
+      const src = ctx.getImageData(0, 0, imageSize.width, imageSize.height);
+      const outSize = estimateOutputSize(corners, 2000);
+      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: false });
+      const out = document.createElement("canvas");
+      out.width = warped.width;
+      out.height = warped.height;
+      out.getContext("2d")!.putImageData(warped, 0, 0);
+      const file = await canvasToFile(out, `photo_${Date.now()}.jpg`, "image/jpeg", 0.92, {
+        timeoutMs: 800,
+        fallbackMaxDimension: 1800,
+      });
+      setCapturedPreview(file);
+      clearPhotoRaw();
+      setScanMode("photo");
+      toast.success("Photo ready", { id: tid });
+    } catch (e) {
+      console.error("photo warp failed", e);
+      toast.error("Could not straighten — using original", { id: tid });
+      // Fallback: use the raw color photo as-is.
+      try {
+        const res = await fetch(photoRawUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+        setCapturedPreview(file);
+        clearPhotoRaw();
+        setScanMode("photo");
+      } catch { /* give up */ }
+    }
+  };
+
   if (!open) return null;
+
+  // Manual crop adjuster screen — shown after "Take Photo".
+  if (scanMode === "photo-crop" && photoRawUrl) {
+    return (
+      <ManualCropScreen
+        open
+        imageUrl={photoRawUrl}
+        onConfirm={handlePhotoCropConfirm}
+        onRetake={() => { clearPhotoRaw(); setScanMode("photo"); startCamera(facingMode); }}
+        onCancel={handleClose}
+      />
+    );
+  }
+
 
   const renderSaveChoices = (kind: "capture" | "id") => (
     <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 px-4" onClick={() => setSaveChoicesOpen(null)}>
