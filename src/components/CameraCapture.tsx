@@ -953,6 +953,90 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     }
   };
 
+  // Live corner-detection loop for auto-fire scan.
+  // Samples the video ~2×/second, runs the worker's detector on a low-res
+  // frame, and auto-triggers scanDocument when 4 stable corners are held
+  // for ~700ms. Only runs while the document scanner is idle.
+  useEffect(() => {
+    if (!open || !streaming || scanning || photoCapturing || captured) return;
+    if (scanMode !== "document") { setLiveCorners(null); setLiveConfidence(0); return; }
+
+    let cancelled = false;
+    let sampleCanvas: HTMLCanvasElement | null = document.createElement("canvas");
+    const SAMPLE_MAX = 480;
+
+    const tick = async () => {
+      if (cancelled || !videoRef.current || !sampleCanvas) return;
+      const v = videoRef.current;
+      if (v.readyState < 2 || !v.videoWidth) return;
+      try {
+        const displayW = v.clientWidth || v.videoWidth;
+        const displayH = v.clientHeight || v.videoHeight;
+        const visible = getObjectCoverSourceRect(v.videoWidth, v.videoHeight, displayW, displayH);
+        const scale = SAMPLE_MAX / Math.max(visible.visibleW, visible.visibleH);
+        sampleCanvas.width = Math.max(80, Math.round(visible.visibleW * scale));
+        sampleCanvas.height = Math.max(60, Math.round(visible.visibleH * scale));
+        const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(v, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, sampleCanvas.width, sampleCanvas.height);
+        const img = ctx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
+        const { corners, confidence } = await detectDocumentCorners(img);
+        if (cancelled) return;
+        setLiveConfidence(confidence);
+        if (corners && confidence >= 0.55) {
+          // Map corners from sample canvas back to on-screen CSS pixels
+          // (frame-relative to the video element) for the overlay display.
+          const cssPerSample = displayW / sampleCanvas.width;
+          const cssCorners: Quad = corners.map((p) => ({
+            x: p.x * cssPerSample,
+            y: p.y * (displayH / sampleCanvas.height),
+          })) as Quad;
+          setLiveCorners(cssCorners);
+          // Stability check: corners haven't moved much across 2 samples.
+          const prev = stableCornersRef.current.corners;
+          const near = prev && prev.every((p, i) => Math.hypot(p.x - cssCorners[i].x, p.y - cssCorners[i].y) < displayW * 0.03);
+          if (near) {
+            stableCornersRef.current.count++;
+          } else {
+            stableCornersRef.current.count = 1;
+            stableCornersRef.current.corners = cssCorners;
+          }
+          if (
+            stableCornersRef.current.count >= 2 &&
+            !autoFireInFlightRef.current &&
+            Date.now() - stableCornersRef.current.lastFireAt > 4000
+          ) {
+            autoFireInFlightRef.current = true;
+            stableCornersRef.current.lastFireAt = Date.now();
+            try { await scanDocument(); }
+            finally { autoFireInFlightRef.current = false; stableCornersRef.current.count = 0; }
+          }
+        } else {
+          setLiveCorners(null);
+          stableCornersRef.current.count = 0;
+          stableCornersRef.current.corners = null;
+        }
+      } catch {
+        // ignore; worker may be busy
+      }
+    };
+
+    const id = window.setInterval(tick, 500);
+    // Kick off after a small delay so the camera stabilizes.
+    const kick = window.setTimeout(tick, 350);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.clearTimeout(kick);
+      sampleCanvas = null;
+      setLiveCorners(null);
+      stableCornersRef.current = { corners: null, count: 0, lastFireAt: stableCornersRef.current.lastFireAt };
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, streaming, scanning, photoCapturing, captured, scanMode]);
+
+
+
   // Decode a data URL into an ImageBitmap (much faster than new Image()).
   const decodeImage = async (dataUrl: string): Promise<ImageBitmap | HTMLImageElement> => {
     try {
