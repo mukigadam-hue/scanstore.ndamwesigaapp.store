@@ -945,19 +945,19 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // / file picker / native bridge), bypassing the in-app vault flow.
   const savePhotoToPhone = async () => {
     if (!capturedFile) return;
-    // Fire the interstitial ad IMMEDIATELY as the save action starts, so
-    // it plays while the file is being written in the background.
-    triggerNativeAd("scan-save-phone");
     const tid = toast.loading("Saving to your phone…");
     try {
       await downloadBlob(capturedFile, capturedFile.name);
-      toast.success("Saved to your phone", { id: tid });
+      toast.success("File saved successfully", { id: tid });
+      // Ad fires ONLY after the save has completed — clean post-task transition.
+      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
       else toast.error("Could not save to phone", { id: tid });
     }
   };
+
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
