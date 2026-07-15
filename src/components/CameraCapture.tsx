@@ -735,7 +735,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setScanStatusText(`Scanning ${scanMode === "id-front" ? "ID front" : scanMode === "id-back" ? "ID back" : "document"}`);
     setScanning(true);
     setScanProgress(0);
+    // Instant capture flash for high-speed feedback.
+    fireCaptureFlash();
     await nextFrame();
+
 
     const video = videoRef.current;
     const scanCanvas = scanCanvasRef.current;
