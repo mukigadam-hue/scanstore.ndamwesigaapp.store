@@ -839,15 +839,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     const prefix = isIdScan ? "id_scan_side" : "scan_image";
     let filePromise: Promise<File> | null = null;
 
+    // For full-document scans, offload perspective warp + adaptive
+    // thresholding to the web worker so the main thread stays smooth.
+    // If corner detection is confident, we replace mainCanvas with the
+    // warped, flattened result BEFORE the enhance pass runs.
+    let workerWarped = false;
+    if (!isIdScan && mainCtx) {
+      try {
+        const scanImageData = scanCtx.getImageData(0, 0, targetW, targetH);
+        const detection = await Promise.race([
+          detectDocumentCorners(scanImageData),
+          new Promise<{ corners: null; confidence: number }>((resolve) =>
+            setTimeout(() => resolve({ corners: null, confidence: 0 }), 800)
+          ),
+        ]);
+        if (detection.corners && detection.confidence >= 0.42) {
+          // Second copy since transferable moved the first.
+          const scanImageData2 = scanCtx.getImageData(0, 0, targetW, targetH);
+          const outSize = estimateOutputSize(detection.corners, Math.max(targetW, targetH));
+          const warped = await Promise.race([
+            warpDocument(scanImageData2, detection.corners, outSize.outW, outSize.outH, { adaptiveThreshold: true }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+          ]);
+          if (warped) {
+            mainCanvas.width = warped.width;
+            mainCanvas.height = warped.height;
+            mainCtx.putImageData(warped, 0, 0);
+            workerWarped = true;
+          }
+        }
+      } catch (err) {
+        // Fall through to the existing enhance path.
+        console.debug("Worker warp skipped:", err);
+      }
+    }
+
     // Enhancement and JPEG encoding start during the first sweep frame so
     // older WebViews do not sit on the camera screen after the animation ends.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      if (!workerWarped) {
+        enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      }
       filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
       });
     });
+
 
     const file = await (filePromise ?? canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
       timeoutMs: profile.encodeTimeoutMs,
