@@ -259,6 +259,25 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
 
+  // Instant-feedback capture flash (300ms) + optional frozen frame preview.
+  const [flashKey, setFlashKey] = useState(0);
+  const [frozenFrame, setFrozenFrame] = useState<string | null>(null);
+  const frozenObjectUrlRef = useRef<string | null>(null);
+
+  // Photo mode: raw color capture handed to the manual crop screen.
+  const [photoRawUrl, setPhotoRawUrl] = useState<string | null>(null);
+  const photoRawObjectUrlRef = useRef<string | null>(null);
+
+  // Live auto-scan: 4-corner detection running in the worker.
+  const [liveCorners, setLiveCorners] = useState<Quad | null>(null);
+  const [liveConfidence, setLiveConfidence] = useState(0);
+  const stableCornersRef = useRef<{ corners: Quad | null; count: number; lastFireAt: number }>({
+    corners: null,
+    count: 0,
+    lastFireAt: 0,
+  });
+  const autoFireInFlightRef = useRef(false);
+
   // ID scanning state
   const [scanMode, setScanMode] = useState<ScanMode>("select");
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
@@ -270,6 +289,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [quality, setQuality] = useState(0);
   const [qualityHint, setQualityHint] = useState<string>("Hold steady, fill the frame");
   const qualityCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
 
   // ID A4 layout editor state
   const [idLayout, setIdLayout] = useState<{ front: IdPlacement; back: IdPlacement }>({
