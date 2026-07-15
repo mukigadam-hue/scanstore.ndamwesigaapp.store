@@ -1271,14 +1271,18 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const handleClose = () => {
     stopCamera();
     clearCapturedPreview();
+    clearFrozenFrame();
+    clearPhotoRaw();
     setScanning(false);
     setScanProgress(0);
     setPhotoCapturing(false);
     setSaveChoicesOpen(null);
     setScanMode("select");
+    setLiveCorners(null);
     clearIdPreviews();
     onClose();
   };
+
 
   const startDocumentMode = () => {
     setScanMode("document");
