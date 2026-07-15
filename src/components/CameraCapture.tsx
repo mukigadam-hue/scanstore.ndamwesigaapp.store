@@ -961,8 +961,6 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
-    // Fire the interstitial immediately while we build the PDF in the background.
-    triggerNativeAd("scan-save-phone");
     const tid = toast.loading("Preparing PDF…");
     try {
       const img = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -987,13 +985,16 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
       const blob = pdf.output("blob");
       await downloadBlob(blob, `scan_${Date.now()}.pdf`);
-      toast.success("PDF saved to your phone", { id: tid });
+      toast.success("PDF saved successfully", { id: tid });
+      // Ad fires ONLY after the PDF save has completed.
+      triggerNativeAd("scan-save-phone");
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
       else toast.error("Could not save PDF to phone", { id: tid });
     }
   };
+
 
   const saveAsDocument = () => {
     if (!captured || !capturedFile) return;
