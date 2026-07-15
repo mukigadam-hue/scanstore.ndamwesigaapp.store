@@ -8,6 +8,8 @@ import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
 import { downloadBlob } from "@/lib/downloadFile";
 import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
+import { detectDocumentCorners, warpDocument, estimateOutputSize, type Quad } from "@/lib/documentProcessor";
+import ManualCropScreen from "@/components/ManualCropScreen";
 
 interface CameraCaptureProps {
   open: boolean;
@@ -16,7 +18,8 @@ interface CameraCaptureProps {
   onScanStart?: () => void;
 }
 
-type ScanMode = "select" | "document" | "id-front" | "id-back" | "id-preview" | "id-layout";
+type ScanMode = "select" | "document" | "photo" | "photo-crop" | "id-front" | "id-back" | "id-preview" | "id-layout";
+
 
 interface IdPlacement { xMm: number; yMm: number; widthMm: number; }
 interface FrameRect { x: number; y: number; width: number; height: number; }
@@ -256,6 +259,25 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
 
+  // Instant-feedback capture flash (300ms) + optional frozen frame preview.
+  const [flashKey, setFlashKey] = useState(0);
+  const [frozenFrame, setFrozenFrame] = useState<string | null>(null);
+  const frozenObjectUrlRef = useRef<string | null>(null);
+
+  // Photo mode: raw color capture handed to the manual crop screen.
+  const [photoRawUrl, setPhotoRawUrl] = useState<string | null>(null);
+  const photoRawObjectUrlRef = useRef<string | null>(null);
+
+  // Live auto-scan: 4-corner detection running in the worker.
+  const [liveCorners, setLiveCorners] = useState<Quad | null>(null);
+  const [liveConfidence, setLiveConfidence] = useState(0);
+  const stableCornersRef = useRef<{ corners: Quad | null; count: number; lastFireAt: number }>({
+    corners: null,
+    count: 0,
+    lastFireAt: 0,
+  });
+  const autoFireInFlightRef = useRef(false);
+
   // ID scanning state
   const [scanMode, setScanMode] = useState<ScanMode>("select");
   const [idFrontImage, setIdFrontImage] = useState<string | null>(null);
@@ -267,6 +289,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [quality, setQuality] = useState(0);
   const [qualityHint, setQualityHint] = useState<string>("Hold steady, fill the frame");
   const qualityCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
 
   // ID A4 layout editor state
   const [idLayout, setIdLayout] = useState<{ front: IdPlacement; back: IdPlacement }>({
@@ -609,17 +632,71 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     });
   };
 
+  // Instant-feedback flash: freezes the current video frame visually and
+  // triggers a hardware-accelerated 300ms shutter animation. Returns the
+  // frozen JPEG blob URL so the caller can hold the freeze until decoding
+  // finishes.
+  const fireCaptureFlash = (): { frozenUrl: string | null } => {
+    setFlashKey((k) => k + 1);
+    try {
+      const video = videoRef.current;
+      if (!video || !video.videoWidth) return { frozenUrl: null };
+      const displayW = video.clientWidth || video.videoWidth;
+      const displayH = video.clientHeight || video.videoHeight;
+      const visible = getObjectCoverSourceRect(video.videoWidth, video.videoHeight, displayW, displayH);
+      // Small freeze frame — just for the visual freeze, not for saving.
+      const freezeMax = 720;
+      const scale = Math.min(1, freezeMax / Math.max(visible.visibleW, visible.visibleH));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(visible.visibleW * scale));
+      c.height = Math.max(1, Math.round(visible.visibleH * scale));
+      const ctx = c.getContext("2d");
+      if (!ctx) return { frozenUrl: null };
+      ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, c.width, c.height);
+      const url = c.toDataURL("image/jpeg", 0.7);
+      if (frozenObjectUrlRef.current && frozenObjectUrlRef.current.startsWith("blob:")) {
+        try { URL.revokeObjectURL(frozenObjectUrlRef.current); } catch { /* ignore */ }
+      }
+      frozenObjectUrlRef.current = url;
+      setFrozenFrame(url);
+      return { frozenUrl: url };
+    } catch {
+      return { frozenUrl: null };
+    }
+  };
+
+  const clearFrozenFrame = useCallback(() => {
+    if (frozenObjectUrlRef.current && frozenObjectUrlRef.current.startsWith("blob:")) {
+      try { URL.revokeObjectURL(frozenObjectUrlRef.current); } catch { /* ignore */ }
+    }
+    frozenObjectUrlRef.current = null;
+    setFrozenFrame(null);
+  }, []);
+
+  const clearPhotoRaw = useCallback(() => {
+    if (photoRawObjectUrlRef.current) {
+      try { URL.revokeObjectURL(photoRawObjectUrlRef.current); } catch { /* ignore */ }
+    }
+    photoRawObjectUrlRef.current = null;
+    setPhotoRawUrl(null);
+  }, []);
+
+  // Manual "Take Photo" — capture full-color frame at highest resolution,
+  // then route to the manual crop adjuster screen (no automatic
+  // thresholding, preserves colors, stamps, and signatures).
   const takePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     onScanStart?.();
     setPhotoCapturing(true);
+    // Instant flash before any heavy work.
+    fireCaptureFlash();
     try {
       await nextFrame();
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas) return;
       const profile = getCaptureProfile();
-      const maxDimension = profile.photoMax;
+      const maxDimension = Math.max(profile.photoMax, 2000); // photo mode wants the full crop-adjust area
       const sourceW = video.videoWidth || 1280;
       const sourceH = video.videoHeight || 720;
       const displayW = video.clientWidth || sourceW;
@@ -632,20 +709,25 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (!ctx) return;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      // Save exactly the visible camera area, not the full wide sensor frame.
       ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, canvas.width, canvas.height);
-      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality, {
-        timeoutMs: profile.encodeTimeoutMs,
-        fallbackMaxDimension: profile.fallbackMax,
-      });
-      setCapturedPreview(file);
+      const blob = await canvasToBlobQuick(canvas, "image/jpeg", profile.photoQuality, profile.encodeTimeoutMs, profile.fallbackMax);
+      if (photoRawObjectUrlRef.current) {
+        try { URL.revokeObjectURL(photoRawObjectUrlRef.current); } catch { /* ignore */ }
+      }
+      const url = URL.createObjectURL(blob);
+      photoRawObjectUrlRef.current = url;
+      setPhotoRawUrl(url);
       stopCamera();
+      setScanMode("photo-crop");
+      clearFrozenFrame();
     } catch {
       toast.error("Could not capture photo on this device");
+      clearFrozenFrame();
     } finally {
       setPhotoCapturing(false);
     }
   };
+
 
   const performScan = async (): Promise<File | null> => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return null;
@@ -653,7 +735,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     setScanStatusText(`Scanning ${scanMode === "id-front" ? "ID front" : scanMode === "id-back" ? "ID back" : "document"}`);
     setScanning(true);
     setScanProgress(0);
+    // Instant capture flash for high-speed feedback.
+    fireCaptureFlash();
     await nextFrame();
+
 
     const video = videoRef.current;
     const scanCanvas = scanCanvasRef.current;
@@ -754,15 +839,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     const prefix = isIdScan ? "id_scan_side" : "scan_image";
     let filePromise: Promise<File> | null = null;
 
+    // For full-document scans, offload perspective warp + adaptive
+    // thresholding to the web worker so the main thread stays smooth.
+    // If corner detection is confident, we replace mainCanvas with the
+    // warped, flattened result BEFORE the enhance pass runs.
+    let workerWarped = false;
+    if (!isIdScan && mainCtx) {
+      try {
+        const scanImageData = scanCtx.getImageData(0, 0, targetW, targetH);
+        const detection = await Promise.race([
+          detectDocumentCorners(scanImageData),
+          new Promise<{ corners: null; confidence: number }>((resolve) =>
+            setTimeout(() => resolve({ corners: null, confidence: 0 }), 800)
+          ),
+        ]);
+        if (detection.corners && detection.confidence >= 0.42) {
+          // Second copy since transferable moved the first.
+          const scanImageData2 = scanCtx.getImageData(0, 0, targetW, targetH);
+          const outSize = estimateOutputSize(detection.corners, Math.max(targetW, targetH));
+          const warped = await Promise.race([
+            warpDocument(scanImageData2, detection.corners, outSize.outW, outSize.outH, { adaptiveThreshold: true }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+          ]);
+          if (warped) {
+            mainCanvas.width = warped.width;
+            mainCanvas.height = warped.height;
+            mainCtx.putImageData(warped, 0, 0);
+            workerWarped = true;
+          }
+        }
+      } catch (err) {
+        // Fall through to the existing enhance path.
+        console.debug("Worker warp skipped:", err);
+      }
+    }
+
     // Enhancement and JPEG encoding start during the first sweep frame so
     // older WebViews do not sit on the camera screen after the animation ends.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      if (!workerWarped) {
+        enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+      }
       filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
       });
     });
+
 
     const file = await (filePromise ?? canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
       timeoutMs: profile.encodeTimeoutMs,
@@ -829,6 +952,90 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setScanMode("id-layout");
     }
   };
+
+  // Live corner-detection loop for auto-fire scan.
+  // Samples the video ~2×/second, runs the worker's detector on a low-res
+  // frame, and auto-triggers scanDocument when 4 stable corners are held
+  // for ~700ms. Only runs while the document scanner is idle.
+  useEffect(() => {
+    if (!open || !streaming || scanning || photoCapturing || captured) return;
+    if (scanMode !== "document") { setLiveCorners(null); setLiveConfidence(0); return; }
+
+    let cancelled = false;
+    let sampleCanvas: HTMLCanvasElement | null = document.createElement("canvas");
+    const SAMPLE_MAX = 480;
+
+    const tick = async () => {
+      if (cancelled || !videoRef.current || !sampleCanvas) return;
+      const v = videoRef.current;
+      if (v.readyState < 2 || !v.videoWidth) return;
+      try {
+        const displayW = v.clientWidth || v.videoWidth;
+        const displayH = v.clientHeight || v.videoHeight;
+        const visible = getObjectCoverSourceRect(v.videoWidth, v.videoHeight, displayW, displayH);
+        const scale = SAMPLE_MAX / Math.max(visible.visibleW, visible.visibleH);
+        sampleCanvas.width = Math.max(80, Math.round(visible.visibleW * scale));
+        sampleCanvas.height = Math.max(60, Math.round(visible.visibleH * scale));
+        const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(v, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, sampleCanvas.width, sampleCanvas.height);
+        const img = ctx.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height);
+        const { corners, confidence } = await detectDocumentCorners(img);
+        if (cancelled) return;
+        setLiveConfidence(confidence);
+        if (corners && confidence >= 0.55) {
+          // Map corners from sample canvas back to on-screen CSS pixels
+          // (frame-relative to the video element) for the overlay display.
+          const cssPerSample = displayW / sampleCanvas.width;
+          const cssCorners: Quad = corners.map((p) => ({
+            x: p.x * cssPerSample,
+            y: p.y * (displayH / sampleCanvas.height),
+          })) as Quad;
+          setLiveCorners(cssCorners);
+          // Stability check: corners haven't moved much across 2 samples.
+          const prev = stableCornersRef.current.corners;
+          const near = prev && prev.every((p, i) => Math.hypot(p.x - cssCorners[i].x, p.y - cssCorners[i].y) < displayW * 0.03);
+          if (near) {
+            stableCornersRef.current.count++;
+          } else {
+            stableCornersRef.current.count = 1;
+            stableCornersRef.current.corners = cssCorners;
+          }
+          if (
+            stableCornersRef.current.count >= 2 &&
+            !autoFireInFlightRef.current &&
+            Date.now() - stableCornersRef.current.lastFireAt > 4000
+          ) {
+            autoFireInFlightRef.current = true;
+            stableCornersRef.current.lastFireAt = Date.now();
+            try { await scanDocument(); }
+            finally { autoFireInFlightRef.current = false; stableCornersRef.current.count = 0; }
+          }
+        } else {
+          setLiveCorners(null);
+          stableCornersRef.current.count = 0;
+          stableCornersRef.current.corners = null;
+        }
+      } catch {
+        // ignore; worker may be busy
+      }
+    };
+
+    const id = window.setInterval(tick, 500);
+    // Kick off after a small delay so the camera stabilizes.
+    const kick = window.setTimeout(tick, 350);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.clearTimeout(kick);
+      sampleCanvas = null;
+      setLiveCorners(null);
+      stableCornersRef.current = { corners: null, count: 0, lastFireAt: stableCornersRef.current.lastFireAt };
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, streaming, scanning, photoCapturing, captured, scanMode]);
+
+
 
   // Decode a data URL into an ImageBitmap (much faster than new Image()).
   const decodeImage = async (dataUrl: string): Promise<ImageBitmap | HTMLImageElement> => {
@@ -1064,17 +1271,26 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const handleClose = () => {
     stopCamera();
     clearCapturedPreview();
+    clearFrozenFrame();
+    clearPhotoRaw();
     setScanning(false);
     setScanProgress(0);
     setPhotoCapturing(false);
     setSaveChoicesOpen(null);
     setScanMode("select");
+    setLiveCorners(null);
     clearIdPreviews();
     onClose();
   };
 
+
   const startDocumentMode = () => {
     setScanMode("document");
+    startCamera(facingMode);
+  };
+
+  const startPhotoMode = () => {
+    setScanMode("photo");
     startCamera(facingMode);
   };
 
@@ -1083,7 +1299,65 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     startCamera(facingMode);
   };
 
+  // Called from the manual crop screen after the user positions the 4 dots.
+  const handlePhotoCropConfirm = async (corners: Quad, imageSize: { width: number; height: number }) => {
+    if (!photoRawUrl) return;
+    const tid = toast.loading("Straightening…");
+    try {
+      const res = await fetch(photoRawUrl);
+      const blob = await res.blob();
+      const bitmap = await createImageBitmap(blob);
+      const c = document.createElement("canvas");
+      c.width = imageSize.width;
+      c.height = imageSize.height;
+      const ctx = c.getContext("2d");
+      if (!ctx) throw new Error("no ctx");
+      ctx.drawImage(bitmap, 0, 0);
+      const src = ctx.getImageData(0, 0, imageSize.width, imageSize.height);
+      const outSize = estimateOutputSize(corners, 2000);
+      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: false });
+      const out = document.createElement("canvas");
+      out.width = warped.width;
+      out.height = warped.height;
+      out.getContext("2d")!.putImageData(warped, 0, 0);
+      const file = await canvasToFile(out, `photo_${Date.now()}.jpg`, "image/jpeg", 0.92, {
+        timeoutMs: 800,
+        fallbackMaxDimension: 1800,
+      });
+      setCapturedPreview(file);
+      clearPhotoRaw();
+      setScanMode("photo");
+      toast.success("Photo ready", { id: tid });
+    } catch (e) {
+      console.error("photo warp failed", e);
+      toast.error("Could not straighten — using original", { id: tid });
+      // Fallback: use the raw color photo as-is.
+      try {
+        const res = await fetch(photoRawUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+        setCapturedPreview(file);
+        clearPhotoRaw();
+        setScanMode("photo");
+      } catch { /* give up */ }
+    }
+  };
+
   if (!open) return null;
+
+  // Manual crop adjuster screen — shown after "Take Photo".
+  if (scanMode === "photo-crop" && photoRawUrl) {
+    return (
+      <ManualCropScreen
+        open
+        imageUrl={photoRawUrl}
+        onConfirm={handlePhotoCropConfirm}
+        onRetake={() => { clearPhotoRaw(); setScanMode("photo"); startCamera(facingMode); }}
+        onCancel={handleClose}
+      />
+    );
+  }
+
 
   const renderSaveChoices = (kind: "capture" | "id") => (
     <div className="absolute inset-0 z-30 flex items-end justify-center bg-black/55 px-4" onClick={() => setSaveChoicesOpen(null)}>
@@ -1154,6 +1428,28 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 <ArrowRight className="h-5 w-5 text-primary" />
               </div>
             </button>
+
+            {/* Take Photo (manual crop, color preserved) */}
+            <button
+              onClick={startPhotoMode}
+              className="group relative overflow-hidden rounded-2xl border-2 border-sky-400/30 bg-gradient-to-br from-sky-400/10 to-sky-500/5 p-6 text-left transition-all hover:border-sky-400 hover:shadow-lg hover:shadow-sky-400/20 active:scale-[0.98]"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-sky-400/20">
+                  <Camera className="h-7 w-7 text-sky-400" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-bold text-white">Take Photo</h4>
+                  <p className="text-sm text-white/60 mt-1">
+                    Capture in full color — then drag 4 corners to straighten. Keeps stamps &amp; signatures.
+                  </p>
+                </div>
+              </div>
+              <div className="absolute bottom-3 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <ArrowRight className="h-5 w-5 text-sky-400" />
+              </div>
+            </button>
+
 
             {/* ID Two-Sided */}
             <button
@@ -1481,7 +1777,58 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               </div>
             )}
 
+            {/* Live corner detection overlay (Scan mode only) */}
+            {scanMode === "document" && liveCorners && !scanning && !photoCapturing && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 4 }}>
+                <polygon
+                  points={liveCorners.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="rgba(74, 222, 128, 0.15)"
+                  stroke="#4ade80"
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                />
+                {liveCorners.map((p, i) => (
+                  <circle key={i} cx={p.x} cy={p.y} r={8} fill="#4ade80" stroke="#000" strokeWidth={2} />
+                ))}
+              </svg>
+            )}
+
+            {/* Helpful on-screen instructions */}
+            {streaming && !scanning && !photoCapturing && !captured && (
+              <div className="absolute bottom-24 left-0 right-0 flex justify-center pointer-events-none px-4">
+                <span className="text-[11px] text-white/85 bg-black/55 px-3 py-1 rounded-full text-center">
+                  {scanMode === "photo"
+                    ? "Center the document, then tap the shutter"
+                    : liveConfidence >= 0.55
+                    ? "Hold still — auto-scanning…"
+                    : "Keep document within frame — auto-scan when 4 corners are found"}
+                </span>
+              </div>
+            )}
+
+            {/* Frozen frame for instant capture feedback */}
+            {frozenFrame && (
+              <img
+                src={frozenFrame}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                style={{ zIndex: 6 }}
+              />
+            )}
+
+            {/* Shutter flash — 300ms hardware-accelerated animation */}
+            <div
+              key={flashKey}
+              className="absolute inset-0 pointer-events-none bg-white"
+              style={{
+                zIndex: 7,
+                opacity: 0,
+                animation: flashKey > 0 ? "capture-flash 300ms ease-out forwards" : undefined,
+              }}
+            />
+
             {photoCapturing && (
+
               <div className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
                 <span className="text-white text-sm font-medium bg-black/60 px-3 py-1 rounded-full">
                   Capturing…

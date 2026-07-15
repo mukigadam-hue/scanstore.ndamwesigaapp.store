@@ -69,7 +69,14 @@
   }
 }
 
+@keyframes capture-flash {
+  0%   { opacity: 0; }
+  15%  { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
 @layer utilities {
+
   .wood-gradient {
     background: linear-gradient(
       180deg,
