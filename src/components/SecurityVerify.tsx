@@ -83,10 +83,11 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
         inCooldown = last > 0 && Date.now() - last < COOLDOWN_MS;
       } catch {}
       if (!inCooldown && typeof navigator !== "undefined" && navigator.onLine) {
-        triggerNativeAd("identity-verified");
-        try { localStorage.setItem(key, String(Date.now())); } catch {}
+        // showInterstitial handles the native bridge call + cooldown mark.
+        // Do NOT also call triggerNativeAd here — that would double-fire.
         await showInterstitial("identity-verified", COOLDOWN_MS);
       }
+
       setPhase("verification_success");
     } else {
       const remaining = requiredCount - updated.size;
