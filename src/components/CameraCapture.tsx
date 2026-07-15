@@ -632,17 +632,71 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     });
   };
 
+  // Instant-feedback flash: freezes the current video frame visually and
+  // triggers a hardware-accelerated 300ms shutter animation. Returns the
+  // frozen JPEG blob URL so the caller can hold the freeze until decoding
+  // finishes.
+  const fireCaptureFlash = (): { frozenUrl: string | null } => {
+    setFlashKey((k) => k + 1);
+    try {
+      const video = videoRef.current;
+      if (!video || !video.videoWidth) return { frozenUrl: null };
+      const displayW = video.clientWidth || video.videoWidth;
+      const displayH = video.clientHeight || video.videoHeight;
+      const visible = getObjectCoverSourceRect(video.videoWidth, video.videoHeight, displayW, displayH);
+      // Small freeze frame — just for the visual freeze, not for saving.
+      const freezeMax = 720;
+      const scale = Math.min(1, freezeMax / Math.max(visible.visibleW, visible.visibleH));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(visible.visibleW * scale));
+      c.height = Math.max(1, Math.round(visible.visibleH * scale));
+      const ctx = c.getContext("2d");
+      if (!ctx) return { frozenUrl: null };
+      ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, c.width, c.height);
+      const url = c.toDataURL("image/jpeg", 0.7);
+      if (frozenObjectUrlRef.current && frozenObjectUrlRef.current.startsWith("blob:")) {
+        try { URL.revokeObjectURL(frozenObjectUrlRef.current); } catch { /* ignore */ }
+      }
+      frozenObjectUrlRef.current = url;
+      setFrozenFrame(url);
+      return { frozenUrl: url };
+    } catch {
+      return { frozenUrl: null };
+    }
+  };
+
+  const clearFrozenFrame = useCallback(() => {
+    if (frozenObjectUrlRef.current && frozenObjectUrlRef.current.startsWith("blob:")) {
+      try { URL.revokeObjectURL(frozenObjectUrlRef.current); } catch { /* ignore */ }
+    }
+    frozenObjectUrlRef.current = null;
+    setFrozenFrame(null);
+  }, []);
+
+  const clearPhotoRaw = useCallback(() => {
+    if (photoRawObjectUrlRef.current) {
+      try { URL.revokeObjectURL(photoRawObjectUrlRef.current); } catch { /* ignore */ }
+    }
+    photoRawObjectUrlRef.current = null;
+    setPhotoRawUrl(null);
+  }, []);
+
+  // Manual "Take Photo" — capture full-color frame at highest resolution,
+  // then route to the manual crop adjuster screen (no automatic
+  // thresholding, preserves colors, stamps, and signatures).
   const takePhoto = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     onScanStart?.();
     setPhotoCapturing(true);
+    // Instant flash before any heavy work.
+    fireCaptureFlash();
     try {
       await nextFrame();
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas) return;
       const profile = getCaptureProfile();
-      const maxDimension = profile.photoMax;
+      const maxDimension = Math.max(profile.photoMax, 2000); // photo mode wants the full crop-adjust area
       const sourceW = video.videoWidth || 1280;
       const sourceH = video.videoHeight || 720;
       const displayW = video.clientWidth || sourceW;
@@ -655,20 +709,25 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (!ctx) return;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      // Save exactly the visible camera area, not the full wide sensor frame.
       ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, canvas.width, canvas.height);
-      const file = await canvasToFile(canvas, `photo_${Date.now()}.jpg`, "image/jpeg", profile.photoQuality, {
-        timeoutMs: profile.encodeTimeoutMs,
-        fallbackMaxDimension: profile.fallbackMax,
-      });
-      setCapturedPreview(file);
+      const blob = await canvasToBlobQuick(canvas, "image/jpeg", profile.photoQuality, profile.encodeTimeoutMs, profile.fallbackMax);
+      if (photoRawObjectUrlRef.current) {
+        try { URL.revokeObjectURL(photoRawObjectUrlRef.current); } catch { /* ignore */ }
+      }
+      const url = URL.createObjectURL(blob);
+      photoRawObjectUrlRef.current = url;
+      setPhotoRawUrl(url);
       stopCamera();
+      setScanMode("photo-crop");
+      clearFrozenFrame();
     } catch {
       toast.error("Could not capture photo on this device");
+      clearFrozenFrame();
     } finally {
       setPhotoCapturing(false);
     }
   };
+
 
   const performScan = async (): Promise<File | null> => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return null;
