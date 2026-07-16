@@ -905,14 +905,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     return file;
   };
 
-  const scanDocument = async () => {
-    // Give instant visual feedback before the (sync) crop math runs.
+  // Auto-scan path (invoked by live corner detection). Runs the automatic
+  // corner-warp + adaptive-threshold pipeline and lands on the review screen.
+  const autoScanDocument = async () => {
     setScanning(true);
     setScanProgress(0);
     await nextFrame();
     try {
       const result = await performScan();
       if (result) {
+        setReviewContrast(100);
+        setReviewBrightness(100);
         setCapturedPreview(result);
       }
     } catch {
@@ -920,6 +923,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     } finally {
       setScanning(false);
       setScanProgress(0);
+    }
+  };
+
+  // Manual "Scan" button — captures the raw high-res frame and routes to
+  // the crop-adjust screen so the user can drag the 4 corners. On confirm,
+  // the image is perspective-warped and adaptively thresholded (BW scan).
+  const scanDocument = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    onScanStart?.();
+    setPhotoCapturing(true);
+    fireCaptureFlash();
+    try {
+      await nextFrame();
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) return;
+      const profile = getCaptureProfile();
+      const maxDimension = Math.max(profile.documentMax, 2000);
+      const sourceW = video.videoWidth || 1280;
+      const sourceH = video.videoHeight || 720;
+      const displayW = video.clientWidth || sourceW;
+      const displayH = video.clientHeight || sourceH;
+      const visible = getObjectCoverSourceRect(sourceW, sourceH, displayW, displayH);
+      const scale = Math.min(1, maxDimension / Math.max(visible.visibleW, visible.visibleH));
+      canvas.width = Math.max(1, Math.round(visible.visibleW * scale));
+      canvas.height = Math.max(1, Math.round(visible.visibleH * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, canvas.width, canvas.height);
+      const blob = await canvasToBlobQuick(canvas, "image/jpeg", profile.documentQuality, profile.encodeTimeoutMs, profile.fallbackMax);
+      if (photoRawObjectUrlRef.current) {
+        try { URL.revokeObjectURL(photoRawObjectUrlRef.current); } catch { /* ignore */ }
+      }
+      const url = URL.createObjectURL(blob);
+      photoRawObjectUrlRef.current = url;
+      setPhotoRawUrl(url);
+      stopCamera();
+      setPendingBW(true);
+      setScanMode("photo-crop");
+      clearFrozenFrame();
+    } catch {
+      toast.error("Could not capture on this device");
+      clearFrozenFrame();
+    } finally {
+      setPhotoCapturing(false);
     }
   };
 
@@ -944,9 +994,19 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const url = URL.createObjectURL(result);
       idObjectUrlsRef.current.push(url);
       setIdFrontImage(url);
+      setScanning(false);
+      setScanProgress(0);
       setScanMode("id-back");
-      // Restart camera for back side
-      setTimeout(() => startCamera(facingMode), 300);
+      toast.success("Front captured — now scan the BACK side");
+      // Restart camera reliably for the back side (await, retry once if it
+      // races with the track release).
+      await new Promise((r) => setTimeout(r, 350));
+      try {
+        await startCamera(facingMode);
+      } catch {
+        await new Promise((r) => setTimeout(r, 400));
+        try { await startCamera(facingMode); } catch { /* give up */ }
+      }
     } else {
       const url = URL.createObjectURL(result);
       idObjectUrlsRef.current.push(url);
