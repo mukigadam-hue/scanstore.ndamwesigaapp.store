@@ -1211,9 +1211,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     return new File([blob], filename, { type });
   };
 
-  const saveAsImage = () => {
+  const saveAsImage = async () => {
     if (!capturedFile) return;
-    const file = capturedFile;
+    const file = (await bakeAdjustments()) ?? capturedFile;
     onCapture(file);
     handleClose();
   };
@@ -1224,7 +1224,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!capturedFile) return;
     const tid = toast.loading("Saving to your phone…");
     try {
-      await downloadBlob(capturedFile, capturedFile.name);
+      const file = (await bakeAdjustments()) ?? capturedFile;
+      await downloadBlob(file, file.name);
       toast.success("File saved successfully", { id: tid });
       // Ad fires ONLY after the save has completed — clean post-task transition.
       triggerNativeAd("scan-save-phone");
