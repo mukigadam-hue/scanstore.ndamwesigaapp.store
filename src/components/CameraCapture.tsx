@@ -1241,44 +1241,15 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!captured || !capturedFile) return;
     const tid = toast.loading("Preparing PDF…");
     try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const i = new Image();
-        i.onload = () => resolve(i);
-        i.onerror = reject;
-        i.src = captured;
-      });
-      const pdf = new jsPDF({
-        orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: false,
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
-      const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
-      const sw = img.width * ratio;
-      const sh = img.height * ratio;
-      const format = capturedFile.type.includes("png") ? "PNG" : "JPEG";
-      pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
-      const blob = pdf.output("blob");
-      await downloadBlob(blob, `scan_${Date.now()}.pdf`);
-      toast.success("PDF saved successfully", { id: tid });
-      // Ad fires ONLY after the PDF save has completed.
-      triggerNativeAd("scan-save-phone");
-      handleClose();
-    } catch (e: any) {
-      if (e?.name === "AbortError") toast.dismiss(tid);
-      else toast.error("Could not save PDF to phone", { id: tid });
-    }
-  };
-
-
-  const saveAsDocument = () => {
-    if (!captured || !capturedFile) return;
-    try {
-      const img = new Image();
-      img.onload = () => {
+      const baked = (await bakeAdjustments()) ?? capturedFile;
+      const bakedUrl = URL.createObjectURL(baked);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = bakedUrl;
+        });
         const pdf = new jsPDF({
           orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
           unit: "mm",
@@ -1288,28 +1259,69 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
         const margin = 5;
-        const availableWidth = pageWidth - margin * 2;
-        const availableHeight = pageHeight - margin * 2;
-        const ratio = Math.min(availableWidth / img.width, availableHeight / img.height);
-        const scaledWidth = img.width * ratio;
-        const scaledHeight = img.height * ratio;
-        const xOffset = (pageWidth - scaledWidth) / 2;
-        const yOffset = (pageHeight - scaledHeight) / 2;
-        const format = capturedFile.type.includes("png") ? "PNG" : "JPEG";
-        pdf.addImage(img, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
-        const pdfBlob = pdf.output("blob");
-        const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
-        onCapture(pdfFile);
-        toast.success("Document scanned and saved as PDF!");
+        const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
+        const sw = img.width * ratio;
+        const sh = img.height * ratio;
+        const format = baked.type.includes("png") ? "PNG" : "JPEG";
+        pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
+        const blob = pdf.output("blob");
+        await downloadBlob(blob, `scan_${Date.now()}.pdf`);
+        toast.success("PDF saved successfully", { id: tid });
+        triggerNativeAd("scan-save-phone");
         handleClose();
+      } finally {
+        try { URL.revokeObjectURL(bakedUrl); } catch { /* ignore */ }
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save PDF to phone", { id: tid });
+    }
+  };
+
+
+  const saveAsDocument = async () => {
+    if (!captured || !capturedFile) return;
+    try {
+      const baked = (await bakeAdjustments()) ?? capturedFile;
+      const bakedUrl = URL.createObjectURL(baked);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const pdf = new jsPDF({
+            orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+            unit: "mm",
+            format: "a4",
+            compress: false,
+          });
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const margin = 5;
+          const availableWidth = pageWidth - margin * 2;
+          const availableHeight = pageHeight - margin * 2;
+          const ratio = Math.min(availableWidth / img.width, availableHeight / img.height);
+          const scaledWidth = img.width * ratio;
+          const scaledHeight = img.height * ratio;
+          const xOffset = (pageWidth - scaledWidth) / 2;
+          const yOffset = (pageHeight - scaledHeight) / 2;
+          const format = baked.type.includes("png") ? "PNG" : "JPEG";
+          pdf.addImage(img, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
+          const pdfBlob = pdf.output("blob");
+          const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
+          onCapture(pdfFile);
+          toast.success("Document scanned and saved as PDF!");
+        } finally {
+          try { URL.revokeObjectURL(bakedUrl); } catch { /* ignore */ }
+          handleClose();
+        }
       };
-      img.src = captured;
+      img.src = bakedUrl;
     } catch (err) {
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
-      saveAsImage();
+      await saveAsImage();
     }
   };
+
 
   // Save the assembled two-sided ID directly to the user's phone.
   const saveIdToPhone = async (asPdf: boolean) => {
