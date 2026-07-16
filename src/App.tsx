@@ -16,21 +16,8 @@ import Privacy from "./pages/Privacy";
 import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
 import OfflineBanner from "./components/OfflineBanner";
 import NotFound from "./pages/NotFound";
-import { useEffect } from "react";
-import { prefetchInterstitial } from "@/lib/ads";
 
 const queryClient = new QueryClient();
-
-const StartupPrefetch = () => {
-  useEffect(() => {
-    // Warm the native ad cache so the first explicit trigger (identity
-    // verified / auto-lock re-verify) renders instantly. We intentionally
-    // do NOT show an interstitial on app open — ads only fire at the
-    // specific inner moments configured in the app.
-    prefetchInterstitial();
-  }, []);
-  return null;
-};
 
 
 const App = () => (
@@ -55,7 +42,6 @@ const App = () => (
           </Routes>
           <InterstitialAdOverlay />
           <OfflineBanner />
-          <StartupPrefetch />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

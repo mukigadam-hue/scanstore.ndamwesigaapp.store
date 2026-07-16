@@ -14,7 +14,6 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { showInterstitial } from "@/lib/ads";
-import { triggerNativeAd } from "@/lib/nativeAd";
 import BannerAd from "@/components/BannerAd";
 
 interface SecuritySettingsRow {
@@ -227,6 +226,11 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
 
   const remainingMethods = availableMethods.filter((m) => !verifiedMethods.has(m.id));
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/", { replace: true });
+  };
+
   if (phase === "verification_success") {
     return (
       <div
@@ -335,7 +339,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
         <Button
           variant="ghost"
           size="sm"
-          onClick={signOut}
+          onClick={handleSignOut}
           className="text-muted-foreground hover:text-foreground"
         >
           <LogOut className="h-4 w-4 mr-1.5" /> Sign Out

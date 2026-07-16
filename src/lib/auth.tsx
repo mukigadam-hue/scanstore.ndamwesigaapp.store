@@ -86,9 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setUser(null);
 
-    // Hard redirect to the landing page so all in-memory state resets.
+    // Keep sign-out inside the SPA. A hard page reload/navigation can be
+    // interpreted by Android WebView ad shells as a navigation event and show
+    // an abrupt interstitial. Individual screens navigate after signOut().
     if (typeof window !== "undefined") {
-      window.location.replace("/");
+      sessionStorage.setItem("showLandingOnce", "1");
     }
   };
 
