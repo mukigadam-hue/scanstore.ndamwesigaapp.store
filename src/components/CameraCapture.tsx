@@ -1967,11 +1967,70 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             )}
           </>
         ) : (
-          <div className="relative">
-            <img src={captured} alt="Captured" className="max-w-full max-h-full object-contain" />
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img
+              src={captured}
+              alt="Captured"
+              className="max-w-full max-h-full object-contain"
+              style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)` }}
+            />
+
+            {/* Contrast slider — vertical, left edge */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Contrast</span>
+              <input
+                type="range"
+                min={50}
+                max={200}
+                step={1}
+                value={reviewContrast}
+                onChange={(e) => setReviewContrast(Number(e.target.value))}
+                aria-label="Contrast"
+                style={{
+                  WebkitAppearance: "slider-vertical" as any,
+                  writingMode: "bt-lr" as any,
+                  width: 24,
+                  height: 200,
+                  background: "transparent",
+                }}
+              />
+              <span className="text-[10px] text-white/70 tabular-nums bg-black/55 px-1 rounded">{reviewContrast}%</span>
+            </div>
+
+            {/* Brightness slider — vertical, right edge */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Brightness</span>
+              <input
+                type="range"
+                min={50}
+                max={200}
+                step={1}
+                value={reviewBrightness}
+                onChange={(e) => setReviewBrightness(Number(e.target.value))}
+                aria-label="Brightness"
+                style={{
+                  WebkitAppearance: "slider-vertical" as any,
+                  writingMode: "bt-lr" as any,
+                  width: 24,
+                  height: 200,
+                  background: "transparent",
+                }}
+              />
+              <span className="text-[10px] text-white/70 tabular-nums bg-black/55 px-1 rounded">{reviewBrightness}%</span>
+            </div>
+
+            {(reviewContrast !== 100 || reviewBrightness !== 100) && (
+              <button
+                onClick={() => { setReviewContrast(100); setReviewBrightness(100); }}
+                className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[11px] text-white/85 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full"
+              >
+                Reset adjustments
+              </button>
+            )}
           </div>
         )}
       </div>
+
 
       {/* Bottom controls */}
       <div className="bg-black/80 backdrop-blur-sm px-4 py-3 safe-area-bottom">
