@@ -1372,7 +1372,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Called from the manual crop screen after the user positions the 4 dots.
   const handlePhotoCropConfirm = async (corners: Quad, imageSize: { width: number; height: number }) => {
     if (!photoRawUrl) return;
-    const tid = toast.loading("Straightening…");
+    const bw = pendingBW;
+    const tid = toast.loading(bw ? "Scanning…" : "Straightening…");
     try {
       const res = await fetch(photoRawUrl);
       const blob = await res.blob();
@@ -1385,48 +1386,88 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       ctx.drawImage(bitmap, 0, 0);
       const src = ctx.getImageData(0, 0, imageSize.width, imageSize.height);
       const outSize = estimateOutputSize(corners, 2000);
-      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: false });
+      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: bw });
       const out = document.createElement("canvas");
       out.width = warped.width;
       out.height = warped.height;
       out.getContext("2d")!.putImageData(warped, 0, 0);
-      const file = await canvasToFile(out, `photo_${Date.now()}.jpg`, "image/jpeg", 0.92, {
+      if (bw) {
+        // Light enhancement pass to lift the scan without destroying detail.
+        try {
+          const profile = getCaptureProfile();
+          enhanceScanCanvas(out, { isIdScan: false, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+        } catch { /* keep raw warp */ }
+      }
+      const prefix = bw ? "scan_image" : "photo";
+      const file = await canvasToFile(out, `${prefix}_${Date.now()}.jpg`, "image/jpeg", 0.92, {
         timeoutMs: 800,
         fallbackMaxDimension: 1800,
       });
+      setReviewContrast(100);
+      setReviewBrightness(100);
       setCapturedPreview(file);
       clearPhotoRaw();
-      setScanMode("photo");
-      toast.success("Photo ready", { id: tid });
+      setPendingBW(false);
+      setScanMode(bw ? "document" : "photo");
+      toast.success(bw ? "Scan ready" : "Photo ready", { id: tid });
     } catch (e) {
-      console.error("photo warp failed", e);
+      console.error("crop confirm failed", e);
       toast.error("Could not straighten — using original", { id: tid });
       // Fallback: use the raw color photo as-is.
       try {
         const res = await fetch(photoRawUrl);
         const blob = await res.blob();
         const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+        setReviewContrast(100);
+        setReviewBrightness(100);
         setCapturedPreview(file);
         clearPhotoRaw();
-        setScanMode("photo");
+        setPendingBW(false);
+        setScanMode(bw ? "document" : "photo");
       } catch { /* give up */ }
+    }
+  };
+
+  // Bake the current contrast/brightness adjustments into a JPEG file so
+  // save actions see the visually-adjusted image, not the raw capture.
+  const bakeAdjustments = async (): Promise<File | null> => {
+    if (!capturedFile) return null;
+    // Fast path: no adjustments applied.
+    if (reviewContrast === 100 && reviewBrightness === 100) return capturedFile;
+    try {
+      const bitmap = await createImageBitmap(capturedFile);
+      const c = document.createElement("canvas");
+      c.width = bitmap.width;
+      c.height = bitmap.height;
+      const ctx = c.getContext("2d");
+      if (!ctx) return capturedFile;
+      ctx.filter = `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)`;
+      ctx.drawImage(bitmap, 0, 0);
+      ctx.filter = "none";
+      return await canvasToFile(c, capturedFile.name, "image/jpeg", 0.92, {
+        timeoutMs: 900,
+        fallbackMaxDimension: 2000,
+      });
+    } catch {
+      return capturedFile;
     }
   };
 
   if (!open) return null;
 
-  // Manual crop adjuster screen — shown after "Take Photo".
+  // Manual crop adjuster screen — shown after "Take Photo" or "Scan".
   if (scanMode === "photo-crop" && photoRawUrl) {
     return (
       <ManualCropScreen
         open
         imageUrl={photoRawUrl}
         onConfirm={handlePhotoCropConfirm}
-        onRetake={() => { clearPhotoRaw(); setScanMode("photo"); startCamera(facingMode); }}
+        onRetake={() => { clearPhotoRaw(); const wasBW = pendingBW; setPendingBW(false); setScanMode(wasBW ? "document" : "photo"); startCamera(facingMode); }}
         onCancel={handleClose}
       />
     );
   }
+
 
 
   const renderSaveChoices = (kind: "capture" | "id") => (
