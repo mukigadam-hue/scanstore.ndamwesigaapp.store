@@ -990,7 +990,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const { corners, confidence } = await detectDocumentCorners(img);
         if (cancelled) return;
         setLiveConfidence(confidence);
-        if (corners && confidence >= 0.55) {
+        // Lowered from 0.55 to 0.32 — the previous threshold rarely fired on
+        // real-world lighting (matte paper, colored surfaces, room shadows).
+        if (corners && confidence >= 0.32) {
           // Map corners from sample canvas back to on-screen CSS pixels
           // (frame-relative to the video element) for the overlay display.
           const cssPerSample = displayW / sampleCanvas.width;
@@ -999,9 +1001,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             y: p.y * (displayH / sampleCanvas.height),
           })) as Quad;
           setLiveCorners(cssCorners);
-          // Stability check: corners haven't moved much across 2 samples.
+          // Stability check: corners haven't moved much across samples.
+          // Widened the "near" radius so a slight hand shake doesn't reset.
           const prev = stableCornersRef.current.corners;
-          const near = prev && prev.every((p, i) => Math.hypot(p.x - cssCorners[i].x, p.y - cssCorners[i].y) < displayW * 0.03);
+          const near = prev && prev.every((p, i) => Math.hypot(p.x - cssCorners[i].x, p.y - cssCorners[i].y) < displayW * 0.05);
           if (near) {
             stableCornersRef.current.count++;
           } else {
@@ -1015,7 +1018,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           ) {
             autoFireInFlightRef.current = true;
             stableCornersRef.current.lastFireAt = Date.now();
-            try { await scanDocument(); }
+            try { await autoScanDocument(); }
             finally { autoFireInFlightRef.current = false; stableCornersRef.current.count = 0; }
           }
         } else {
