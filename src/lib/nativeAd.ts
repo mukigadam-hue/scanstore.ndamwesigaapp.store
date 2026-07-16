@@ -1,13 +1,11 @@
-// Native interstitial trigger + silent preloader.
+// Native interstitial trigger.
 //
 // We NEVER navigate to any external URL. Instead we call the
 // WebViewGold-style Android JavaScript bridge when available.
 // Outside the native shell this is a silent no-op.
 //
-// Bridge contract (best-effort; we probe multiple names so ads fire
-// as fast as possible on whatever wrapper is present):
-//   Android.showInterstitial() / preloadInterstitial() / loadInterstitial()
-//   Android.showBanner()       / preloadBanner()       / loadBanner()
+// Bridge contract (best-effort; we probe multiple names):
+//   Android.showInterstitial() / WebViewGold.showInterstitial()
 //   WebViewGold.*  (same method names)
 //
 // All calls ALWAYS return immediately and NEVER throw.
@@ -40,26 +38,15 @@ function callFirst(methods: string[]): boolean {
   return false;
 }
 
-/** Warm up the ad SDK as early as possible so triggers show instantly. */
+/**
+ * Intentionally no-op.
+ *
+ * Some Android WebView wrappers treat preload/load methods as real ad display
+ * calls or count them toward automatic navigation/back-button ads. To keep
+ * placement compliant, this app never calls any preload/load/banner ad methods.
+ */
 export function preloadNativeAds(): void {
-  try {
-    callFirst([
-      "preloadInterstitial",
-      "loadInterstitial",
-      "cacheInterstitial",
-      "prepareInterstitial",
-    ]);
-    // NOTE: do NOT include "showBanner" here — some wrappers actually
-    // render a banner when that method is called, which caused abrupt
-    // ads to appear on app start / back navigation. Preload only.
-    callFirst([
-      "preloadBanner",
-      "loadBanner",
-      "cacheBanner",
-    ]);
-  } catch {
-    /* never throw */
-  }
+  return;
 }
 
 
@@ -74,14 +61,10 @@ export function isAndroidWebView(): boolean {
  *
  * - Calls the WebViewGold / Android JS bridge (`Android.showInterstitial()`)
  *   when available — this is the real interstitial.
- * - Also bumps a same-page hash change, which WebViewGold counts as a
- *   navigation toward its built-in interstitial threshold. Using a hash
- *   (not a full URL) means the app never leaves our domain and users
- *   never see the WebViewGold landing page.
  */
 export function triggerNativeAd(_trigger: string = "generic"): void {
   try {
-    const shown = callFirst(["showInterstitial", "displayInterstitial"]);
+    callFirst(["showInterstitial", "displayInterstitial"]);
     // NOTE: we intentionally do NOT bump window.history / hashchange here.
     // The WebViewGold shell counts navigations toward its own built-in
     // interstitial threshold — bumping history on every trigger caused
@@ -89,11 +72,6 @@ export function triggerNativeAd(_trigger: string = "generic"): void {
     // now only show when we explicitly call the JS bridge from the
     // designated inner moments (identity verified, auto-lock re-verify,
     // etc.), which keeps ad placement predictable.
-    if (!shown) {
-      preloadNativeAds();
-    } else {
-      setTimeout(preloadNativeAds, 0);
-    }
   } catch (e) {
     console.log("Native ad bridge unavailable:", e);
   }

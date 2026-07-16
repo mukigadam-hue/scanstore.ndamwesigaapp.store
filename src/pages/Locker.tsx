@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Plus, KeyRound, X, Crown, Timer, Info, Shield, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,6 @@ import LanguageSelector from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import { getPendingVaultFile, clearPendingVaultFile } from "@/lib/pendingVaultFile";
 import BannerAd from "@/components/BannerAd";
-import { triggerNativeAd } from "@/lib/nativeAd";
 import { inferFileType } from "@/lib/fileCompatibility";
 
 interface Drawer {
@@ -60,7 +60,7 @@ const DRAWER_COLORS = [
 ];
 
 const Locker = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [selectedDrawer, setSelectedDrawer] = useState<string | null>(null);
@@ -92,9 +92,6 @@ const Locker = () => {
     onLock: () => {
       if (user?.id) {
         localStorage.removeItem(`locker_verified_${user.id}`);
-        // Mark that re-verification was triggered by auto-lock so we can
-        // fire a native interstitial ad on the next successful unlock.
-        localStorage.setItem(`autolock_pending_ad_${user.id}`, String(Date.now()));
       }
       setSessionVerified(false);
       toast.info("Locker auto-locked due to inactivity 🔒");
@@ -183,12 +180,6 @@ const Locker = () => {
     if (user?.id) {
       localStorage.removeItem(`locker_verified_${user.id}`);
       localStorage.removeItem(`doclocker_exit_needs_verify_${user.id}`);
-      // If this unlock followed an auto-lock, fire a native ad once.
-      const pendingKey = `autolock_pending_ad_${user.id}`;
-      if (localStorage.getItem(pendingKey)) {
-        localStorage.removeItem(pendingKey);
-        triggerNativeAd("autolock-reverify");
-      }
     }
     setSessionVerified(true);
   };
@@ -309,6 +300,10 @@ const Locker = () => {
         </motion.div>
       </div>
     );
+  }
+
+  if (!user) {
+    return <Navigate to="/" replace />;
   }
 
   if (!securitySettings?.setup_completed) {
