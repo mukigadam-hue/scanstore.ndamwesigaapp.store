@@ -257,6 +257,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
   const [torchOn, setTorchOn] = useState(false);
+  // Contrast/brightness adjusters on the captured review screen.
+  const [reviewContrast, setReviewContrast] = useState(100);
+  const [reviewBrightness, setReviewBrightness] = useState(100);
+  // When true, the raw capture routed through ManualCropScreen should be
+  // warped with adaptive thresholding (Scan button) instead of preserving
+  // colors (Take Photo button).
+  const [pendingBW, setPendingBW] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
 
   // Instant-feedback capture flash (300ms) + optional frozen frame preview.
