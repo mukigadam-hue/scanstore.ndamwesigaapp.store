@@ -257,6 +257,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
   const [torchOn, setTorchOn] = useState(false);
+  // Contrast/brightness adjusters on the captured review screen.
+  const [reviewContrast, setReviewContrast] = useState(100);
+  const [reviewBrightness, setReviewBrightness] = useState(100);
+  // When true, the raw capture routed through ManualCropScreen should be
+  // warped with adaptive thresholding (Scan button) instead of preserving
+  // colors (Take Photo button).
+  const [pendingBW, setPendingBW] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
 
   // Instant-feedback capture flash (300ms) + optional frozen frame preview.
@@ -501,6 +508,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setPhotoCapturing(false);
       setSaveChoicesOpen(null);
       setScanMode("select");
+      setPendingBW(false);
+      setReviewContrast(100);
+      setReviewBrightness(100);
       clearIdPreviews();
     }
   }, [open, clearCapturedPreview, clearIdPreviews]);
@@ -853,7 +863,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             setTimeout(() => resolve({ corners: null, confidence: 0 }), 800)
           ),
         ]);
-        if (detection.corners && detection.confidence >= 0.42) {
+        if (detection.corners && detection.confidence >= 0.28) {
           // Second copy since transferable moved the first.
           const scanImageData2 = scanCtx.getImageData(0, 0, targetW, targetH);
           const outSize = estimateOutputSize(detection.corners, Math.max(targetW, targetH));
@@ -898,14 +908,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     return file;
   };
 
-  const scanDocument = async () => {
-    // Give instant visual feedback before the (sync) crop math runs.
+  // Auto-scan path (invoked by live corner detection). Runs the automatic
+  // corner-warp + adaptive-threshold pipeline and lands on the review screen.
+  const autoScanDocument = async () => {
     setScanning(true);
     setScanProgress(0);
     await nextFrame();
     try {
       const result = await performScan();
       if (result) {
+        setReviewContrast(100);
+        setReviewBrightness(100);
         setCapturedPreview(result);
       }
     } catch {
@@ -913,6 +926,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     } finally {
       setScanning(false);
       setScanProgress(0);
+    }
+  };
+
+  // Manual "Scan" button — captures the raw high-res frame and routes to
+  // the crop-adjust screen so the user can drag the 4 corners. On confirm,
+  // the image is perspective-warped and adaptively thresholded (BW scan).
+  const scanDocument = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    onScanStart?.();
+    setPhotoCapturing(true);
+    fireCaptureFlash();
+    try {
+      await nextFrame();
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas) return;
+      const profile = getCaptureProfile();
+      const maxDimension = Math.max(profile.documentMax, 2000);
+      const sourceW = video.videoWidth || 1280;
+      const sourceH = video.videoHeight || 720;
+      const displayW = video.clientWidth || sourceW;
+      const displayH = video.clientHeight || sourceH;
+      const visible = getObjectCoverSourceRect(sourceW, sourceH, displayW, displayH);
+      const scale = Math.min(1, maxDimension / Math.max(visible.visibleW, visible.visibleH));
+      canvas.width = Math.max(1, Math.round(visible.visibleW * scale));
+      canvas.height = Math.max(1, Math.round(visible.visibleH * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(video, visible.offsetX, visible.offsetY, visible.visibleW, visible.visibleH, 0, 0, canvas.width, canvas.height);
+      const blob = await canvasToBlobQuick(canvas, "image/jpeg", profile.documentQuality, profile.encodeTimeoutMs, profile.fallbackMax);
+      if (photoRawObjectUrlRef.current) {
+        try { URL.revokeObjectURL(photoRawObjectUrlRef.current); } catch { /* ignore */ }
+      }
+      const url = URL.createObjectURL(blob);
+      photoRawObjectUrlRef.current = url;
+      setPhotoRawUrl(url);
+      stopCamera();
+      setPendingBW(true);
+      setScanMode("photo-crop");
+      clearFrozenFrame();
+    } catch {
+      toast.error("Could not capture on this device");
+      clearFrozenFrame();
+    } finally {
+      setPhotoCapturing(false);
     }
   };
 
@@ -937,9 +997,19 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const url = URL.createObjectURL(result);
       idObjectUrlsRef.current.push(url);
       setIdFrontImage(url);
+      setScanning(false);
+      setScanProgress(0);
       setScanMode("id-back");
-      // Restart camera for back side
-      setTimeout(() => startCamera(facingMode), 300);
+      toast.success("Front captured — now scan the BACK side");
+      // Restart camera reliably for the back side (await, retry once if it
+      // races with the track release).
+      await new Promise((r) => setTimeout(r, 350));
+      try {
+        await startCamera(facingMode);
+      } catch {
+        await new Promise((r) => setTimeout(r, 400));
+        try { await startCamera(facingMode); } catch { /* give up */ }
+      }
     } else {
       const url = URL.createObjectURL(result);
       idObjectUrlsRef.current.push(url);
@@ -983,7 +1053,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const { corners, confidence } = await detectDocumentCorners(img);
         if (cancelled) return;
         setLiveConfidence(confidence);
-        if (corners && confidence >= 0.55) {
+        // Lowered from 0.55 to 0.32 — the previous threshold rarely fired on
+        // real-world lighting (matte paper, colored surfaces, room shadows).
+        if (corners && confidence >= 0.32) {
           // Map corners from sample canvas back to on-screen CSS pixels
           // (frame-relative to the video element) for the overlay display.
           const cssPerSample = displayW / sampleCanvas.width;
@@ -992,9 +1064,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             y: p.y * (displayH / sampleCanvas.height),
           })) as Quad;
           setLiveCorners(cssCorners);
-          // Stability check: corners haven't moved much across 2 samples.
+          // Stability check: corners haven't moved much across samples.
+          // Widened the "near" radius so a slight hand shake doesn't reset.
           const prev = stableCornersRef.current.corners;
-          const near = prev && prev.every((p, i) => Math.hypot(p.x - cssCorners[i].x, p.y - cssCorners[i].y) < displayW * 0.03);
+          const near = prev && prev.every((p, i) => Math.hypot(p.x - cssCorners[i].x, p.y - cssCorners[i].y) < displayW * 0.05);
           if (near) {
             stableCornersRef.current.count++;
           } else {
@@ -1008,7 +1081,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           ) {
             autoFireInFlightRef.current = true;
             stableCornersRef.current.lastFireAt = Date.now();
-            try { await scanDocument(); }
+            try { await autoScanDocument(); }
             finally { autoFireInFlightRef.current = false; stableCornersRef.current.count = 0; }
           }
         } else {
@@ -1141,9 +1214,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     return new File([blob], filename, { type });
   };
 
-  const saveAsImage = () => {
+  const saveAsImage = async () => {
     if (!capturedFile) return;
-    const file = capturedFile;
+    const file = (await bakeAdjustments()) ?? capturedFile;
     onCapture(file);
     handleClose();
   };
@@ -1154,7 +1227,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!capturedFile) return;
     const tid = toast.loading("Saving to your phone…");
     try {
-      await downloadBlob(capturedFile, capturedFile.name);
+      const file = (await bakeAdjustments()) ?? capturedFile;
+      await downloadBlob(file, file.name);
       toast.success("File saved successfully", { id: tid });
       // Ad fires ONLY after the save has completed — clean post-task transition.
       triggerNativeAd("scan-save-phone");
@@ -1170,44 +1244,15 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!captured || !capturedFile) return;
     const tid = toast.loading("Preparing PDF…");
     try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const i = new Image();
-        i.onload = () => resolve(i);
-        i.onerror = reject;
-        i.src = captured;
-      });
-      const pdf = new jsPDF({
-        orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: false,
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 5;
-      const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
-      const sw = img.width * ratio;
-      const sh = img.height * ratio;
-      const format = capturedFile.type.includes("png") ? "PNG" : "JPEG";
-      pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
-      const blob = pdf.output("blob");
-      await downloadBlob(blob, `scan_${Date.now()}.pdf`);
-      toast.success("PDF saved successfully", { id: tid });
-      // Ad fires ONLY after the PDF save has completed.
-      triggerNativeAd("scan-save-phone");
-      handleClose();
-    } catch (e: any) {
-      if (e?.name === "AbortError") toast.dismiss(tid);
-      else toast.error("Could not save PDF to phone", { id: tid });
-    }
-  };
-
-
-  const saveAsDocument = () => {
-    if (!captured || !capturedFile) return;
-    try {
-      const img = new Image();
-      img.onload = () => {
+      const baked = (await bakeAdjustments()) ?? capturedFile;
+      const bakedUrl = URL.createObjectURL(baked);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const i = new Image();
+          i.onload = () => resolve(i);
+          i.onerror = reject;
+          i.src = bakedUrl;
+        });
         const pdf = new jsPDF({
           orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
           unit: "mm",
@@ -1217,28 +1262,69 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
         const margin = 5;
-        const availableWidth = pageWidth - margin * 2;
-        const availableHeight = pageHeight - margin * 2;
-        const ratio = Math.min(availableWidth / img.width, availableHeight / img.height);
-        const scaledWidth = img.width * ratio;
-        const scaledHeight = img.height * ratio;
-        const xOffset = (pageWidth - scaledWidth) / 2;
-        const yOffset = (pageHeight - scaledHeight) / 2;
-        const format = capturedFile.type.includes("png") ? "PNG" : "JPEG";
-        pdf.addImage(img, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
-        const pdfBlob = pdf.output("blob");
-        const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
-        onCapture(pdfFile);
-        toast.success("Document scanned and saved as PDF!");
+        const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
+        const sw = img.width * ratio;
+        const sh = img.height * ratio;
+        const format = baked.type.includes("png") ? "PNG" : "JPEG";
+        pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
+        const blob = pdf.output("blob");
+        await downloadBlob(blob, `scan_${Date.now()}.pdf`);
+        toast.success("PDF saved successfully", { id: tid });
+        triggerNativeAd("scan-save-phone");
         handleClose();
+      } finally {
+        try { URL.revokeObjectURL(bakedUrl); } catch { /* ignore */ }
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") toast.dismiss(tid);
+      else toast.error("Could not save PDF to phone", { id: tid });
+    }
+  };
+
+
+  const saveAsDocument = async () => {
+    if (!captured || !capturedFile) return;
+    try {
+      const baked = (await bakeAdjustments()) ?? capturedFile;
+      const bakedUrl = URL.createObjectURL(baked);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const pdf = new jsPDF({
+            orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+            unit: "mm",
+            format: "a4",
+            compress: false,
+          });
+          const pageWidth = pdf.internal.pageSize.getWidth();
+          const pageHeight = pdf.internal.pageSize.getHeight();
+          const margin = 5;
+          const availableWidth = pageWidth - margin * 2;
+          const availableHeight = pageHeight - margin * 2;
+          const ratio = Math.min(availableWidth / img.width, availableHeight / img.height);
+          const scaledWidth = img.width * ratio;
+          const scaledHeight = img.height * ratio;
+          const xOffset = (pageWidth - scaledWidth) / 2;
+          const yOffset = (pageHeight - scaledHeight) / 2;
+          const format = baked.type.includes("png") ? "PNG" : "JPEG";
+          pdf.addImage(img, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
+          const pdfBlob = pdf.output("blob");
+          const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
+          onCapture(pdfFile);
+          toast.success("Document scanned and saved as PDF!");
+        } finally {
+          try { URL.revokeObjectURL(bakedUrl); } catch { /* ignore */ }
+          handleClose();
+        }
       };
-      img.src = captured;
+      img.src = bakedUrl;
     } catch (err) {
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
-      saveAsImage();
+      await saveAsImage();
     }
   };
+
 
   // Save the assembled two-sided ID directly to the user's phone.
   const saveIdToPhone = async (asPdf: boolean) => {
@@ -1302,7 +1388,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Called from the manual crop screen after the user positions the 4 dots.
   const handlePhotoCropConfirm = async (corners: Quad, imageSize: { width: number; height: number }) => {
     if (!photoRawUrl) return;
-    const tid = toast.loading("Straightening…");
+    const bw = pendingBW;
+    const tid = toast.loading(bw ? "Scanning…" : "Straightening…");
     try {
       const res = await fetch(photoRawUrl);
       const blob = await res.blob();
@@ -1315,48 +1402,88 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       ctx.drawImage(bitmap, 0, 0);
       const src = ctx.getImageData(0, 0, imageSize.width, imageSize.height);
       const outSize = estimateOutputSize(corners, 2000);
-      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: false });
+      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: bw });
       const out = document.createElement("canvas");
       out.width = warped.width;
       out.height = warped.height;
       out.getContext("2d")!.putImageData(warped, 0, 0);
-      const file = await canvasToFile(out, `photo_${Date.now()}.jpg`, "image/jpeg", 0.92, {
+      if (bw) {
+        // Light enhancement pass to lift the scan without destroying detail.
+        try {
+          const profile = getCaptureProfile();
+          enhanceScanCanvas(out, { isIdScan: false, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+        } catch { /* keep raw warp */ }
+      }
+      const prefix = bw ? "scan_image" : "photo";
+      const file = await canvasToFile(out, `${prefix}_${Date.now()}.jpg`, "image/jpeg", 0.92, {
         timeoutMs: 800,
         fallbackMaxDimension: 1800,
       });
+      setReviewContrast(100);
+      setReviewBrightness(100);
       setCapturedPreview(file);
       clearPhotoRaw();
-      setScanMode("photo");
-      toast.success("Photo ready", { id: tid });
+      setPendingBW(false);
+      setScanMode(bw ? "document" : "photo");
+      toast.success(bw ? "Scan ready" : "Photo ready", { id: tid });
     } catch (e) {
-      console.error("photo warp failed", e);
+      console.error("crop confirm failed", e);
       toast.error("Could not straighten — using original", { id: tid });
       // Fallback: use the raw color photo as-is.
       try {
         const res = await fetch(photoRawUrl);
         const blob = await res.blob();
         const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+        setReviewContrast(100);
+        setReviewBrightness(100);
         setCapturedPreview(file);
         clearPhotoRaw();
-        setScanMode("photo");
+        setPendingBW(false);
+        setScanMode(bw ? "document" : "photo");
       } catch { /* give up */ }
+    }
+  };
+
+  // Bake the current contrast/brightness adjustments into a JPEG file so
+  // save actions see the visually-adjusted image, not the raw capture.
+  const bakeAdjustments = async (): Promise<File | null> => {
+    if (!capturedFile) return null;
+    // Fast path: no adjustments applied.
+    if (reviewContrast === 100 && reviewBrightness === 100) return capturedFile;
+    try {
+      const bitmap = await createImageBitmap(capturedFile);
+      const c = document.createElement("canvas");
+      c.width = bitmap.width;
+      c.height = bitmap.height;
+      const ctx = c.getContext("2d");
+      if (!ctx) return capturedFile;
+      ctx.filter = `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)`;
+      ctx.drawImage(bitmap, 0, 0);
+      ctx.filter = "none";
+      return await canvasToFile(c, capturedFile.name, "image/jpeg", 0.92, {
+        timeoutMs: 900,
+        fallbackMaxDimension: 2000,
+      });
+    } catch {
+      return capturedFile;
     }
   };
 
   if (!open) return null;
 
-  // Manual crop adjuster screen — shown after "Take Photo".
+  // Manual crop adjuster screen — shown after "Take Photo" or "Scan".
   if (scanMode === "photo-crop" && photoRawUrl) {
     return (
       <ManualCropScreen
         open
         imageUrl={photoRawUrl}
         onConfirm={handlePhotoCropConfirm}
-        onRetake={() => { clearPhotoRaw(); setScanMode("photo"); startCamera(facingMode); }}
+        onRetake={() => { clearPhotoRaw(); const wasBW = pendingBW; setPendingBW(false); setScanMode(wasBW ? "document" : "photo"); startCamera(facingMode); }}
         onCancel={handleClose}
       />
     );
   }
+
 
 
   const renderSaveChoices = (kind: "capture" | "id") => (
@@ -1843,11 +1970,70 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             )}
           </>
         ) : (
-          <div className="relative">
-            <img src={captured} alt="Captured" className="max-w-full max-h-full object-contain" />
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img
+              src={captured}
+              alt="Captured"
+              className="max-w-full max-h-full object-contain"
+              style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)` }}
+            />
+
+            {/* Contrast slider — vertical, left edge */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Contrast</span>
+              <input
+                type="range"
+                min={50}
+                max={200}
+                step={1}
+                value={reviewContrast}
+                onChange={(e) => setReviewContrast(Number(e.target.value))}
+                aria-label="Contrast"
+                style={{
+                  WebkitAppearance: "slider-vertical" as any,
+                  writingMode: "bt-lr" as any,
+                  width: 24,
+                  height: 200,
+                  background: "transparent",
+                }}
+              />
+              <span className="text-[10px] text-white/70 tabular-nums bg-black/55 px-1 rounded">{reviewContrast}%</span>
+            </div>
+
+            {/* Brightness slider — vertical, right edge */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Brightness</span>
+              <input
+                type="range"
+                min={50}
+                max={200}
+                step={1}
+                value={reviewBrightness}
+                onChange={(e) => setReviewBrightness(Number(e.target.value))}
+                aria-label="Brightness"
+                style={{
+                  WebkitAppearance: "slider-vertical" as any,
+                  writingMode: "bt-lr" as any,
+                  width: 24,
+                  height: 200,
+                  background: "transparent",
+                }}
+              />
+              <span className="text-[10px] text-white/70 tabular-nums bg-black/55 px-1 rounded">{reviewBrightness}%</span>
+            </div>
+
+            {(reviewContrast !== 100 || reviewBrightness !== 100) && (
+              <button
+                onClick={() => { setReviewContrast(100); setReviewBrightness(100); }}
+                className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[11px] text-white/85 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full"
+              >
+                Reset adjustments
+              </button>
+            )}
           </div>
         )}
       </div>
+
 
       {/* Bottom controls */}
       <div className="bg-black/80 backdrop-blur-sm px-4 py-3 safe-area-bottom">
