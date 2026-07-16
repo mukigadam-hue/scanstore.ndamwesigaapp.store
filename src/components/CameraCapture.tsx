@@ -508,6 +508,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setPhotoCapturing(false);
       setSaveChoicesOpen(null);
       setScanMode("select");
+      setPendingBW(false);
+      setReviewContrast(100);
+      setReviewBrightness(100);
       clearIdPreviews();
     }
   }, [open, clearCapturedPreview, clearIdPreviews]);
