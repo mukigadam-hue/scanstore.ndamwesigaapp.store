@@ -860,7 +860,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             setTimeout(() => resolve({ corners: null, confidence: 0 }), 800)
           ),
         ]);
-        if (detection.corners && detection.confidence >= 0.42) {
+        if (detection.corners && detection.confidence >= 0.28) {
           // Second copy since transferable moved the first.
           const scanImageData2 = scanCtx.getImageData(0, 0, targetW, targetH);
           const outSize = estimateOutputSize(detection.corners, Math.max(targetW, targetH));
