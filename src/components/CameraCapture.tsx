@@ -1458,7 +1458,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const bakeAdjustments = async (): Promise<File | null> => {
     if (!capturedFile) return null;
     // Fast path: no adjustments applied.
-    if (reviewContrast === 100 && reviewBrightness === 100) return capturedFile;
+    if (reviewContrast === 100 && reviewBrightness === 100 && reviewSaturate === 100) return capturedFile;
     try {
       const bitmap = await createImageBitmap(capturedFile);
       const c = document.createElement("canvas");
@@ -1466,7 +1466,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       c.height = bitmap.height;
       const ctx = c.getContext("2d");
       if (!ctx) return capturedFile;
-      ctx.filter = `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)`;
+      ctx.filter = `contrast(${reviewContrast}%) brightness(${reviewBrightness}%) saturate(${reviewSaturate}%)`;
       ctx.drawImage(bitmap, 0, 0);
       ctx.filter = "none";
       return await canvasToFile(c, capturedFile.name, "image/jpeg", 0.92, {
@@ -1477,6 +1477,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       return capturedFile;
     }
   };
+
+  // Filter presets modeled on the reference scan app (Original/Auto/Perfect/Lighten).
+  const applyPreset = (preset: "original" | "auto" | "perfect" | "lighten") => {
+    setReviewPreset(preset);
+    if (preset === "original") { setReviewContrast(100); setReviewBrightness(100); setReviewSaturate(100); }
+    else if (preset === "auto") { setReviewContrast(115); setReviewBrightness(108); setReviewSaturate(105); }
+    else if (preset === "perfect") { setReviewContrast(125); setReviewBrightness(112); setReviewSaturate(118); }
+    else if (preset === "lighten") { setReviewContrast(96); setReviewBrightness(125); setReviewSaturate(102); }
+  };
+
+  const showAdjustHint = (label: string, value: number) => {
+    setAdjustHint({ label, value });
+    if (adjustHintTimerRef.current) window.clearTimeout(adjustHintTimerRef.current);
+    adjustHintTimerRef.current = window.setTimeout(() => setAdjustHint(null), 700);
+  };
+
 
   if (!open) return null;
 
