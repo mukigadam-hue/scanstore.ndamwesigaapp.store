@@ -257,9 +257,14 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
   const [torchOn, setTorchOn] = useState(false);
-  // Contrast/brightness adjusters on the captured review screen.
+  // Contrast/brightness/saturation adjusters on the captured review screen.
   const [reviewContrast, setReviewContrast] = useState(100);
   const [reviewBrightness, setReviewBrightness] = useState(100);
+  const [reviewSaturate, setReviewSaturate] = useState(100);
+  const [reviewPreset, setReviewPreset] = useState<"original" | "auto" | "perfect" | "lighten">("original");
+  // Big center overlay while dragging a slider ("63% Brightness").
+  const [adjustHint, setAdjustHint] = useState<null | { label: string; value: number }>(null);
+  const adjustHintTimerRef = useRef<number | null>(null);
   // When true, the raw capture routed through ManualCropScreen should be
   // warped with adaptive thresholding (Scan button) instead of preserving
   // colors (Take Photo button).
@@ -511,6 +516,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setPendingBW(false);
       setReviewContrast(100);
       setReviewBrightness(100);
+      setReviewSaturate(100);
+      setReviewPreset("original");
       clearIdPreviews();
     }
   }, [open, clearCapturedPreview, clearIdPreviews]);
@@ -919,6 +926,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (result) {
         setReviewContrast(100);
         setReviewBrightness(100);
+        setReviewSaturate(100);
+        setReviewPreset("original");
         setCapturedPreview(result);
       }
     } catch {
@@ -999,6 +1008,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setIdFrontImage(url);
       setScanning(false);
       setScanProgress(0);
+      // CRITICAL: clear the frozen freeze-frame overlay from the FRONT scan
+      // so the BACK-side live camera view is not blocked.
+      clearFrozenFrame();
       setScanMode("id-back");
       toast.success("Front captured — now scan the BACK side");
       // Restart camera reliably for the back side (await, retry once if it
@@ -1014,6 +1026,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const url = URL.createObjectURL(result);
       idObjectUrlsRef.current.push(url);
       setIdBackImage(url);
+      clearFrozenFrame();
       // Reset placements to defaults each time both sides are freshly captured
       setIdLayout({
         front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
@@ -1421,6 +1434,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       });
       setReviewContrast(100);
       setReviewBrightness(100);
+      setReviewSaturate(100);
+      setReviewPreset("original");
       setCapturedPreview(file);
       clearPhotoRaw();
       setPendingBW(false);
@@ -1436,6 +1451,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
         setReviewContrast(100);
         setReviewBrightness(100);
+        setReviewSaturate(100);
+        setReviewPreset("original");
         setCapturedPreview(file);
         clearPhotoRaw();
         setPendingBW(false);
@@ -1449,7 +1466,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const bakeAdjustments = async (): Promise<File | null> => {
     if (!capturedFile) return null;
     // Fast path: no adjustments applied.
-    if (reviewContrast === 100 && reviewBrightness === 100) return capturedFile;
+    if (reviewContrast === 100 && reviewBrightness === 100 && reviewSaturate === 100) return capturedFile;
     try {
       const bitmap = await createImageBitmap(capturedFile);
       const c = document.createElement("canvas");
@@ -1457,7 +1474,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       c.height = bitmap.height;
       const ctx = c.getContext("2d");
       if (!ctx) return capturedFile;
-      ctx.filter = `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)`;
+      ctx.filter = `contrast(${reviewContrast}%) brightness(${reviewBrightness}%) saturate(${reviewSaturate}%)`;
       ctx.drawImage(bitmap, 0, 0);
       ctx.filter = "none";
       return await canvasToFile(c, capturedFile.name, "image/jpeg", 0.92, {
@@ -1468,6 +1485,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       return capturedFile;
     }
   };
+
+  // Filter presets modeled on the reference scan app (Original/Auto/Perfect/Lighten).
+  const applyPreset = (preset: "original" | "auto" | "perfect" | "lighten") => {
+    setReviewPreset(preset);
+    if (preset === "original") { setReviewContrast(100); setReviewBrightness(100); setReviewSaturate(100); }
+    else if (preset === "auto") { setReviewContrast(115); setReviewBrightness(108); setReviewSaturate(105); }
+    else if (preset === "perfect") { setReviewContrast(125); setReviewBrightness(112); setReviewSaturate(118); }
+    else if (preset === "lighten") { setReviewContrast(96); setReviewBrightness(125); setReviewSaturate(102); }
+  };
+
+  const showAdjustHint = (label: string, value: number) => {
+    setAdjustHint({ label, value });
+    if (adjustHintTimerRef.current) window.clearTimeout(adjustHintTimerRef.current);
+    adjustHintTimerRef.current = window.setTimeout(() => setAdjustHint(null), 700);
+  };
+
 
   if (!open) return null;
 
@@ -1975,19 +2008,24 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               src={captured}
               alt="Captured"
               className="max-w-full max-h-full object-contain"
-              style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)` }}
+              style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%) saturate(${reviewSaturate}%)` }}
             />
 
-            {/* Contrast slider — vertical, left edge */}
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
-              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Contrast</span>
+            {/* Contrast slider — vertical, left edge (matches reference scan app) */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none z-10">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">◐</span>
               <input
                 type="range"
                 min={50}
                 max={200}
                 step={1}
                 value={reviewContrast}
-                onChange={(e) => setReviewContrast(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setReviewContrast(v);
+                  setReviewPreset("original");
+                  showAdjustHint("Contrast", v);
+                }}
                 aria-label="Contrast"
                 style={{
                   WebkitAppearance: "slider-vertical" as any,
@@ -2001,15 +2039,20 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             </div>
 
             {/* Brightness slider — vertical, right edge */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
-              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Brightness</span>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none z-10">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">☀</span>
               <input
                 type="range"
                 min={50}
                 max={200}
                 step={1}
                 value={reviewBrightness}
-                onChange={(e) => setReviewBrightness(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setReviewBrightness(v);
+                  setReviewPreset("original");
+                  showAdjustHint("Brightness", v);
+                }}
                 aria-label="Brightness"
                 style={{
                   WebkitAppearance: "slider-vertical" as any,
@@ -2022,17 +2065,38 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               <span className="text-[10px] text-white/70 tabular-nums bg-black/55 px-1 rounded">{reviewBrightness}%</span>
             </div>
 
-            {(reviewContrast !== 100 || reviewBrightness !== 100) && (
-              <button
-                onClick={() => { setReviewContrast(100); setReviewBrightness(100); }}
-                className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[11px] text-white/85 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full"
-              >
-                Reset adjustments
-              </button>
+            {/* Big center overlay while dragging a slider (e.g. "63% Brightness") */}
+            {adjustHint && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="bg-black/55 backdrop-blur-sm rounded-2xl px-6 py-3 text-center">
+                  <div className="text-white text-4xl font-bold tabular-nums leading-none">{adjustHint.value}%</div>
+                  <div className="text-white/85 text-sm mt-1">{adjustHint.label}</div>
+                </div>
+              </div>
             )}
+
+            {/* Filter preset chips — Original / Auto / Perfect / Lighten */}
+            <div className="absolute bottom-2 left-0 right-0 px-3 pointer-events-auto">
+              <div className="flex items-center justify-center gap-2 overflow-x-auto">
+                {(["original", "auto", "perfect", "lighten"] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => applyPreset(p)}
+                    className={`shrink-0 text-[11px] px-3 py-1.5 rounded-full border transition ${
+                      reviewPreset === p
+                        ? "bg-amber-400 text-black border-amber-300 font-semibold"
+                        : "bg-black/55 text-white/85 border-white/20 hover:bg-black/70"
+                    }`}
+                  >
+                    {p === "original" ? "Original" : p === "auto" ? "Auto" : p === "perfect" ? "Perfect" : "Lighten"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
+
 
 
       {/* Bottom controls */}
