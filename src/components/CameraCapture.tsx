@@ -1004,6 +1004,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setIdFrontImage(url);
       setScanning(false);
       setScanProgress(0);
+      // CRITICAL: clear the frozen freeze-frame overlay from the FRONT scan
+      // so the BACK-side live camera view is not blocked.
+      clearFrozenFrame();
       setScanMode("id-back");
       toast.success("Front captured — now scan the BACK side");
       // Restart camera reliably for the back side (await, retry once if it
@@ -1019,6 +1022,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const url = URL.createObjectURL(result);
       idObjectUrlsRef.current.push(url);
       setIdBackImage(url);
+      clearFrozenFrame();
       // Reset placements to defaults each time both sides are freshly captured
       setIdLayout({
         front: { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15, widthMm: DEFAULT_ID_WIDTH_MM },
