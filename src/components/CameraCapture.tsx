@@ -2008,19 +2008,24 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               src={captured}
               alt="Captured"
               className="max-w-full max-h-full object-contain"
-              style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%)` }}
+              style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%) saturate(${reviewSaturate}%)` }}
             />
 
-            {/* Contrast slider — vertical, left edge */}
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
-              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Contrast</span>
+            {/* Contrast slider — vertical, left edge (matches reference scan app) */}
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none z-10">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">◐</span>
               <input
                 type="range"
                 min={50}
                 max={200}
                 step={1}
                 value={reviewContrast}
-                onChange={(e) => setReviewContrast(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setReviewContrast(v);
+                  setReviewPreset("original");
+                  showAdjustHint("Contrast", v);
+                }}
                 aria-label="Contrast"
                 style={{
                   WebkitAppearance: "slider-vertical" as any,
@@ -2034,15 +2039,20 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             </div>
 
             {/* Brightness slider — vertical, right edge */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none">
-              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">Brightness</span>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 select-none z-10">
+              <span className="text-[10px] text-white/85 bg-black/55 px-1.5 py-0.5 rounded-full">☀</span>
               <input
                 type="range"
                 min={50}
                 max={200}
                 step={1}
                 value={reviewBrightness}
-                onChange={(e) => setReviewBrightness(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setReviewBrightness(v);
+                  setReviewPreset("original");
+                  showAdjustHint("Brightness", v);
+                }}
                 aria-label="Brightness"
                 style={{
                   WebkitAppearance: "slider-vertical" as any,
@@ -2055,17 +2065,38 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               <span className="text-[10px] text-white/70 tabular-nums bg-black/55 px-1 rounded">{reviewBrightness}%</span>
             </div>
 
-            {(reviewContrast !== 100 || reviewBrightness !== 100) && (
-              <button
-                onClick={() => { setReviewContrast(100); setReviewBrightness(100); }}
-                className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[11px] text-white/85 bg-black/60 hover:bg-black/80 px-3 py-1 rounded-full"
-              >
-                Reset adjustments
-              </button>
+            {/* Big center overlay while dragging a slider (e.g. "63% Brightness") */}
+            {adjustHint && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                <div className="bg-black/55 backdrop-blur-sm rounded-2xl px-6 py-3 text-center">
+                  <div className="text-white text-4xl font-bold tabular-nums leading-none">{adjustHint.value}%</div>
+                  <div className="text-white/85 text-sm mt-1">{adjustHint.label}</div>
+                </div>
+              </div>
             )}
+
+            {/* Filter preset chips — Original / Auto / Perfect / Lighten */}
+            <div className="absolute bottom-2 left-0 right-0 px-3 pointer-events-auto">
+              <div className="flex items-center justify-center gap-2 overflow-x-auto">
+                {(["original", "auto", "perfect", "lighten"] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => applyPreset(p)}
+                    className={`shrink-0 text-[11px] px-3 py-1.5 rounded-full border transition ${
+                      reviewPreset === p
+                        ? "bg-amber-400 text-black border-amber-300 font-semibold"
+                        : "bg-black/55 text-white/85 border-white/20 hover:bg-black/70"
+                    }`}
+                  >
+                    {p === "original" ? "Original" : p === "auto" ? "Auto" : p === "perfect" ? "Perfect" : "Lighten"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
+
 
 
       {/* Bottom controls */}
