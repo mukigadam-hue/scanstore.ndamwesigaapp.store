@@ -516,6 +516,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setPendingBW(false);
       setReviewContrast(100);
       setReviewBrightness(100);
+      setReviewSaturate(100);
+      setReviewPreset("original");
       clearIdPreviews();
     }
   }, [open, clearCapturedPreview, clearIdPreviews]);
@@ -924,6 +926,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (result) {
         setReviewContrast(100);
         setReviewBrightness(100);
+        setReviewSaturate(100);
+        setReviewPreset("original");
         setCapturedPreview(result);
       }
     } catch {
@@ -1430,6 +1434,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       });
       setReviewContrast(100);
       setReviewBrightness(100);
+      setReviewSaturate(100);
+      setReviewPreset("original");
       setCapturedPreview(file);
       clearPhotoRaw();
       setPendingBW(false);
@@ -1445,6 +1451,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
         setReviewContrast(100);
         setReviewBrightness(100);
+        setReviewSaturate(100);
+        setReviewPreset("original");
         setCapturedPreview(file);
         clearPhotoRaw();
         setPendingBW(false);
