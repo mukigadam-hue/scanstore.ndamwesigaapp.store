@@ -257,9 +257,14 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
   const [torchOn, setTorchOn] = useState(false);
-  // Contrast/brightness adjusters on the captured review screen.
+  // Contrast/brightness/saturation adjusters on the captured review screen.
   const [reviewContrast, setReviewContrast] = useState(100);
   const [reviewBrightness, setReviewBrightness] = useState(100);
+  const [reviewSaturate, setReviewSaturate] = useState(100);
+  const [reviewPreset, setReviewPreset] = useState<"original" | "auto" | "perfect" | "lighten">("original");
+  // Big center overlay while dragging a slider ("63% Brightness").
+  const [adjustHint, setAdjustHint] = useState<null | { label: string; value: number }>(null);
+  const adjustHintTimerRef = useRef<number | null>(null);
   // When true, the raw capture routed through ManualCropScreen should be
   // warped with adaptive thresholding (Scan button) instead of preserving
   // colors (Take Photo button).
