@@ -979,7 +979,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       photoRawObjectUrlRef.current = url;
       setPhotoRawUrl(url);
       stopCamera();
-      setPendingBW(false);
+      // Flag: this is a document scan (not a plain photo) — cleanup pass
+      // must run on the warped output while preserving original colors.
+      setPendingBW(true);
       setScanMode("photo-crop");
       clearFrozenFrame();
     } catch {
