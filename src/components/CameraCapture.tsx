@@ -521,6 +521,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setReviewBrightness(100);
       setReviewSaturate(100);
       setReviewPreset("original");
+      setExtraPages([]);
       clearIdPreviews();
     }
   }, [open, clearCapturedPreview, clearIdPreviews]);
