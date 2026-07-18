@@ -974,7 +974,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       photoRawObjectUrlRef.current = url;
       setPhotoRawUrl(url);
       stopCamera();
-      setPendingBW(true);
+      setPendingBW(false);
       setScanMode("photo-crop");
       clearFrozenFrame();
     } catch {
