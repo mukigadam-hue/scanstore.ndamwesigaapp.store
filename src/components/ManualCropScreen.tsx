@@ -124,6 +124,45 @@ export default function ManualCropScreen({
     window.addEventListener("pointercancel", onUp);
   };
 
+  // Midpoint drag: translates the two adjacent corners together by the drag delta,
+  // so the edge extends/contracts as a whole.
+  const startEdgeDrag = (edgeIdx: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const container = containerRef.current;
+    if (!container || !corners) return;
+    const rect = container.getBoundingClientRect();
+    const a = corners[edgeIdx];
+    const b = corners[(edgeIdx + 1) % 4];
+    const startMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const startA = { ...a };
+    const startB = { ...b };
+
+    const onMove = (ev: PointerEvent) => {
+      const cx = ev.clientX - rect.left;
+      const cy = ev.clientY - rect.top;
+      const cur = cssToSrc(cx, cy);
+      const dx = cur.x - startMid.x;
+      const dy = cur.y - startMid.y;
+      setCorners((prev) => {
+        if (!prev) return prev;
+        const copy = [...prev] as Quad;
+        copy[edgeIdx] = { x: startA.x + dx, y: startA.y + dy };
+        copy[(edgeIdx + 1) % 4] = { x: startB.x + dx, y: startB.y + dy };
+        return copy;
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
   const polygonPoints = useMemo(() => {
     if (!corners) return "";
     return corners.map((p) => {
@@ -188,6 +227,27 @@ export default function ManualCropScreen({
               }}
             >
               <div className="absolute inset-1 rounded-full bg-black/25" />
+            </div>
+          );
+        })}
+        {corners && corners.map((_, edgeIdx) => {
+          const a = corners[edgeIdx];
+          const b = corners[(edgeIdx + 1) % 4];
+          const mid = srcToCss({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+          return (
+            <div
+              key={`mid-${edgeIdx}`}
+              onPointerDown={(e) => startEdgeDrag(edgeIdx, e)}
+              className="absolute rounded-full bg-amber-200 border-2 border-black shadow-md touch-none cursor-grab active:cursor-grabbing"
+              style={{
+                left: mid.x - 12,
+                top: mid.y - 12,
+                width: 24,
+                height: 24,
+                zIndex: 4,
+              }}
+            >
+              <div className="absolute inset-1 rounded-full bg-black/20" />
             </div>
           );
         })}

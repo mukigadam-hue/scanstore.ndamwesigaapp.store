@@ -270,6 +270,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // colors (Take Photo button).
   const [pendingBW, setPendingBW] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  // Multi-page: additional captured pages queued before the current one.
+  // When saving as PDF, all pages are combined; single-image saves use the current only.
+  const [extraPages, setExtraPages] = useState<File[]>([]);
 
   // Instant-feedback capture flash (300ms) + optional frozen frame preview.
   const [flashKey, setFlashKey] = useState(0);
@@ -518,6 +521,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setReviewBrightness(100);
       setReviewSaturate(100);
       setReviewPreset("original");
+      setExtraPages([]);
       clearIdPreviews();
     }
   }, [open, clearCapturedPreview, clearIdPreviews]);
@@ -875,7 +879,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           const scanImageData2 = scanCtx.getImageData(0, 0, targetW, targetH);
           const outSize = estimateOutputSize(detection.corners, Math.max(targetW, targetH));
           const warped = await Promise.race([
-            warpDocument(scanImageData2, detection.corners, outSize.outW, outSize.outH, { adaptiveThreshold: true }),
+            warpDocument(scanImageData2, detection.corners, outSize.outW, outSize.outH, { adaptiveThreshold: false }),
             new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
           ]);
           if (warped) {
@@ -974,7 +978,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       photoRawObjectUrlRef.current = url;
       setPhotoRawUrl(url);
       stopCamera();
-      setPendingBW(true);
+      setPendingBW(false);
       setScanMode("photo-crop");
       clearFrozenFrame();
     } catch {
@@ -1253,41 +1257,53 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   };
 
 
+  // Build a single PDF from all captured pages (extras + current baked).
+  const buildMultiPagePdf = async (): Promise<{ blob: Blob; count: number } | null> => {
+    if (!capturedFile) return null;
+    const baked = (await bakeAdjustments()) ?? capturedFile;
+    const pageFiles: File[] = [...extraPages, baked];
+    const pdf = new jsPDF({
+      orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: false,
+    });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 5;
+    for (let i = 0; i < pageFiles.length; i++) {
+      const f = pageFiles[i];
+      const url = URL.createObjectURL(f);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = reject;
+          im.src = url;
+        });
+        if (i > 0) pdf.addPage();
+        const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
+        const sw = img.width * ratio;
+        const sh = img.height * ratio;
+        const format = f.type.includes("png") ? "PNG" : "JPEG";
+        pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
+      } finally {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+      }
+    }
+    return { blob: pdf.output("blob"), count: pageFiles.length };
+  };
+
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
     const tid = toast.loading("Preparing PDF…");
     try {
-      const baked = (await bakeAdjustments()) ?? capturedFile;
-      const bakedUrl = URL.createObjectURL(baked);
-      try {
-        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const i = new Image();
-          i.onload = () => resolve(i);
-          i.onerror = reject;
-          i.src = bakedUrl;
-        });
-        const pdf = new jsPDF({
-          orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
-          unit: "mm",
-          format: "a4",
-          compress: false,
-        });
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        const margin = 5;
-        const ratio = Math.min((pageWidth - margin * 2) / img.width, (pageHeight - margin * 2) / img.height);
-        const sw = img.width * ratio;
-        const sh = img.height * ratio;
-        const format = baked.type.includes("png") ? "PNG" : "JPEG";
-        pdf.addImage(img, format, (pageWidth - sw) / 2, (pageHeight - sh) / 2, sw, sh, undefined, "FAST");
-        const blob = pdf.output("blob");
-        await downloadBlob(blob, `scan_${Date.now()}.pdf`);
-        toast.success("PDF saved successfully", { id: tid });
-        triggerNativeAd("scan-save-phone");
-        handleClose();
-      } finally {
-        try { URL.revokeObjectURL(bakedUrl); } catch { /* ignore */ }
-      }
+      const built = await buildMultiPagePdf();
+      if (!built) throw new Error("no pdf");
+      await downloadBlob(built.blob, `scan_${Date.now()}.pdf`);
+      toast.success(built.count > 1 ? `PDF saved (${built.count} pages)` : "PDF saved successfully", { id: tid });
+      triggerNativeAd("scan-save-phone");
+      handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
       else toast.error("Could not save PDF to phone", { id: tid });
@@ -1298,45 +1314,38 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const saveAsDocument = async () => {
     if (!captured || !capturedFile) return;
     try {
-      const baked = (await bakeAdjustments()) ?? capturedFile;
-      const bakedUrl = URL.createObjectURL(baked);
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const pdf = new jsPDF({
-            orientation: scanOrientation === "landscape" ? "landscape" : "portrait",
-            unit: "mm",
-            format: "a4",
-            compress: false,
-          });
-          const pageWidth = pdf.internal.pageSize.getWidth();
-          const pageHeight = pdf.internal.pageSize.getHeight();
-          const margin = 5;
-          const availableWidth = pageWidth - margin * 2;
-          const availableHeight = pageHeight - margin * 2;
-          const ratio = Math.min(availableWidth / img.width, availableHeight / img.height);
-          const scaledWidth = img.width * ratio;
-          const scaledHeight = img.height * ratio;
-          const xOffset = (pageWidth - scaledWidth) / 2;
-          const yOffset = (pageHeight - scaledHeight) / 2;
-          const format = baked.type.includes("png") ? "PNG" : "JPEG";
-          pdf.addImage(img, format, xOffset, yOffset, scaledWidth, scaledHeight, undefined, "FAST");
-          const pdfBlob = pdf.output("blob");
-          const pdfFile = new File([pdfBlob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
-          onCapture(pdfFile);
-          toast.success("Document scanned and saved as PDF!");
-        } finally {
-          try { URL.revokeObjectURL(bakedUrl); } catch { /* ignore */ }
-          handleClose();
-        }
-      };
-      img.src = bakedUrl;
+      const built = await buildMultiPagePdf();
+      if (!built) throw new Error("no pdf");
+      const pdfFile = new File([built.blob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
+      onCapture(pdfFile);
+      toast.success(built.count > 1 ? `Saved as ${built.count}-page PDF!` : "Document scanned and saved as PDF!");
+      handleClose();
     } catch (err) {
       console.error("PDF creation error:", err);
       toast.error("Failed to create PDF. Saving as image instead.");
       await saveAsImage();
     }
   };
+
+  // Stash the current baked page and reopen the camera for the next page.
+  const addAnotherPage = async () => {
+    if (!capturedFile) return;
+    try {
+      const baked = (await bakeAdjustments()) ?? capturedFile;
+      setExtraPages((p) => [...p, baked]);
+      setReviewContrast(100);
+      setReviewBrightness(100);
+      setReviewSaturate(100);
+      setReviewPreset("original");
+      clearCapturedPreview();
+      setSaveChoicesOpen(null);
+      startCamera(facingMode);
+      toast.success("Page added — scan the next one");
+    } catch {
+      toast.error("Could not add page");
+    }
+  };
+
 
 
   // Save the assembled two-sided ID directly to the user's phone.
@@ -2142,18 +2151,28 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 max-w-sm mx-auto">
+          <div className="flex flex-col gap-2 max-w-sm mx-auto">
+            {extraPages.length > 0 && (
+              <div className="flex items-center justify-center">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/40">
+                  {extraPages.length + 1} pages queued
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
               <Button onClick={() => setSaveChoicesOpen("capture")} className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90">
                 <Save className="h-4 w-4 mr-2" />
                 Save
+              </Button>
+              <Button onClick={addAnotherPage} variant="outline" className="flex-1 border-amber-300/50 text-amber-200 hover:bg-amber-400/10 bg-transparent">
+                <FileText className="h-4 w-4 mr-1.5" />
+                + Page
               </Button>
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { clearCapturedPreview(); setSaveChoicesOpen(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake
               </Button>
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
-                Cancel
-              </Button>
+            </div>
           </div>
         )}
       </div>
