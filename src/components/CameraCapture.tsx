@@ -897,10 +897,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
     // Enhancement and JPEG encoding start during the first sweep frame so
     // older WebViews do not sit on the camera screen after the animation ends.
+    // Always run the cleanup pass (shadow/darkness removal, white-balance,
+    // sharpening) — even when the worker successfully warped the document —
+    // so scanned pages come out clean and bright, not dim or muddy.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      if (!workerWarped) {
-        enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
-      }
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
       filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
