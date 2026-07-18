@@ -1413,8 +1413,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Called from the manual crop screen after the user positions the 4 dots.
   const handlePhotoCropConfirm = async (corners: Quad, imageSize: { width: number; height: number }) => {
     if (!photoRawUrl) return;
-    const bw = pendingBW;
-    const tid = toast.loading(bw ? "Scanning…" : "Straightening…");
+    // `pendingBW` now means "scan mode" — apply page cleanup (shadow removal,
+    // white-balance, sharpening) while KEEPING the document's original
+    // colors. We never apply adaptive B&W thresholding here so colored
+    // stamps, signatures and highlights survive.
+    const isScan = pendingBW;
+    const tid = toast.loading(isScan ? "Cleaning scan…" : "Straightening…");
     try {
       const res = await fetch(photoRawUrl);
       const blob = await res.blob();
@@ -1427,19 +1431,20 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       ctx.drawImage(bitmap, 0, 0);
       const src = ctx.getImageData(0, 0, imageSize.width, imageSize.height);
       const outSize = estimateOutputSize(corners, 2000);
-      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: bw });
+      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: false });
       const out = document.createElement("canvas");
       out.width = warped.width;
       out.height = warped.height;
       out.getContext("2d")!.putImageData(warped, 0, 0);
-      if (bw) {
-        // Light enhancement pass to lift the scan without destroying detail.
+      if (isScan) {
+        // Color-preserving cleanup: removes shadows/darkness, whitens the
+        // page background and sharpens text without inverting colors.
         try {
           const profile = getCaptureProfile();
           enhanceScanCanvas(out, { isIdScan: false, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
         } catch { /* keep raw warp */ }
       }
-      const prefix = bw ? "scan_image" : "photo";
+      const prefix = isScan ? "scan_image" : "photo";
       const file = await canvasToFile(out, `${prefix}_${Date.now()}.jpg`, "image/jpeg", 0.92, {
         timeoutMs: 800,
         fallbackMaxDimension: 1800,
@@ -1451,8 +1456,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setCapturedPreview(file);
       clearPhotoRaw();
       setPendingBW(false);
-      setScanMode(bw ? "document" : "photo");
-      toast.success(bw ? "Scan ready" : "Photo ready", { id: tid });
+      setScanMode(isScan ? "document" : "photo");
+      toast.success(isScan ? "Scan ready — adjust contrast & brightness if needed" : "Photo ready", { id: tid });
     } catch (e) {
       console.error("crop confirm failed", e);
       toast.error("Could not straighten — using original", { id: tid });
