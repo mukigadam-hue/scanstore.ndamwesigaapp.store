@@ -875,7 +875,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           const scanImageData2 = scanCtx.getImageData(0, 0, targetW, targetH);
           const outSize = estimateOutputSize(detection.corners, Math.max(targetW, targetH));
           const warped = await Promise.race([
-            warpDocument(scanImageData2, detection.corners, outSize.outW, outSize.outH, { adaptiveThreshold: true }),
+            warpDocument(scanImageData2, detection.corners, outSize.outW, outSize.outH, { adaptiveThreshold: false }),
             new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
           ]);
           if (warped) {
