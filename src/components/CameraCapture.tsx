@@ -270,6 +270,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // colors (Take Photo button).
   const [pendingBW, setPendingBW] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  // Multi-page: additional captured pages queued before the current one.
+  // When saving as PDF, all pages are combined; single-image saves use the current only.
+  const [extraPages, setExtraPages] = useState<File[]>([]);
 
   // Instant-feedback capture flash (300ms) + optional frozen frame preview.
   const [flashKey, setFlashKey] = useState(0);
