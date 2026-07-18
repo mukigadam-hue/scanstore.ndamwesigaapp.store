@@ -2151,18 +2151,28 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 max-w-sm mx-auto">
+          <div className="flex flex-col gap-2 max-w-sm mx-auto">
+            {extraPages.length > 0 && (
+              <div className="flex items-center justify-center">
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/40">
+                  {extraPages.length + 1} pages queued
+                </span>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
               <Button onClick={() => setSaveChoicesOpen("capture")} className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90">
                 <Save className="h-4 w-4 mr-2" />
                 Save
+              </Button>
+              <Button onClick={addAnotherPage} variant="outline" className="flex-1 border-amber-300/50 text-amber-200 hover:bg-amber-400/10 bg-transparent">
+                <FileText className="h-4 w-4 mr-1.5" />
+                + Page
               </Button>
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { clearCapturedPreview(); setSaveChoicesOpen(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake
               </Button>
-              <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
-                Cancel
-              </Button>
+            </div>
           </div>
         )}
       </div>
