@@ -1473,7 +1473,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         setCapturedPreview(file);
         clearPhotoRaw();
         setPendingBW(false);
-        setScanMode(bw ? "document" : "photo");
+        setScanMode(isScan ? "document" : "photo");
       } catch { /* give up */ }
     }
   };
