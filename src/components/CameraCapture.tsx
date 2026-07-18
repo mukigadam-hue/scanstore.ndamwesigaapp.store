@@ -29,7 +29,7 @@ const A4_H_MM = 297;
 const A4_PORTRAIT_ASPECT = A4_W_MM / A4_H_MM;
 const A4_LANDSCAPE_ASPECT = A4_H_MM / A4_W_MM;
 const DEFAULT_ID_WIDTH_MM = 110;
-const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
+const BANNER_SAFE_BOTTOM = "calc(128px + env(safe-area-inset-bottom, 0px))";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
