@@ -29,7 +29,7 @@ const A4_H_MM = 297;
 const A4_PORTRAIT_ASPECT = A4_W_MM / A4_H_MM;
 const A4_LANDSCAPE_ASPECT = A4_H_MM / A4_W_MM;
 const DEFAULT_ID_WIDTH_MM = 110;
-const BANNER_SAFE_BOTTOM = "calc(104px + env(safe-area-inset-bottom, 0px))";
+const BANNER_SAFE_BOTTOM = "calc(128px + env(safe-area-inset-bottom, 0px))";
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -897,10 +897,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
     // Enhancement and JPEG encoding start during the first sweep frame so
     // older WebViews do not sit on the camera screen after the animation ends.
+    // Always run the cleanup pass (shadow/darkness removal, white-balance,
+    // sharpening) — even when the worker successfully warped the document —
+    // so scanned pages come out clean and bright, not dim or muddy.
     await runScanAnimation(isIdScan ? 300 : profile.sweepMs, () => {
-      if (!workerWarped) {
-        enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
-      }
+      enhanceScanCanvas(mainCanvas, { isIdScan, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
       filePromise = canvasToFile(mainCanvas, `${prefix}_${Date.now()}.jpg`, "image/jpeg", jpegQuality, {
         timeoutMs: profile.encodeTimeoutMs,
         fallbackMaxDimension: profile.fallbackMax,
@@ -978,7 +979,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       photoRawObjectUrlRef.current = url;
       setPhotoRawUrl(url);
       stopCamera();
-      setPendingBW(false);
+      // Flag: this is a document scan (not a plain photo) — cleanup pass
+      // must run on the warped output while preserving original colors.
+      setPendingBW(true);
       setScanMode("photo-crop");
       clearFrozenFrame();
     } catch {
@@ -1410,8 +1413,12 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // Called from the manual crop screen after the user positions the 4 dots.
   const handlePhotoCropConfirm = async (corners: Quad, imageSize: { width: number; height: number }) => {
     if (!photoRawUrl) return;
-    const bw = pendingBW;
-    const tid = toast.loading(bw ? "Scanning…" : "Straightening…");
+    // `pendingBW` now means "scan mode" — apply page cleanup (shadow removal,
+    // white-balance, sharpening) while KEEPING the document's original
+    // colors. We never apply adaptive B&W thresholding here so colored
+    // stamps, signatures and highlights survive.
+    const isScan = pendingBW;
+    const tid = toast.loading(isScan ? "Cleaning scan…" : "Straightening…");
     try {
       const res = await fetch(photoRawUrl);
       const blob = await res.blob();
@@ -1424,19 +1431,20 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       ctx.drawImage(bitmap, 0, 0);
       const src = ctx.getImageData(0, 0, imageSize.width, imageSize.height);
       const outSize = estimateOutputSize(corners, 2000);
-      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: bw });
+      const warped = await warpDocument(src, corners, outSize.outW, outSize.outH, { adaptiveThreshold: false });
       const out = document.createElement("canvas");
       out.width = warped.width;
       out.height = warped.height;
       out.getContext("2d")!.putImageData(warped, 0, 0);
-      if (bw) {
-        // Light enhancement pass to lift the scan without destroying detail.
+      if (isScan) {
+        // Color-preserving cleanup: removes shadows/darkness, whitens the
+        // page background and sharpens text without inverting colors.
         try {
           const profile = getCaptureProfile();
           enhanceScanCanvas(out, { isIdScan: false, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
         } catch { /* keep raw warp */ }
       }
-      const prefix = bw ? "scan_image" : "photo";
+      const prefix = isScan ? "scan_image" : "photo";
       const file = await canvasToFile(out, `${prefix}_${Date.now()}.jpg`, "image/jpeg", 0.92, {
         timeoutMs: 800,
         fallbackMaxDimension: 1800,
@@ -1448,8 +1456,8 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setCapturedPreview(file);
       clearPhotoRaw();
       setPendingBW(false);
-      setScanMode(bw ? "document" : "photo");
-      toast.success(bw ? "Scan ready" : "Photo ready", { id: tid });
+      setScanMode(isScan ? "document" : "photo");
+      toast.success(isScan ? "Scan ready — adjust contrast & brightness if needed" : "Photo ready", { id: tid });
     } catch (e) {
       console.error("crop confirm failed", e);
       toast.error("Could not straighten — using original", { id: tid });
@@ -1465,7 +1473,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         setCapturedPreview(file);
         clearPhotoRaw();
         setPendingBW(false);
-        setScanMode(bw ? "document" : "photo");
+        setScanMode(isScan ? "document" : "photo");
       } catch { /* give up */ }
     }
   };

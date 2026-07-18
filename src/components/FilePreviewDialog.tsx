@@ -3,7 +3,7 @@ import "@/lib/polyfills";
 import { useAdPrefetch } from "@/hooks/useAdPrefetch";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, X, FileText, Music, Video, File, ZoomIn, ZoomOut, Pencil, Save, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,11 +67,8 @@ const canEdit = (name: string, fileType: string) => {
 
 const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [numPages, setNumPages] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
-  const renderTaskRef = useRef<any>(null);
+  const [numPages, setNumPages] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +78,6 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
         if (!cancelled) {
           setPdfDoc(doc);
           setNumPages(doc.numPages);
-          setCurrentPage(1);
         }
       } catch (e) {
         console.error("PDF load error", e);
@@ -91,27 +87,79 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
     return () => { cancelled = true; };
   }, [url]);
 
-  useEffect(() => {
-    if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
-    let cancelled = false;
+  return (
+    <div ref={containerRef} className="w-full h-full overflow-y-auto overflow-x-hidden bg-white">
+      <div className="w-full flex flex-col items-center gap-3 p-2">
+        {pdfDoc && Array.from({ length: numPages }, (_, i) => (
+          <PdfPageInline key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} />
+        ))}
+        {numPages > 1 && (
+          <div className="sticky bottom-2 self-center bg-black/70 rounded-full px-3 py-1 text-white text-xs z-10">
+            {numPages} pages
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
-    const renderPage = async () => {
-      // Cancel any in-flight render before starting a new one — fixes
-      // "Cannot use the same canvas during multiple render() operations"
-      // when zooming/paging quickly.
+function PdfPageInline({
+  pdfDoc,
+  pageNumber,
+  zoom,
+  scrollParent,
+}: {
+  pdfDoc: any;
+  pageNumber: number;
+  zoom: number;
+  scrollParent: HTMLElement | null;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderTaskRef = useRef<any>(null);
+  const [visible, setVisible] = useState(pageNumber <= 2);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const page = await pdfDoc.getPage(pageNumber);
+        if (cancelled) return;
+        const vp = page.getViewport({ scale: 1 });
+        setSize({ w: vp.width, h: vp.height });
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [pdfDoc, pageNumber]);
+
+  useEffect(() => {
+    if (visible || !wrapRef.current) return;
+    const el = wrapRef.current;
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) { setVisible(true); io.disconnect(); break; }
+      }
+    }, { root: scrollParent || null, rootMargin: "400px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible, scrollParent]);
+
+  useEffect(() => {
+    if (!visible || !pdfDoc || !canvasRef.current || !wrapRef.current) return;
+    let cancelled = false;
+    (async () => {
       if (renderTaskRef.current) {
         try { renderTaskRef.current.cancel(); } catch { /* ignore */ }
         renderTaskRef.current = null;
       }
-
       try {
-        const page = await pdfDoc.getPage(currentPage);
-        const container = containerRef.current;
-        if (!container || cancelled) return;
-        const containerWidth = container.clientWidth;
-        const unscaledViewport = page.getViewport({ scale: 1 });
-        const dpr = Math.min(window.devicePixelRatio || 1, 3);
-        const cssScale = (containerWidth / unscaledViewport.width) * zoom;
+        const page = await pdfDoc.getPage(pageNumber);
+        const wrap = wrapRef.current;
+        if (!wrap || cancelled) return;
+        const unscaled = page.getViewport({ scale: 1 });
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const cssScale = (wrap.clientWidth / unscaled.width) * zoom;
         const viewport = page.getViewport({ scale: cssScale * dpr });
         const cssViewport = page.getViewport({ scale: cssScale });
         const canvas = canvasRef.current!;
@@ -125,14 +173,11 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
         await task.promise;
         if (renderTaskRef.current === task) renderTaskRef.current = null;
       } catch (err: any) {
-        // pdf.js throws "RenderingCancelledException" when we cancel — ignore.
         if (err?.name !== "RenderingCancelledException") {
           console.error("PDF render error", err);
         }
       }
-    };
-
-    renderPage();
+    })();
     return () => {
       cancelled = true;
       if (renderTaskRef.current) {
@@ -140,27 +185,24 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
         renderTaskRef.current = null;
       }
     };
-  }, [pdfDoc, currentPage, zoom]);
+  }, [visible, pdfDoc, pageNumber, zoom]);
 
+  const reservedAspect = size ? size.h / size.w : 1.414;
   return (
-    <div ref={containerRef} className="w-full h-full overflow-auto bg-white">
-      <div className="min-w-full min-h-full flex flex-col items-center justify-center p-2">
-        <canvas ref={canvasRef} style={{ display: "block", margin: "auto" }} />
-        {numPages > 1 && (
-          <div className="sticky bottom-2 flex items-center gap-3 bg-black/70 rounded-full px-4 py-2 mt-2 z-10">
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-white text-sm">{currentPage} / {numPages}</span>
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage >= numPages}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-      </div>
+    <div
+      ref={wrapRef}
+      className="w-full max-w-full shadow-sm bg-white"
+      style={{ aspectRatio: visible ? undefined : `${1} / ${reservedAspect}` }}
+    >
+      <canvas ref={canvasRef} style={{ display: "block", margin: "0 auto", maxWidth: "100%" }} />
+      {!visible && (
+        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+          Loading page {pageNumber}…
+        </div>
+      )}
     </div>
   );
-};
+}
 
 /**
  * AsyncImage — fetches the given URL into a binary Blob, creates a
