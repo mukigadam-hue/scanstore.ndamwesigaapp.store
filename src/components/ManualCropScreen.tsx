@@ -230,6 +230,27 @@ export default function ManualCropScreen({
             </div>
           );
         })}
+        {corners && corners.map((_, edgeIdx) => {
+          const a = corners[edgeIdx];
+          const b = corners[(edgeIdx + 1) % 4];
+          const mid = srcToCss({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+          return (
+            <div
+              key={`mid-${edgeIdx}`}
+              onPointerDown={(e) => startEdgeDrag(edgeIdx, e)}
+              className="absolute rounded-full bg-amber-200 border-2 border-black shadow-md touch-none cursor-grab active:cursor-grabbing"
+              style={{
+                left: mid.x - 12,
+                top: mid.y - 12,
+                width: 24,
+                height: 24,
+                zIndex: 4,
+              }}
+            >
+              <div className="absolute inset-1 rounded-full bg-black/20" />
+            </div>
+          );
+        })}
       </div>
 
       <div className="bg-black/85 backdrop-blur-sm px-4 py-3 safe-area-bottom">
