@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Check, RotateCcw, X } from "lucide-react";
 import type { Quad, Pt } from "@/lib/documentProcessor";
 
+// Height reserved at the bottom for the persistent banner ad so the action
+// buttons are never covered.
+const BANNER_SAFE_BOTTOM = 76;
+
 interface ManualCropScreenProps {
   open: boolean;
   imageUrl: string;
@@ -32,6 +36,10 @@ export default function ManualCropScreen({
   });
   // Corners stored in source-image pixel space.
   const [corners, setCorners] = useState<Quad | null>(null);
+  // Independent midpoint positions (source-image pixel space). null = follow
+  // the current edge midpoint automatically. Once the user drags a midpoint
+  // it becomes "sticky" and stays where they placed it.
+  const [midpoints, setMidpoints] = useState<(Pt | null)[]>([null, null, null, null]);
 
   // Load image and initialize corners at 6% inset from each edge.
   useEffect(() => {
@@ -47,6 +55,7 @@ export default function ManualCropScreen({
         { x: w - inset, y: h - inset },
         { x: inset, y: h - inset },
       ]);
+      setMidpoints([null, null, null, null]);
     };
     img.src = imageUrl;
   }, [open, imageUrl]);
@@ -124,8 +133,8 @@ export default function ManualCropScreen({
     window.addEventListener("pointercancel", onUp);
   };
 
-  // Midpoint drag: translates the two adjacent corners together by the drag delta,
-  // so the edge extends/contracts as a whole.
+  // Midpoint drag: moves ONLY that midpoint independently. The four corners
+  // remain fixed so the user can shape a side that isn't perfectly straight.
   const startEdgeDrag = (edgeIdx: number, e: React.PointerEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -133,23 +142,14 @@ export default function ManualCropScreen({
     const container = containerRef.current;
     if (!container || !corners) return;
     const rect = container.getBoundingClientRect();
-    const a = corners[edgeIdx];
-    const b = corners[(edgeIdx + 1) % 4];
-    const startMid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    const startA = { ...a };
-    const startB = { ...b };
 
     const onMove = (ev: PointerEvent) => {
       const cx = ev.clientX - rect.left;
       const cy = ev.clientY - rect.top;
       const cur = cssToSrc(cx, cy);
-      const dx = cur.x - startMid.x;
-      const dy = cur.y - startMid.y;
-      setCorners((prev) => {
-        if (!prev) return prev;
-        const copy = [...prev] as Quad;
-        copy[edgeIdx] = { x: startA.x + dx, y: startA.y + dy };
-        copy[(edgeIdx + 1) % 4] = { x: startB.x + dx, y: startB.y + dy };
+      setMidpoints((prev) => {
+        const copy = [...prev];
+        copy[edgeIdx] = cur;
         return copy;
       });
     };
@@ -163,30 +163,48 @@ export default function ManualCropScreen({
     window.addEventListener("pointercancel", onUp);
   };
 
+  // Effective midpoint for each edge: user's chosen point if they moved it,
+  // otherwise the automatic edge midpoint between the two adjacent corners.
+  const effectiveMidpoints = useMemo<Pt[]>(() => {
+    if (!corners) return [];
+    return [0, 1, 2, 3].map((i) => {
+      const m = midpoints[i];
+      if (m) return m;
+      const a = corners[i];
+      const b = corners[(i + 1) % 4];
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    });
+  }, [corners, midpoints]);
+
+  // 8-point polygon path used for the visual crop outline (corner → midpoint → corner …).
   const polygonPoints = useMemo(() => {
-    if (!corners) return "";
-    return corners.map((p) => {
+    if (!corners || effectiveMidpoints.length !== 4) return "";
+    const seq: Pt[] = [];
+    for (let i = 0; i < 4; i++) {
+      seq.push(corners[i]);
+      seq.push(effectiveMidpoints[i]);
+    }
+    return seq.map((p) => {
       const c = srcToCss(p);
       return `${c.x},${c.y}`;
     }).join(" ");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [corners, displaySize, imgSize]);
+  }, [corners, effectiveMidpoints, displaySize, imgSize]);
 
   if (!open) return null;
 
   const overlay = (
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
-      <div className="bg-black/85 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top">
-        <h3 className="text-white text-sm font-medium">Adjust corners</h3>
+      <div className="bg-black/85 backdrop-blur-sm px-3 py-1.5 flex items-center justify-between safe-area-top">
+        <div className="flex-1">
+          <h3 className="text-white text-sm font-medium leading-tight">Adjust corners</h3>
+          <p className="text-white/60 text-[10px] leading-tight">
+            Drag amber dots to corners · pale dots reshape a curved side
+          </p>
+        </div>
         <Button size="icon" variant="ghost" onClick={onCancel} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
           <X className="h-5 w-5" />
         </Button>
-      </div>
-
-      <div className="px-4 pt-2 pb-1 text-center">
-        <p className="text-white/75 text-xs">
-          Drag the 4 amber dots to the exact corners of your document. Colors, stamps and signatures are preserved.
-        </p>
       </div>
 
       <div ref={containerRef} className="flex-1 relative overflow-hidden">
@@ -230,10 +248,8 @@ export default function ManualCropScreen({
             </div>
           );
         })}
-        {corners && corners.map((_, edgeIdx) => {
-          const a = corners[edgeIdx];
-          const b = corners[(edgeIdx + 1) % 4];
-          const mid = srcToCss({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        {effectiveMidpoints.map((p, edgeIdx) => {
+          const mid = srcToCss(p);
           return (
             <div
               key={`mid-${edgeIdx}`}
@@ -253,7 +269,10 @@ export default function ManualCropScreen({
         })}
       </div>
 
-      <div className="bg-black/85 backdrop-blur-sm px-4 py-3 safe-area-bottom">
+      <div
+        className="bg-black/90 backdrop-blur-sm px-4 pt-3"
+        style={{ paddingBottom: BANNER_SAFE_BOTTOM }}
+      >
         <div className="flex items-center gap-2 max-w-sm mx-auto">
           <Button
             onClick={() => corners && imgSize && onConfirm(corners, imgSize)}
