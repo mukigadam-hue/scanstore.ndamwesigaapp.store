@@ -1440,8 +1440,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         // Color-preserving cleanup: removes shadows/darkness, whitens the
         // page background and sharpens text without inverting colors.
         try {
-          const profile = getCaptureProfile();
-          enhanceScanCanvas(out, { isIdScan: false, fast: profile.fastEnhance, backgroundScale: profile.backgroundScale });
+          // Always run the FULL cleanup for a scan (shadow removal + whitening
+          // + contrast + sharpening). Skipping shadow removal here is what was
+          // leaving the greyish shadowed background the user reported.
+          enhanceScanCanvas(out, { isIdScan: false, fast: false, backgroundWhiteness: 0.92, sharpenAmount: 0.4 });
         } catch { /* keep raw warp */ }
       }
       const prefix = isScan ? "scan_image" : "photo";
