@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Check, RotateCcw, X } from "lucide-react";
 import type { Quad, Pt } from "@/lib/documentProcessor";
 
+// Height reserved at the bottom for the persistent banner ad so the action
+// buttons are never covered.
+const BANNER_SAFE_BOTTOM = 76;
+
 interface ManualCropScreenProps {
   open: boolean;
   imageUrl: string;
