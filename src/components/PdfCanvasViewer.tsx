@@ -56,8 +56,8 @@ export default function PdfCanvasViewer({ url, className }: Props) {
   }
 
   return (
-    <div ref={containerRef} className={className || "w-full h-[80vh] overflow-y-auto overflow-x-hidden bg-white rounded-md border border-border"}>
-      <div className="w-full flex flex-col items-center gap-3 p-2">
+    <div ref={containerRef} className={className || "w-full h-[80vh] overflow-y-auto overflow-x-hidden bg-white rounded-md border border-border"} style={{ touchAction: "pan-y pinch-zoom" }}>
+      <div className="w-full min-h-full flex flex-col items-center justify-center gap-3 p-3">
         {pdfDoc && Array.from({ length: numPages }, (_, i) => (
           <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} />
         ))}
