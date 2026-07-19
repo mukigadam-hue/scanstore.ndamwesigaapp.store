@@ -88,8 +88,8 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   }, [url]);
 
   return (
-    <div ref={containerRef} className="w-full h-full overflow-y-auto overflow-x-hidden bg-white">
-      <div className="w-full flex flex-col items-center gap-3 p-2">
+    <div ref={containerRef} className="w-full h-full overflow-y-auto overflow-x-hidden bg-white" style={{ touchAction: "pan-y pinch-zoom" }}>
+      <div className="w-full min-h-full flex flex-col items-center justify-center gap-3 p-3">
         {pdfDoc && Array.from({ length: numPages }, (_, i) => (
           <PdfPageInline key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} />
         ))}

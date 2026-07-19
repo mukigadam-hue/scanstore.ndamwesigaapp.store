@@ -115,6 +115,8 @@ export function enhanceScanCanvas(
 
     // Divide image by the low-resolution background map directly. Avoiding a full-size
     // upscaled ImageData saves several MB and is much faster on older Android WebViews.
+    // Also protect dark text: for genuinely dark pixels we skip the whitening blend
+    // so faint pen/pencil words never get erased into the background.
     const wMix = backgroundWhiteness;
     const xRatio = bgW / w;
     const yRatio = bgH / h;
@@ -124,11 +126,18 @@ export function enhanceScanCanvas(
       for (let x = 0; x < w; x++, idx += 4) {
         const bx = Math.min(bgW - 1, (x * xRatio) | 0);
         const bIdx = (by * bgW + bx) * 4;
+        // Per-pixel text guard: brightness drives how much whitening we apply.
+        // <110 luminance = treat as ink, keep original. >180 = full whitening.
+        const lum = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        let textMix: number;
+        if (lum <= 110) textMix = 0;
+        else if (lum >= 180) textMix = wMix;
+        else textMix = wMix * ((lum - 110) / 70);
         for (let c = 0; c < 3; c++) {
           const px = data[idx + c];
           const bgPx = bg[bIdx + c] || 1;
           const corrected = (px / bgPx) * 255;
-          data[idx + c] = Math.min(255, Math.max(0, corrected * wMix + px * (1 - wMix)));
+          data[idx + c] = Math.min(255, Math.max(0, corrected * textMix + px * (1 - textMix)));
         }
       }
     }
@@ -166,7 +175,10 @@ export function enhanceScanCanvas(
       const orig = data[i];
       const v = (orig - lo) * scale;
       const clamped = v < 0 ? 0 : v > 255 ? 255 : v;
-      data[i] = clamped * stretchMix + orig * (1 - stretchMix);
+      // Text-safe stretch: don't push dark ink brighter than it started.
+      // Only allow the stretch to darken dark pixels — never lighten them.
+      const stretched = clamped * stretchMix + orig * (1 - stretchMix);
+      data[i] = orig < 120 ? Math.min(orig, stretched) : stretched;
     }
   }
 
