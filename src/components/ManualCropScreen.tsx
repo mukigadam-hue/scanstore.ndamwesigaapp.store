@@ -36,6 +36,10 @@ export default function ManualCropScreen({
   });
   // Corners stored in source-image pixel space.
   const [corners, setCorners] = useState<Quad | null>(null);
+  // Independent midpoint positions (source-image pixel space). null = follow
+  // the current edge midpoint automatically. Once the user drags a midpoint
+  // it becomes "sticky" and stays where they placed it.
+  const [midpoints, setMidpoints] = useState<(Pt | null)[]>([null, null, null, null]);
 
   // Load image and initialize corners at 6% inset from each edge.
   useEffect(() => {
@@ -51,6 +55,7 @@ export default function ManualCropScreen({
         { x: w - inset, y: h - inset },
         { x: inset, y: h - inset },
       ]);
+      setMidpoints([null, null, null, null]);
     };
     img.src = imageUrl;
   }, [open, imageUrl]);
