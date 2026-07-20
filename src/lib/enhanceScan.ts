@@ -34,9 +34,10 @@ export function enhanceScanCanvas(
   // IDs get real shadow/darkness removal too, just slightly softer so the
   // photo, holograms and stamps keep their colors.
   const {
-    backgroundWhiteness = isIdScan ? 0.7 : 0.85,
-    sharpenAmount = fast ? 0 : isIdScan ? 0.2 : 0.35,
+    backgroundWhiteness = isIdScan ? 0.75 : 0.95,
+    sharpenAmount = fast ? 0 : isIdScan ? 0.25 : 0.45,
   } = options;
+
 
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return canvas;
