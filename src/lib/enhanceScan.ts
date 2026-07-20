@@ -205,9 +205,36 @@ export function enhanceScanCanvas(
     }
   }
 
+  // ---------- 5. Final levels lift: snap near-white background to pure white
+  // and deepen ink slightly. Skips ID scans so photo/holograms stay intact. ----------
+  if (!isIdScan && !fast) {
+    // Piecewise curve: [0..40]→darken toward 0, [40..190]→linear, [190..255]→snap to 255.
+    const lut = new Uint8ClampedArray(256);
+    for (let v = 0; v < 256; v++) {
+      let out: number;
+      if (v <= 40) out = v * 0.6; // deepen deep shadows/ink
+      else if (v >= 190) out = 255; // clean background
+      else out = ((v - 40) / (190 - 40)) * 255;
+      lut[v] = Math.max(0, Math.min(255, out));
+    }
+    for (let i = 0; i < data.length; i += 4) {
+      // Use per-pixel luminance to decide whether all channels get pushed to white
+      // (removes color casts from shadows without desaturating colored ink).
+      const lum = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      if (lum >= 200) {
+        data[i] = 255; data[i + 1] = 255; data[i + 2] = 255;
+      } else {
+        data[i] = lut[data[i]];
+        data[i + 1] = lut[data[i + 1]];
+        data[i + 2] = lut[data[i + 2]];
+      }
+    }
+  }
+
   ctx.putImageData(imageData, 0, 0);
   return canvas;
 }
+
 
 /**
  * Enhance a data URL (base64) image and return a new data URL.
