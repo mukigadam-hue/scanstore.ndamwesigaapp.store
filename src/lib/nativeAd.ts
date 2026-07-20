@@ -39,15 +39,23 @@ function callFirst(methods: string[]): boolean {
 }
 
 /**
- * Intentionally no-op.
- *
- * Some Android WebView wrappers treat preload/load methods as real ad display
- * calls or count them toward automatic navigation/back-button ads. To keep
- * placement compliant, this app never calls any preload/load/banner ad methods.
+ * Silently ask the native shell to preload/cache an interstitial in the
+ * background so it renders instantly at the next trigger. This ONLY calls
+ * preload-style methods (never showInterstitial), so it cannot accidentally
+ * display an ad. Outside the native shell this is a no-op.
  */
 export function preloadNativeAds(): void {
-  return;
+  try {
+    for (const b of bridges()) {
+      for (const m of ["preloadInterstitial", "loadInterstitial", "cacheInterstitial", "prepareInterstitial"]) {
+        try {
+          if (typeof b[m] === "function") { b[m](); return; }
+        } catch { /* try next */ }
+      }
+    }
+  } catch { /* ignore */ }
 }
+
 
 
 /** True when the app is running inside an Android WebView shell (WebViewGold). */
