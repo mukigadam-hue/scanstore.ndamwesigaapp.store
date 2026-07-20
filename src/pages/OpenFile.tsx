@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadBlob } from "@/lib/downloadFile";
+import { showInterstitial } from "@/lib/ads";
 import { inferFileType, isAudioFile, isImageFile, isPdfFile, isVideoFile, withInferredType } from "@/lib/fileCompatibility";
 
 const OpenFile = () => {
@@ -117,6 +118,7 @@ const OpenFile = () => {
     try {
       await downloadBlob(file, file.name);
       toast.success("Download started");
+      await showInterstitial("save-to-phone", 2 * 60 * 1000);
     } catch (err: any) {
       if (err?.name !== "AbortError") toast.error("Download failed");
     }

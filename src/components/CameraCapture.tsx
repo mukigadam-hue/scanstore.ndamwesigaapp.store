@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
 import { downloadBlob } from "@/lib/downloadFile";
-import { triggerNativeAd, isAndroidWebView } from "@/lib/nativeAd";
+import { showInterstitial } from "@/lib/ads";
+import { isAndroidWebView } from "@/lib/nativeAd";
 import { detectDocumentCorners, warpDocument, estimateOutputSize, type Quad } from "@/lib/documentProcessor";
 import ManualCropScreen from "@/components/ManualCropScreen";
 
@@ -30,6 +31,7 @@ const A4_PORTRAIT_ASPECT = A4_W_MM / A4_H_MM;
 const A4_LANDSCAPE_ASPECT = A4_H_MM / A4_W_MM;
 const DEFAULT_ID_WIDTH_MM = 110;
 const BANNER_SAFE_BOTTOM = "calc(128px + env(safe-area-inset-bottom, 0px))";
+const INTERSTITIAL_COOLDOWN_MS = 2 * 60 * 1000;
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -1251,7 +1253,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       await downloadBlob(file, file.name);
       toast.success("File saved successfully", { id: tid });
       // Ad fires ONLY after the save has completed — clean post-task transition.
-      triggerNativeAd("scan-save-phone");
+      await showInterstitial("save-to-phone", INTERSTITIAL_COOLDOWN_MS);
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
@@ -1305,7 +1307,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (!built) throw new Error("no pdf");
       await downloadBlob(built.blob, `scan_${Date.now()}.pdf`);
       toast.success(built.count > 1 ? `PDF saved (${built.count} pages)` : "PDF saved successfully", { id: tid });
-      triggerNativeAd("scan-save-phone");
+      await showInterstitial("save-to-phone", INTERSTITIAL_COOLDOWN_MS);
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
@@ -1370,7 +1372,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       }
       toast.success("ID saved successfully", { id: tid });
       // Ad fires ONLY after the ID has been saved successfully.
-      triggerNativeAd("scan-save-phone");
+      await showInterstitial("save-to-phone", INTERSTITIAL_COOLDOWN_MS);
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);

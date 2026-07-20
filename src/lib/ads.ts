@@ -1,16 +1,5 @@
-// Interstitial ad controller.
-//
-// Priority order at every designated ad point:
-//   1. If the WebViewGold native Android bridge is present, call
-//      Android.showInterstitial() and resolve immediately. The native
-//      shell displays the real preloaded AdMob interstitial on top of
-//      the WebView; our JS flow continues without waiting.
-//   2. Otherwise (mobile browser, iOS, desktop) resolve immediately —
-//      we do NOT show an in-app placeholder overlay, and we NEVER
-//      redirect to any external URL.
-//
-// This guarantees the app never freezes on an ad and never opens a
-// WebViewGold landing page.
+// Interstitial ad controller. Only call showInterstitial() at approved
+// post-action checkpoints: final verification and successful public save.
 
 import { triggerNativeAd, preloadNativeAds } from "./nativeAd";
 
@@ -21,6 +10,8 @@ export const AD_NETWORK_READY = false;
 type Listener = (trigger: string, resolve: () => void) => void;
 
 let listener: Listener | null = null;
+const inFlight = new Set<string>();
+const ALLOWED_TRIGGERS = new Set(["last-verify", "save-to-phone"]);
 
 export function registerInterstitialHost(l: Listener | null) {
   listener = l;
@@ -31,15 +22,6 @@ export function prefetchInterstitial() {
   preloadNativeAds();
 }
 
-
-function hasNativeBridge(): boolean {
-  const A: any = (typeof window !== "undefined" && (window as any).Android) || null;
-  const W: any = (typeof window !== "undefined" && (window as any).WebViewGold) || null;
-  return (
-    (A && typeof A.showInterstitial === "function") ||
-    (W && typeof W.showInterstitial === "function")
-  );
-}
 
 // Per-trigger cooldown map (in-memory + localStorage for cross-reload).
 const COOLDOWN_KEY = "ad_cooldown_";
@@ -59,15 +41,18 @@ function markShown(trigger: string) {
 
 export function showInterstitial(trigger: string, cooldownMs = 0): Promise<void> {
   return new Promise((resolve) => {
+    if (!ALLOWED_TRIGGERS.has(trigger)) { resolve(); return; }
+    if (inFlight.has(trigger)) { resolve(); return; }
     if (withinCooldown(trigger, cooldownMs)) { resolve(); return; }
     if (typeof navigator !== "undefined" && !navigator.onLine) { resolve(); return; }
-    if (hasNativeBridge()) {
-      triggerNativeAd(trigger);
+    inFlight.add(trigger);
+    const emitted = triggerNativeAd(trigger);
+    if (emitted) {
       markShown(trigger);
       // Warm the cache again for the next trigger point.
       setTimeout(() => { try { preloadNativeAds(); } catch { /* ignore */ } }, 1500);
     }
-    // No native shell → skip silently (no in-app placeholder overlay).
+    setTimeout(() => inFlight.delete(trigger), 1200);
     resolve();
   });
 }

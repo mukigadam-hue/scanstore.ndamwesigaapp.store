@@ -75,17 +75,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       // 2-minute per-trigger cooldown so rapid re-verifies don't re-show.
       setPhase("playing_ad");
       const COOLDOWN_MS = 2 * 60 * 1000;
-      const key = "ad_cooldown_identity-verified";
-      let inCooldown = false;
-      try {
-        const last = parseInt(localStorage.getItem(key) || "0", 10);
-        inCooldown = last > 0 && Date.now() - last < COOLDOWN_MS;
-      } catch {}
-      if (!inCooldown && typeof navigator !== "undefined" && navigator.onLine) {
-        // showInterstitial handles the native bridge call + cooldown mark.
-        // Do NOT also call triggerNativeAd here — that would double-fire.
-        await showInterstitial("identity-verified", COOLDOWN_MS);
-      }
+      await showInterstitial("last-verify", COOLDOWN_MS);
 
       setPhase("verification_success");
     } else {
