@@ -56,10 +56,10 @@ export default function PdfCanvasViewer({ url, className }: Props) {
   }
 
   return (
-    <div ref={containerRef} className={className || "w-full h-[80vh] overflow-y-auto overflow-x-hidden bg-white rounded-md border border-border"} style={{ touchAction: "pan-y pinch-zoom" }}>
-      <div className="w-full min-h-full flex flex-col items-center justify-center gap-3 p-3">
+    <div ref={containerRef} className={className || "w-full h-[80vh] overflow-auto bg-white rounded-md border border-border"} style={{ touchAction: "pan-y pinch-zoom" }}>
+      <div className="min-w-full min-h-full flex flex-col items-center justify-start gap-3 p-3" style={{ width: "max-content", marginInline: "auto" }}>
         {pdfDoc && Array.from({ length: numPages }, (_, i) => (
-          <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} />
+          <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} baseWidth={containerRef.current?.clientWidth || 0} />
         ))}
         <div className="sticky bottom-2 flex items-center gap-2 bg-black/70 rounded-full px-3 py-1.5 z-10 self-center">
           <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))}>
