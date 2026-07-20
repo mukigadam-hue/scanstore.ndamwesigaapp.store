@@ -21,7 +21,11 @@ function callFirst(methods: string[], args: unknown[] = []): boolean {
     for (const m of methods) {
       try {
         if (typeof b[m] === "function") {
-          b[m](...args);
+          try {
+            b[m](...args);
+          } catch {
+            b[m]();
+          }
           return true;
         }
       } catch {
@@ -71,7 +75,10 @@ export function preloadNativeAds(): void {
         "cacheInterstitialAd",
       ]) {
         try {
-          if (typeof b[m] === "function") { b[m]("doclocker"); return; }
+          if (typeof b[m] === "function") {
+            try { b[m]("doclocker"); } catch { b[m](); }
+            return;
+          }
         } catch { /* try next */ }
       }
     }
