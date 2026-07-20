@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
 import { downloadBlob } from "@/lib/downloadFile";
+import { showInterstitial } from "@/lib/ads";
 import { inferFileType, isImageFile, isPdfFile, withInferredType } from "@/lib/fileCompatibility";
 
 function dataUrlToFile(dataUrl: string, name: string, type: string): File {
@@ -145,6 +146,7 @@ export default function ViewerScreen() {
     try {
       await downloadBlob(file, file.name);
       toast.success("Download started");
+      await showInterstitial("save-to-phone", 2 * 60 * 1000);
     } catch (err: any) {
       if (err?.name !== "AbortError") toast.error("Download failed");
     }
