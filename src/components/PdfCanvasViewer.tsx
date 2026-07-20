@@ -56,10 +56,10 @@ export default function PdfCanvasViewer({ url, className }: Props) {
   }
 
   return (
-    <div ref={containerRef} className={className || "w-full h-[80vh] overflow-y-auto overflow-x-hidden bg-white rounded-md border border-border"} style={{ touchAction: "pan-y pinch-zoom" }}>
-      <div className="w-full min-h-full flex flex-col items-center justify-center gap-3 p-3">
+    <div ref={containerRef} className={className || "w-full h-[80vh] overflow-auto bg-white rounded-md border border-border"} style={{ touchAction: "pan-y pinch-zoom" }}>
+      <div className="min-w-full min-h-full flex flex-col items-center justify-start gap-3 p-3" style={{ width: "max-content", marginInline: "auto" }}>
         {pdfDoc && Array.from({ length: numPages }, (_, i) => (
-          <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} />
+          <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} baseWidth={containerRef.current?.clientWidth || 0} />
         ))}
         <div className="sticky bottom-2 flex items-center gap-2 bg-black/70 rounded-full px-3 py-1.5 z-10 self-center">
           <Button size="icon" variant="ghost" className="h-8 w-8 text-white" onClick={() => setZoom((z) => Math.max(0.5, z - 0.2))}>
@@ -87,11 +87,13 @@ function PdfPage({
   pageNumber,
   zoom,
   scrollParent,
+  baseWidth,
 }: {
   pdfDoc: any;
   pageNumber: number;
   zoom: number;
   scrollParent: HTMLElement | null;
+  baseWidth: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -129,6 +131,7 @@ function PdfPage({
   // Render the page onto the canvas whenever visible/zoom changes.
   useEffect(() => {
     if (!visible || !pdfDoc || !canvasRef.current || !wrapRef.current) return;
+    if (!baseWidth) return;
     let cancelled = false;
     (async () => {
       if (renderTaskRef.current) {
@@ -137,11 +140,12 @@ function PdfPage({
       }
       try {
         const page = await pdfDoc.getPage(pageNumber);
-        const wrap = wrapRef.current;
-        if (!wrap || cancelled) return;
+        if (cancelled) return;
         const unscaled = page.getViewport({ scale: 1 });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const cssScale = (wrap.clientWidth / unscaled.width) * zoom;
+        // Base fit-to-container width (accounts for padding ~24px)
+        const fitWidth = Math.max(120, baseWidth - 24);
+        const cssScale = (fitWidth / unscaled.width) * zoom;
         const viewport = page.getViewport({ scale: cssScale * dpr });
         const cssViewport = page.getViewport({ scale: cssScale });
         const canvas = canvasRef.current!;
@@ -167,19 +171,19 @@ function PdfPage({
         renderTaskRef.current = null;
       }
     };
-  }, [visible, pdfDoc, pageNumber, zoom]);
+  }, [visible, pdfDoc, pageNumber, zoom, baseWidth]);
 
-  // Reserved height keeps scrolling stable while the page is not yet rendered.
-  const reservedAspect = size ? size.h / size.w : 1.414; // default to A4 portrait
+  // Reserved dimensions keep scrolling stable while the page is not yet rendered.
+  const fitWidth = Math.max(120, (baseWidth || 300) - 24);
+  const reservedW = size ? fitWidth * zoom : fitWidth;
+  const reservedH = size ? (size.h / size.w) * fitWidth * zoom : fitWidth * 1.414;
   return (
     <div
       ref={wrapRef}
-      className="w-full max-w-full shadow-sm bg-white"
-      style={{
-        aspectRatio: visible ? undefined : `${1} / ${reservedAspect}`,
-      }}
+      className="shadow-sm bg-white flex-shrink-0"
+      style={{ width: reservedW, height: visible ? undefined : reservedH }}
     >
-      <canvas ref={canvasRef} style={{ display: "block", margin: "0 auto", maxWidth: "100%" }} />
+      <canvas ref={canvasRef} style={{ display: "block" }} />
       {!visible && (
         <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
           Loading page {pageNumber}…
@@ -188,3 +192,4 @@ function PdfPage({
     </div>
   );
 }
+

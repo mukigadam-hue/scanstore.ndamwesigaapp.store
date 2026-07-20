@@ -88,10 +88,10 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   }, [url]);
 
   return (
-    <div ref={containerRef} className="w-full h-full overflow-y-auto overflow-x-hidden bg-white" style={{ touchAction: "pan-y pinch-zoom" }}>
-      <div className="w-full min-h-full flex flex-col items-center justify-center gap-3 p-3">
+    <div ref={containerRef} className="w-full h-full overflow-auto bg-white" style={{ touchAction: "pan-y pinch-zoom" }}>
+      <div className="min-w-full min-h-full flex flex-col items-center justify-start gap-3 p-3" style={{ width: "max-content", marginInline: "auto" }}>
         {pdfDoc && Array.from({ length: numPages }, (_, i) => (
-          <PdfPageInline key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} />
+          <PdfPageInline key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} baseWidth={containerRef.current?.clientWidth || 0} />
         ))}
         {numPages > 1 && (
           <div className="sticky bottom-2 self-center bg-black/70 rounded-full px-3 py-1 text-white text-xs z-10">
@@ -108,11 +108,13 @@ function PdfPageInline({
   pageNumber,
   zoom,
   scrollParent,
+  baseWidth,
 }: {
   pdfDoc: any;
   pageNumber: number;
   zoom: number;
   scrollParent: HTMLElement | null;
+  baseWidth: number;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -147,6 +149,7 @@ function PdfPageInline({
 
   useEffect(() => {
     if (!visible || !pdfDoc || !canvasRef.current || !wrapRef.current) return;
+    if (!baseWidth) return;
     let cancelled = false;
     (async () => {
       if (renderTaskRef.current) {
@@ -155,11 +158,11 @@ function PdfPageInline({
       }
       try {
         const page = await pdfDoc.getPage(pageNumber);
-        const wrap = wrapRef.current;
-        if (!wrap || cancelled) return;
+        if (cancelled) return;
         const unscaled = page.getViewport({ scale: 1 });
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const cssScale = (wrap.clientWidth / unscaled.width) * zoom;
+        const fitWidth = Math.max(120, baseWidth - 24);
+        const cssScale = (fitWidth / unscaled.width) * zoom;
         const viewport = page.getViewport({ scale: cssScale * dpr });
         const cssViewport = page.getViewport({ scale: cssScale });
         const canvas = canvasRef.current!;
@@ -185,16 +188,18 @@ function PdfPageInline({
         renderTaskRef.current = null;
       }
     };
-  }, [visible, pdfDoc, pageNumber, zoom]);
+  }, [visible, pdfDoc, pageNumber, zoom, baseWidth]);
 
-  const reservedAspect = size ? size.h / size.w : 1.414;
+  const fitWidth = Math.max(120, (baseWidth || 300) - 24);
+  const reservedW = size ? fitWidth * zoom : fitWidth;
+  const reservedH = size ? (size.h / size.w) * fitWidth * zoom : fitWidth * 1.414;
   return (
     <div
       ref={wrapRef}
-      className="w-full max-w-full shadow-sm bg-white"
-      style={{ aspectRatio: visible ? undefined : `${1} / ${reservedAspect}` }}
+      className="shadow-sm bg-white flex-shrink-0"
+      style={{ width: reservedW, height: visible ? undefined : reservedH }}
     >
-      <canvas ref={canvasRef} style={{ display: "block", margin: "0 auto", maxWidth: "100%" }} />
+      <canvas ref={canvasRef} style={{ display: "block" }} />
       {!visible && (
         <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
           Loading page {pageNumber}…
@@ -203,6 +208,7 @@ function PdfPageInline({
     </div>
   );
 }
+
 
 /**
  * AsyncImage — fetches the given URL into a binary Blob, creates a

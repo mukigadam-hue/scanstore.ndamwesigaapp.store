@@ -64,11 +64,14 @@ export function showInterstitial(trigger: string, cooldownMs = 0): Promise<void>
     if (hasNativeBridge()) {
       triggerNativeAd(trigger);
       markShown(trigger);
+      // Warm the cache again for the next trigger point.
+      setTimeout(() => { try { preloadNativeAds(); } catch { /* ignore */ } }, 1500);
     }
     // No native shell → skip silently (no in-app placeholder overlay).
     resolve();
   });
 }
+
 
 export function hasPrefetched() {
   return false;
