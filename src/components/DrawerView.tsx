@@ -215,7 +215,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         try {
           const added = await uploadSingleFile(file, runningTotal);
           runningTotal += added;
-          ok += 1;
+          if (added > 0) ok += 1;
         } catch (err) {
           console.error("Upload failed for", file.name, err);
         }
