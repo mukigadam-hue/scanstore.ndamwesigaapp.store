@@ -245,6 +245,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
   useEffect(() => {
     const resumeAfterPickerCancel = () => {
+      if (document.visibilityState !== "visible") return;
       window.setTimeout(() => {
         if (filePickerOpenRef.current && !uploading) {
           filePickerOpenRef.current = false;
