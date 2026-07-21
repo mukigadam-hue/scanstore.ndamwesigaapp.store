@@ -89,6 +89,20 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
   }, [zoom, numPages]);
 
   useEffect(() => {
+    const el = containerRef.current;
+    const content = el?.firstElementChild;
+    if (!el || !content || typeof ResizeObserver === "undefined") return;
+    const centerScroll = () => {
+      if (el.scrollWidth > el.clientWidth) {
+        el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+      }
+    };
+    const observer = new ResizeObserver(() => requestAnimationFrame(centerScroll));
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [pdfDoc, zoom]);
+
+  useEffect(() => {
     let cancelled = false;
     const loadPdf = async () => {
       try {
