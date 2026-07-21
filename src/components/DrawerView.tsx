@@ -1,8 +1,8 @@
-import { useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Upload, Download, Trash2, FileText, File,
-  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw, Pencil,
+  Image, FileSpreadsheet, Lock, Camera, Eye, Video, Music, RefreshCw, Pencil, Search,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -76,11 +76,22 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [compressionFile, setCompressionFile] = useState<{ file: File; resolve: (compress: boolean) => void } | null>(null);
   const [downloadDoc, setDownloadDoc] = useState<Document | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const filePickerOpenRef = useRef(false);
 
   const outdatedCount = useMemo(() => documents.filter(needsUpgrade).length, [documents]);
+  const filteredDocuments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return documents;
+    return documents.filter((doc) =>
+      doc.name.toLowerCase().includes(q) ||
+      doc.file_type.toLowerCase().includes(q) ||
+      format(new Date(doc.created_at), "MMM d, yyyy").toLowerCase().includes(q)
+    );
+  }, [documents, searchQuery]);
 
   const refreshDocs = () =>
     queryClient.invalidateQueries({ queryKey: ["documents", user?.id] });
@@ -174,7 +185,11 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || !user) return;
+    filePickerOpenRef.current = false;
+    if (!files || !user) {
+      onScanEnd?.();
+      return;
+    }
 
     if (!canUpload) {
       toast.error(
@@ -182,6 +197,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           ? "Your vault is frozen. Please unlock access first."
           : "Storage limit reached. Please upgrade your plan."
       );
+      onScanEnd?.();
       return;
     }
 
@@ -199,7 +215,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         try {
           const added = await uploadSingleFile(file, runningTotal);
           runningTotal += added;
-          ok += 1;
+          if (added > 0) ok += 1;
         } catch (err) {
           console.error("Upload failed for", file.name, err);
         }
@@ -212,6 +228,38 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       onScanEnd?.();
     }
   };
+
+  const handleStoreClick = () => {
+    if (!canUpload) {
+      toast.error(
+        isFrozen
+          ? "Your vault is frozen. Please unlock access first."
+          : "Storage limit reached. Please upgrade your plan."
+      );
+      return;
+    }
+    filePickerOpenRef.current = true;
+    onScanStart?.();
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
+  };
+
+  useEffect(() => {
+    const resumeAfterPickerCancel = () => {
+      if (document.visibilityState !== "visible") return;
+      window.setTimeout(() => {
+        if (filePickerOpenRef.current && !uploading) {
+          filePickerOpenRef.current = false;
+          onScanEnd?.();
+        }
+      }, 700);
+    };
+    window.addEventListener("focus", resumeAfterPickerCancel);
+    document.addEventListener("visibilitychange", resumeAfterPickerCancel);
+    return () => {
+      window.removeEventListener("focus", resumeAfterPickerCancel);
+      document.removeEventListener("visibilitychange", resumeAfterPickerCancel);
+    };
+  }, [onScanEnd, uploading]);
 
   const handleCameraCapture = async (file: File) => {
     if (!user || !canUpload) {
@@ -448,6 +496,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             type="file"
             multiple
             onChange={handleUpload}
+            onClick={(event) => { event.currentTarget.value = ""; }}
             className="hidden"
           />
           <Button
@@ -474,7 +523,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             <span className="text-xs">Scan</span>
           </Button>
           <Button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleStoreClick}
             disabled={uploading || !canUpload}
             className="brass-gradient text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
@@ -513,6 +562,19 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         </motion.div>
       )}
 
+      {documents.length > 0 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search files by name…"
+            className="bg-input border-border pl-9 pr-3"
+            aria-label="Search files in this drawer"
+          />
+        </div>
+      )}
+
       {/* Document list */}
       {documents.length === 0 ? (
         <motion.div
@@ -529,8 +591,19 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           </p>
         </motion.div>
       ) : (
+        filteredDocuments.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-12"
+          >
+            <Search className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-muted-foreground font-display text-base">No matching files</p>
+            <p className="text-muted-foreground/60 text-sm mt-1">Try another file name.</p>
+          </motion.div>
+        ) : (
         <div className="space-y-2">
-          {documents.map((doc, i) => (
+          {filteredDocuments.map((doc, i) => (
             <motion.div
               key={doc.id}
               initial={{ opacity: 0, y: 10 }}
@@ -605,6 +678,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             </motion.div>
           ))}
         </div>
+        )
       )}
 
       {/* Dialogs */}

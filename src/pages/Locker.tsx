@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, Plus, KeyRound, X, Crown, Timer, Info, Shield, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -70,6 +70,7 @@ const Locker = () => {
   const [showPricing, setShowPricing] = useState(false);
   const [showAutoLock, setShowAutoLock] = useState(false);
   const [showSecuritySetup, setShowSecuritySetup] = useState(false);
+  const vaultActivityRef = useRef(false);
 
   const { currentPlan, isFrozen, isRetrievalActive, showExpiryWarning, daysUntilExpiry } = useSubscription();
   const canAccessDrawers = !isFrozen || isRetrievalActive;
@@ -98,6 +99,18 @@ const Locker = () => {
     },
   });
 
+  const pauseVaultActivity = () => {
+    vaultActivityRef.current = true;
+    pauseAutoLock();
+  };
+
+  const resumeVaultActivity = () => {
+    window.setTimeout(() => {
+      vaultActivityRef.current = false;
+      resumeAutoLock();
+    }, 600);
+  };
+
   useEffect(() => {
     if (user?.id) {
       // Verification is intentionally memory-only. A remembered login may open
@@ -111,6 +124,7 @@ const Locker = () => {
     if (!user?.id || !sessionVerified) return;
 
     const lockForExit = () => {
+      if (vaultActivityRef.current) return;
       localStorage.removeItem(`locker_verified_${user.id}`);
       localStorage.setItem(`doclocker_exit_needs_verify_${user.id}`, "1");
       setSelectedDrawer(null);
@@ -141,6 +155,7 @@ const Locker = () => {
 
   const uploadPendingTo = async (drawerName: string) => {
     if (!pendingFile || !user) return;
+    pauseVaultActivity();
     setPendingUploading(true);
     try {
       const [, b64] = pendingFile.dataUrl.split(",");
@@ -172,6 +187,7 @@ const Locker = () => {
       toast.error(e?.message || "Failed to save to vault");
     } finally {
       setPendingUploading(false);
+      resumeVaultActivity();
     }
   };
 
@@ -437,8 +453,8 @@ const Locker = () => {
                 drawerName={selectedDrawer}
                 documents={getDrawerDocs(selectedDrawer)}
                 onBack={() => setSelectedDrawer(null)}
-                onScanStart={pauseAutoLock}
-                onScanEnd={resumeAutoLock}
+                onScanStart={pauseVaultActivity}
+                onScanEnd={resumeVaultActivity}
               />
             ) : (
               <motion.div

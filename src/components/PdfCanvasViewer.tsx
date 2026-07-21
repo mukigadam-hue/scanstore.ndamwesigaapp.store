@@ -29,6 +29,38 @@ export default function PdfCanvasViewer({ url, className }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const centerScroll = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      if (el.scrollWidth > el.clientWidth) {
+        el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+      }
+    };
+    const id = requestAnimationFrame(centerScroll);
+    const t1 = window.setTimeout(centerScroll, 120);
+    const t2 = window.setTimeout(centerScroll, 360);
+    return () => {
+      cancelAnimationFrame(id);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [zoom, numPages]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    const content = el?.firstElementChild;
+    if (!el || !content || typeof ResizeObserver === "undefined") return;
+    const centerScroll = () => {
+      if (el.scrollWidth > el.clientWidth) {
+        el.scrollLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+      }
+    };
+    const observer = new ResizeObserver(() => requestAnimationFrame(centerScroll));
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [pdfDoc, zoom]);
+
+  useEffect(() => {
     let cancelled = false;
     setError(null);
     setPdfDoc(null);
@@ -57,7 +89,10 @@ export default function PdfCanvasViewer({ url, className }: Props) {
 
   return (
     <div ref={containerRef} className={className || "w-full h-[80vh] overflow-auto bg-white rounded-md border border-border"} style={{ touchAction: "pan-y pinch-zoom" }}>
-      <div className="min-w-full min-h-full flex flex-col items-center justify-start gap-3 p-3" style={{ width: "max-content", marginInline: "auto" }}>
+      <div
+        className="min-h-full flex flex-col items-center gap-3 p-3"
+        style={{ minWidth: "100%", width: "fit-content", marginInline: "auto", justifyContent: numPages <= 1 && zoom <= 1 ? "center" : "flex-start" }}
+      >
         {pdfDoc && Array.from({ length: numPages }, (_, i) => (
           <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNumber={i + 1} zoom={zoom} scrollParent={containerRef.current} baseWidth={containerRef.current?.clientWidth || 0} />
         ))}
