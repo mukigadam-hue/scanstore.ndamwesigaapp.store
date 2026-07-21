@@ -39,6 +39,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const [verifiedMethods, setVerifiedMethods] = useState<Set<MethodId>>(new Set());
   const [pin, setPin] = useState("");
   const [school, setSchool] = useState("");
+  const [familyName, setFamilyName] = useState("");
   const [fingerprintScanning, setFingerprintScanning] = useState(false);
   const [phase, setPhase] = useState<"verifying" | "playing_ad" | "verification_success">("verifying");
 
@@ -56,7 +57,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     settings.fingerprint_enabled && { id: "fingerprint" as MethodId, label: "Fingerprint", icon: Fingerprint },
     settings.face_image_path && { id: "face" as MethodId, label: "Face Photo", icon: Camera },
     settings.last_school && { id: "school" as MethodId, label: "School Name", icon: GraduationCap },
-    settings.family_face_path && { id: "family" as MethodId, label: "Family Face", icon: Users },
+    settings.family_face_path && { id: "family" as MethodId, label: "Family Member Name", icon: Users },
     settings.id_document_path && { id: "id" as MethodId, label: "Show ID", icon: IdCard },
   ].filter(Boolean) as { id: MethodId; label: string; icon: any }[];
 
@@ -69,6 +70,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     setSelectedMethod(null);
     setPin("");
     setSchool("");
+    setFamilyName("");
 
     if (updated.size >= requiredCount) {
       // Fire the interstitial ad on final verification, with a strict
@@ -124,6 +126,14 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       markVerified("school");
     } else {
       toast.error("School name does not match — try again");
+    }
+  };
+
+  const handleVerifyFamily = () => {
+    if (familyName.trim().toLowerCase() === settings.family_face_path?.trim().toLowerCase()) {
+      markVerified("family");
+    } else {
+      toast.error("Family member's name does not match — try again");
     }
   };
 
@@ -541,6 +551,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                     setSelectedMethod(null);
                     setPin("");
                     setSchool("");
+                    setFamilyName("");
                   }}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -629,8 +640,32 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   </>
                 )}
 
+                {selectedMethod === "family" && (
+                  <>
+                    <p className="text-sm text-muted-foreground text-center">
+                      Enter any family member's name you registered
+                    </p>
+                    <Input
+                      placeholder="Family member's name…"
+                      value={familyName}
+                      onChange={(e) => setFamilyName(e.target.value)}
+                      className="bg-input border-border"
+                      autoFocus
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && familyName.trim() && handleVerifyFamily()
+                      }
+                    />
+                    <Button
+                      className="w-full brass-gradient text-primary-foreground font-semibold"
+                      onClick={handleVerifyFamily}
+                      disabled={!familyName.trim()}
+                    >
+                      Verify Family Name
+                    </Button>
+                  </>
+                )}
+
                 {(selectedMethod === "face" ||
-                  selectedMethod === "family" ||
                   selectedMethod === "id") && (
                   <div className="text-center space-y-4">
                     <div className="wood-panel border border-border rounded-lg p-4">
@@ -640,15 +675,6 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                           <p className="text-sm text-foreground font-medium">Face verification</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             Your registered face photo is on file. Confirm to verify.
-                          </p>
-                        </>
-                      )}
-                      {selectedMethod === "family" && (
-                        <>
-                          <Users className="h-10 w-10 text-primary mx-auto mb-2" />
-                          <p className="text-sm text-foreground font-medium">Family member verification</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Your registered family photo is on file. Confirm to verify.
                           </p>
                         </>
                       )}

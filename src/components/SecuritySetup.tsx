@@ -37,7 +37,7 @@ const METHODS = [
   { id: "fingerprint", label: "Fingerprint Scan", desc: "Register your device fingerprint sensor", icon: Fingerprint },
   { id: "face", label: "Your Face Photo", desc: "Upload a clear photo of your face", icon: Camera },
   { id: "school", label: "Any School You Attended or Like", desc: "Name any school you attended or simply like", icon: GraduationCap },
-  { id: "family", label: "Family Member's Name you Like", desc: "Name of a family member you like and remember", icon: Users },
+  { id: "family", label: "Any Family Member's Name You Like", desc: "Enter any family member's name you like and can remember", icon: Users },
   { id: "id", label: "National ID / Driving Permit", desc: "Upload your government-issued identity document", icon: IdCard },
 ];
 
@@ -123,11 +123,11 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
 
   const handleFamilySet = () => {
     if (!familyName.trim()) {
-      toast.error("Please enter a family member's name");
+      toast.error("Please enter any family member's name you like");
       return;
     }
     markDone("family", familyName.trim());
-    toast.success("Family member name registered ✓");
+    toast.success("Family member's name registered ✓");
   };
 
   const handleSchoolSet = () => {
@@ -349,7 +349,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                                 <Input placeholder="e.g. Grandma Sarah" value={familyName} onChange={(e) => setFamilyName(e.target.value)}
                                   className="bg-input border-border" autoFocus onKeyDown={(e) => e.key === "Enter" && handleFamilySet()} />
                                 <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handleFamilySet}>
-                                  <Users className="h-4 w-4 mr-2" />Register Family Member's Name
+                                  <Users className="h-4 w-4 mr-2" />Register Any Family Member's Name You Like
                                 </Button>
                               </>
                             )}
