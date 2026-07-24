@@ -7,8 +7,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/lib/auth";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
-import InterstitialAdOverlay from "./components/InterstitialAdOverlay";
-import OfflineBanner from "./components/OfflineBanner";
 
 // Lazy-load non-landing routes so old / low-end phones parse a much smaller
 // initial bundle and don't crash on startup. The landing page (Index) stays
@@ -22,6 +20,8 @@ const ViewerScreen = lazy(() => import("./pages/ViewerScreen"));
 const UtilityHome = lazy(() => import("./pages/UtilityHome"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const InterstitialAdOverlay = lazy(() => import("./components/InterstitialAdOverlay"));
+const OfflineBanner = lazy(() => import("./components/OfflineBanner"));
 
 const queryClient = new QueryClient();
 
@@ -54,8 +54,10 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
-            <InterstitialAdOverlay />
-            <OfflineBanner />
+            <Suspense fallback={null}>
+              <InterstitialAdOverlay />
+              <OfflineBanner />
+            </Suspense>
           </BrowserRouter>
         </AuthProvider>
       </TooltipProvider>

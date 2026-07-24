@@ -19,10 +19,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Safety timeout: if auth never resolves, unblock UI after 5s
+    // Safety timeout: if auth never resolves, unblock UI quickly on old phones.
     const timeout = setTimeout(() => {
       setLoading(false);
-    }, 5000);
+    }, 1800);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       clearTimeout(timeout);
