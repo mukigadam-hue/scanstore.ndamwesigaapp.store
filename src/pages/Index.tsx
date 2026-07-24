@@ -1,6 +1,5 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { motion } from "framer-motion";
 import { KeyRound, Shield, Download, Upload, ScanLine, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -21,12 +20,9 @@ const Index = () => {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-        >
+        <div className="animate-spin">
           <KeyRound className="h-12 w-12 text-primary" />
-        </motion.div>
+        </div>
       </div>
     );
   }
@@ -52,11 +48,7 @@ const Index = () => {
 
         <div className="relative z-10 max-w-4xl mx-auto px-4 py-24 text-center">
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
+          <div>
             <div className="flex justify-center mb-6">
               <div className="brass-gradient rounded-2xl p-4 brass-glow">
                 <KeyRound className="h-10 w-10 text-primary-foreground" />
@@ -88,7 +80,7 @@ const Index = () => {
                 </Button>
               </Link>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
 
@@ -113,11 +105,8 @@ const Index = () => {
               desc: t("landing.feature.download.desc"),
             },
           ].map((f, i) => (
-            <motion.div
+            <div
               key={f.title}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + i * 0.15 }}
               className="wood-panel rounded-lg border border-border p-6 text-center"
             >
               <div className="brass-gradient rounded-lg p-3 inline-block mb-4">
@@ -125,7 +114,7 @@ const Index = () => {
               </div>
               <h3 className="font-display font-bold text-lg text-foreground mb-2">{f.title}</h3>
               <p className="text-sm text-muted-foreground">{f.desc}</p>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
