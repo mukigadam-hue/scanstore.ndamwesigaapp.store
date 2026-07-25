@@ -276,7 +276,7 @@ const getRpId = (): string | undefined => {
   }
 };
 
-const withRpId = <T extends Record<string, unknown>>(options: T, includeRpId: boolean): T => {
+const withRpId = <T extends object>(options: T, includeRpId: boolean): T => {
   if (!includeRpId) return options;
   const rpId = getRpId();
   if (!rpId) return options;
