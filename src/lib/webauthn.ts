@@ -5,11 +5,11 @@ interface DeviceBiometricUser {
 
 type BiometricAction = "register" | "verify";
 
-const BIOMETRIC_TIMEOUT_MS = 120000;
+const BIOMETRIC_TIMEOUT_MS = 60000;
 
 const WEB_AUTHN_ALGORITHMS: PublicKeyCredentialParameters[] = [
-  { alg: -7, type: "public-key" },
-  { alg: -257, type: "public-key" },
+  { alg: -7, type: "public-key" },   // ES256
+  { alg: -257, type: "public-key" }, // RS256
 ];
 
 const createChallenge = (): ArrayBuffer => {
@@ -31,11 +31,7 @@ const decodeCredentialId = (encodedId: string): ArrayBuffer => {
   const binary = atob(encodedId);
   const buffer = new ArrayBuffer(binary.length);
   const bytes = new Uint8Array(buffer);
-
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return buffer;
 };
 
@@ -47,75 +43,50 @@ const createUserHandle = (userId?: string | null): ArrayBuffer => {
   return buffer;
 };
 
-const ensureBiometricSupport = async () => {
-  if (!window.PublicKeyCredential) {
-    throw new Error("Biometric authentication is not supported on this device");
-  }
-
-  if (!window.isSecureContext) {
-    throw new Error("Biometrics require a secure (HTTPS) context.");
-  }
-
-  // Inside a cross-origin iframe (e.g. Lovable preview), WebAuthn is blocked
-  // unless explicitly allowed via Permissions Policy. Detect & inform the user.
+const isInCrossOriginFrame = () => {
   try {
-    if (window.self !== window.top) {
-      throw new Error(
-        "Biometrics can't run inside the in-app preview. Open this site in your phone's browser (tap the URL bar) and try again.",
-      );
-    }
-  } catch (e) {
-    if (e instanceof Error && e.message.includes("Biometrics can't run")) throw e;
-    // SecurityError when accessing window.top from cross-origin = we're framed
-    throw new Error(
-      "Biometrics can't run inside the in-app preview. Open this site in your phone's browser and try again.",
-    );
-  }
-
-  const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  if (!available) {
-    throw new Error("No biometric sensor found on this device.");
+    return window.self !== window.top;
+  } catch {
+    return true; // Access denied = cross-origin frame
   }
 };
 
-const buildRequestOptions = (
-  challenge: ArrayBuffer,
-  storedCredentialId?: string | null,
-): PublicKeyCredentialRequestOptions => ({
-  challenge,
-  timeout: BIOMETRIC_TIMEOUT_MS,
-  userVerification: "preferred",
-  ...(storedCredentialId
-    ? {
-        allowCredentials: [
-          {
-            id: decodeCredentialId(storedCredentialId),
-            type: "public-key",
-          },
-        ],
-      }
-    : {}),
-});
-
-const tryAuthenticateExistingCredential = async (storedCredentialId?: string | null) => {
-  // Only attempt to reuse if we actually have a stored credential ID.
-  // Calling get() with no allowCredentials shows a passkey picker that
-  // users may dismiss → NotAllowedError, breaking the flow on fresh devices.
-  if (!storedCredentialId) return null;
-
-  try {
-    const credential = await navigator.credentials.get({
-      publicKey: buildRequestOptions(createChallenge(), storedCredentialId),
-    });
-
-    if (credential instanceof PublicKeyCredential) {
-      return encodeCredentialId(credential.rawId);
-    }
-  } catch {
-    // Fall through — caller will register a new credential.
+const ensureBiometricSupport = async () => {
+  if (typeof window === "undefined" || !window.PublicKeyCredential) {
+    throw new Error("Fingerprint isn't supported on this device or browser.");
   }
+  if (!window.isSecureContext) {
+    throw new Error("Fingerprint needs a secure (HTTPS) connection.");
+  }
+  // Only block if we're clearly in the Lovable in-app preview iframe.
+  // Real installed apps / native WebViews / user's browser aren't cross-origin framed.
+  if (isInCrossOriginFrame()) {
+    throw new Error(
+      "Fingerprint can't run inside the in-app preview. Open the app in your phone's browser or the installed app.",
+    );
+  }
+  try {
+    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    if (!available) {
+      throw new Error("No fingerprint or face sensor detected on this device. Set one up in Settings, then try again.");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("No fingerprint")) throw e;
+    // Some old WebViews throw on the availability probe — allow the flow to continue and let the OS decide.
+  }
+};
 
-  return null;
+const getRpId = (): string | undefined => {
+  // Let the browser default to current effective domain — most reliable across
+  // preview subdomains, custom domains, and Capacitor. Only override if needed.
+  try {
+    const host = window.location.hostname;
+    // localhost / IPs — omit rpId (browser handles it).
+    if (!host || host === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(host)) return undefined;
+    return host;
+  } catch {
+    return undefined;
+  }
 };
 
 export const registerDeviceBiometric = async (
@@ -124,19 +95,31 @@ export const registerDeviceBiometric = async (
 ) => {
   await ensureBiometricSupport();
 
-  // Only reuse if we have a stored credential. Don't prompt the user with
-  // a picker on first-time registration.
+  // If we already have a credential on this device, verify it instead of
+  // creating a duplicate (Android returns InvalidStateError for duplicates).
   if (storedCredentialId) {
-    const existingCredentialId = await tryAuthenticateExistingCredential(storedCredentialId);
-    if (existingCredentialId) {
-      return { credentialId: existingCredentialId, reusedExisting: true };
+    try {
+      const existing = await navigator.credentials.get({
+        publicKey: {
+          challenge: createChallenge(),
+          timeout: BIOMETRIC_TIMEOUT_MS,
+          userVerification: "required",
+          rpId: getRpId(),
+          allowCredentials: [{ id: decodeCredentialId(storedCredentialId), type: "public-key" }],
+        },
+      });
+      if (existing instanceof PublicKeyCredential) {
+        return { credentialId: encodeCredentialId(existing.rawId), reusedExisting: true };
+      }
+    } catch {
+      // Fall through and create a new credential.
     }
   }
 
   const credential = await navigator.credentials.create({
     publicKey: {
       challenge: createChallenge(),
-      rp: { name: "DocLocker" },
+      rp: { name: "DocLocker", id: getRpId() },
       user: {
         id: createUserHandle(user.id),
         name: user.email || user.id || "user",
@@ -147,6 +130,7 @@ export const registerDeviceBiometric = async (
         authenticatorAttachment: "platform",
         userVerification: "required",
         residentKey: "preferred",
+        requireResidentKey: false,
       },
       timeout: BIOMETRIC_TIMEOUT_MS,
       attestation: "none",
@@ -154,26 +138,46 @@ export const registerDeviceBiometric = async (
   });
 
   if (!(credential instanceof PublicKeyCredential)) {
-    throw new Error("Biometric registration did not complete.");
+    throw new Error("Fingerprint registration did not complete. Try again.");
   }
 
-  return {
-    credentialId: encodeCredentialId(credential.rawId),
-    reusedExisting: false,
-  };
+  return { credentialId: encodeCredentialId(credential.rawId), reusedExisting: false };
 };
 
 export const verifyDeviceBiometric = async (storedCredentialId?: string | null) => {
   await ensureBiometricSupport();
 
-  const credentialId = await tryAuthenticateExistingCredential(storedCredentialId);
-  if (!credentialId) {
-    throw new Error(
-      "This device does not have the registered biometric credential. Use another unlock method or relink biometrics in Security Settings.",
-    );
-  }
+  const attempt = async (useAllowList: boolean): Promise<string> => {
+    const publicKey: PublicKeyCredentialRequestOptions = {
+      challenge: createChallenge(),
+      timeout: BIOMETRIC_TIMEOUT_MS,
+      userVerification: "required",
+      rpId: getRpId(),
+    };
+    if (useAllowList && storedCredentialId) {
+      publicKey.allowCredentials = [
+        { id: decodeCredentialId(storedCredentialId), type: "public-key" },
+      ];
+    }
+    const credential = await navigator.credentials.get({ publicKey });
+    if (!(credential instanceof PublicKeyCredential)) {
+      throw new Error("Fingerprint verification did not complete.");
+    }
+    return encodeCredentialId(credential.rawId);
+  };
 
-  return credentialId;
+  // First try with the stored credential (fastest path — direct prompt).
+  if (storedCredentialId) {
+    try {
+      return await attempt(true);
+    } catch {
+      // Stored credential may have been wiped from the device keystore.
+      // Fall back to a discoverable-credential prompt so the user can
+      // pick any registered passkey on this device.
+    }
+  }
+  // No stored credential OR the stored one failed — let the OS show a picker.
+  return attempt(false);
 };
 
 export const getBiometricErrorMessage = (error: unknown, action: BiometricAction) => {
@@ -186,21 +190,20 @@ export const getBiometricErrorMessage = (error: unknown, action: BiometricAction
 
   if (name === "NotAllowedError" || name === "AbortError") {
     return action === "register"
-      ? "Biometric prompt was dismissed. Tap again and approve the device prompt."
-      : "Biometric prompt was dismissed. Try again and approve the device prompt.";
+      ? "You cancelled the fingerprint prompt. Tap again and approve with your fingerprint."
+      : "You cancelled the fingerprint prompt. Tap again and place your finger on the sensor.";
   }
-
   if (name === "InvalidStateError") {
     return action === "register"
-      ? "This device is already linked. Try the fingerprint option again."
-      : "This device biometric needs to be retried. Tap again.";
+      ? "This fingerprint is already registered for this app. Use it to unlock instead."
+      : "Try the fingerprint again — the sensor didn't recognize the previous attempt.";
   }
-
-  if (error instanceof Error && error.message) {
-    return error.message;
+  if (name === "NotSupportedError") {
+    return "This device doesn't support fingerprint sign-in for this app.";
   }
-
-  return action === "register"
-    ? "Biometric registration failed."
-    : "Biometric verification failed.";
+  if (name === "SecurityError") {
+    return "Fingerprint blocked by the browser. Open the app in your phone's browser or the installed app and try again.";
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return action === "register" ? "Fingerprint registration failed." : "Fingerprint verification failed.";
 };
