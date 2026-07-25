@@ -295,7 +295,8 @@ export const registerDeviceBiometric = async (
   await ensureBiometricSupport();
 
   if (!window.PublicKeyCredential) {
-    return runNativeBiometric("register", user);
+    const nativeResult = await runNativeBiometric("register", user);
+    return { credentialId: nativeResult.credentialId, reusedExisting: false };
   }
 
   // If we already have a credential on this device, verify it instead of
@@ -303,7 +304,7 @@ export const registerDeviceBiometric = async (
   if (storedCredentialId) {
     try {
       const existing = await navigator.credentials.get({
-        publicKey: withRpId({
+        publicKey: withRpId<PublicKeyCredentialRequestOptions>({
           challenge: createChallenge(),
           timeout: BIOMETRIC_TIMEOUT_MS,
           userVerification: "required",
@@ -387,7 +388,7 @@ export const verifyDeviceBiometric = async (storedCredentialId?: string | null) 
     includeRpId: boolean,
     verification: UserVerificationRequirement,
   ): Promise<string> => {
-    const publicKey: PublicKeyCredentialRequestOptions = withRpId({
+    const publicKey: PublicKeyCredentialRequestOptions = withRpId<PublicKeyCredentialRequestOptions>({
       challenge: createChallenge(),
       timeout: BIOMETRIC_TIMEOUT_MS,
       userVerification: verification,
