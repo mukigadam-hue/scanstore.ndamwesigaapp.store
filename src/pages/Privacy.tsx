@@ -19,6 +19,7 @@ import {
   KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import PageHead from "@/components/PageHead";
 
 const LAST_UPDATED = "July 25, 2026";
 
@@ -47,6 +48,11 @@ const Section = ({
 export default function Privacy() {
   return (
     <div className="min-h-screen bg-background">
+      <PageHead
+        title="Privacy Policy — DocLocker"
+        description="How DocLocker collects, uses, stores, and protects your documents and personal data."
+        path="/privacy"
+      />
       <header className="wood-panel border-b border-border sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link to="/">
