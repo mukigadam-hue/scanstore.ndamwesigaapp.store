@@ -24,6 +24,7 @@ import {
   useDetectedCountry,
 } from "@/components/CountryCodePicker";
 import { PinInput } from "@/components/PinInput";
+import PageHead from "@/components/PageHead";
 
 type Mode =
   | "phone-signup"
@@ -317,6 +318,11 @@ const Auth = () => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <PageHead
+        title="Sign In — DocLocker"
+        description="Sign in to DocLocker to access your secure document vault."
+        path="/auth"
+      />
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}

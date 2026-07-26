@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
 import LanguageSelector from "@/components/LanguageSelector";
+import PageHead from "@/components/PageHead";
 
 
 const Index = () => {
@@ -33,16 +34,22 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background pb-[60px]">
+      <PageHead
+        title="DocLocker — Secure Personal Document Vault"
+        description="Scan, store, and organize important documents on your phone with encrypted, biometric-locked storage."
+        path="/"
+      />
       {/* Top bar with language selector — always reachable */}
       <div className="absolute top-0 right-0 z-20 p-3">
         <LanguageSelector compact={false} />
       </div>
 
+      <main>
       {/* Hero */}
       <div className="relative overflow-hidden">
         {/* Background image */}
         <div className="absolute inset-0">
-          <img src={heroCabinet} alt="" className="w-full h-full object-cover opacity-30" />
+          <img src={heroCabinet} alt="Antique wooden filing cabinet representing DocLocker's secure vault" className="w-full h-full object-cover opacity-30" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
         </div>
 
@@ -56,7 +63,7 @@ const Index = () => {
             </div>
 
             <h1 className="font-display text-5xl md:text-6xl font-bold mb-4 brass-text">
-              DocLocker
+              DocLocker — Secure Personal Document Vault
             </h1>
             <p className="text-xl text-muted-foreground mb-8 max-w-lg mx-auto">
               {t("landing.heroDesc")}
@@ -118,6 +125,9 @@ const Index = () => {
           ))}
         </div>
       </div>
+      </main>
+
+
 
       {/* Footer */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
