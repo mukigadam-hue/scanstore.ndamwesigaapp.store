@@ -1,5 +1,6 @@
 import "./lib/polyfills";
 import { createRoot } from "react-dom/client";
+import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
 import "./index.css";
 import "./i18n";
@@ -23,7 +24,11 @@ const showStartupFallback = (message: string) => {
 
 try {
   if (!rootEl) throw new Error("Missing app root");
-  createRoot(rootEl).render(<App />);
+  createRoot(rootEl).render(
+    <HelmetProvider>
+      <App />
+    </HelmetProvider>
+  );
 } catch (err) {
   // Last-resort fallback so old WebViews never show a blank white screen.
   try { console.error("Fatal mount error:", err); } catch { /* ignore */ }
