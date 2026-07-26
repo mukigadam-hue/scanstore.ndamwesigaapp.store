@@ -1,0 +1,8 @@
+# DocLocker
+
+> DocLocker is a secure personal document vault for scanning, storing, and organizing important documents on your phone.
+
+## Pages
+
+- [Home](/): Overview of DocLocker, the secure document vault app.
+- [Privacy Policy](/privacy): How DocLocker collects, uses, and protects your data.
