@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => ({
         // service-worker install, which surfaced as "Scan&Store keeps stopping"
         // right after launch.
         globPatterns: ["index.html", "assets/*.css", "app-icon.png", "manifest.json"],
-        maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
