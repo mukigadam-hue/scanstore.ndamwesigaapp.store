@@ -97,29 +97,19 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
-        // Split heavy vendor libs into their own chunks so no single script
-        // exceeds a few hundred KB. Old Android WebViews (Android 6-8,
-        // ~1 GB RAM) crash while parsing a single 800 KB+ JS file — the
-        // legacy entry was 846 KB before this split.
+        // Only split heavy, self-contained libraries. Splitting React (or the
+        // many small libs that depend on it) across chunks broke module init
+        // order in the legacy build and produced a blank/black screen
+        // ("Cannot read properties of undefined (reading 'createContext')").
+        // React and its ecosystem now stay together in the main entry.
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
-          if (id.includes("react-dom") || id.includes("scheduler") ||
-              (id.includes("/react/") && !id.includes("react-router") && !id.includes("react-hook") && !id.includes("react-i18n") && !id.includes("react-helmet"))) {
-            return "vendor-react";
-          }
-          if (id.includes("@supabase")) return "vendor-supabase";
-          if (id.includes("@radix-ui")) return "vendor-radix";
-          if (id.includes("i18next") || id.includes("react-i18next")) return "vendor-i18n";
-          if (id.includes("@tanstack")) return "vendor-query";
-          if (id.includes("react-router")) return "vendor-router";
-          if (id.includes("lucide-react")) return "vendor-icons";
           if (id.includes("pdfjs-dist") || id.includes("pdf-lib") || id.includes("jspdf")) return "vendor-pdf";
           if (id.includes("xlsx") || id.includes("mammoth") || id.includes("docx")) return "vendor-office";
           if (id.includes("html2canvas")) return "vendor-html2canvas";
-          if (id.includes("framer-motion")) return "vendor-motion";
-          if (id.includes("recharts")) return "vendor-recharts";
         },
       },
+
     },
   },
 }));
