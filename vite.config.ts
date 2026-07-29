@@ -18,7 +18,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     legacy({
       targets: ["Chrome >= 49", "Android >= 6", "Safari >= 11"],
-      modernPolyfills: true,
+      // modernPolyfills=false: modern phones don't need the 127KB extra bundle.
+      // Our hand-written polyfills.ts fills the few real gaps.
+      modernPolyfills: false,
       renderLegacyChunks: true,
     }),
     mode === "development" && componentTagger(),
@@ -34,12 +36,16 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/~oauth/],
-        globPatterns: ["**/*.{js,css,html,svg,png,jpg,jpeg,woff,woff2,ttf}"],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Only precache the app shell (HTML + CSS + icon). Everything else is
+        // fetched on demand and served via runtime caching. Precaching the
+        // whole 11 MB build was OOM-killing low-RAM Android WebViews on
+        // service-worker install, which surfaced as "Scan&Store keeps stopping"
+        // right after launch.
+        globPatterns: ["index.html", "assets/*.css", "app-icon.png", "manifest.json"],
+        maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
-            // HTML navigations — always try the network first.
             urlPattern: ({ request, url }) =>
               request.mode === "navigate" && !url.pathname.startsWith("/~oauth"),
             handler: "NetworkFirst",
@@ -49,7 +55,6 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
-            // Hashed same-origin built assets.
             urlPattern: ({ url, sameOrigin }) =>
               sameOrigin && /\.(?:js|css|woff2?|ttf)$/.test(url.pathname),
             handler: "CacheFirst",
@@ -59,7 +64,6 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
-            // Images, including app icons.
             urlPattern: ({ url, sameOrigin }) =>
               sameOrigin && /\.(?:png|jpg|jpeg|svg|webp|gif)$/.test(url.pathname),
             handler: "CacheFirst",
@@ -69,9 +73,6 @@ export default defineConfig(({ mode }) => ({
             },
           },
           {
-            // One-time local download URLs created from in-memory public scans.
-            // Android WebViews do not save blob: URLs, but they do handle normal
-            // same-origin file URLs with a real extension and download headers.
             urlPattern: ({ url, sameOrigin }) =>
               sameOrigin && url.pathname.startsWith("/local-downloads/"),
             handler: "CacheFirst",
@@ -91,9 +92,34 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
-    // Keep generated syntax safe for old Android WebViews that understand
-    // module scripts but crash on newer syntax such as optional chaining.
     target: "es2017",
     cssTarget: "chrome61",
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        // Split heavy vendor libs into their own chunks so no single script
+        // exceeds a few hundred KB. Old Android WebViews (Android 6-8,
+        // ~1 GB RAM) crash while parsing a single 800 KB+ JS file — the
+        // legacy entry was 846 KB before this split.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("react-dom") || id.includes("scheduler") ||
+              (id.includes("/react/") && !id.includes("react-router") && !id.includes("react-hook") && !id.includes("react-i18n") && !id.includes("react-helmet"))) {
+            return "vendor-react";
+          }
+          if (id.includes("@supabase")) return "vendor-supabase";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("i18next") || id.includes("react-i18next")) return "vendor-i18n";
+          if (id.includes("@tanstack")) return "vendor-query";
+          if (id.includes("react-router")) return "vendor-router";
+          if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("pdfjs-dist") || id.includes("pdf-lib") || id.includes("jspdf")) return "vendor-pdf";
+          if (id.includes("xlsx") || id.includes("mammoth") || id.includes("docx")) return "vendor-office";
+          if (id.includes("html2canvas")) return "vendor-html2canvas";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("recharts")) return "vendor-recharts";
+        },
+      },
+    },
   },
 }));
