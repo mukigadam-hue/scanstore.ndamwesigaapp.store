@@ -138,6 +138,38 @@ const preparePhoneDownloadUrl = async (blob: Blob, fileName: string): Promise<st
   }
 };
 
+const isOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
+
+/**
+ * Offline path: stash the file in the service-worker cache behind a real
+ * same-origin HTTPS URL (`/local-downloads/...`). The SW serves it CacheFirst,
+ * so the Android download manager / WebViewGold shell can fetch and write it
+ * to phone storage with no network at all.
+ */
+const prepareOfflineDownloadUrl = async (blob: Blob, fileName: string): Promise<string | null> => {
+  try {
+    if (typeof caches === "undefined") return null;
+    const safeName = safeFileName(fileName);
+    const url = `${location.origin}/local-downloads/${Date.now()}-${encodeURIComponent(safeName)}`;
+    const cache = await caches.open("local-downloads");
+    await cache.put(
+      url,
+      new Response(blob, {
+        status: 200,
+        headers: {
+          "Content-Type": blob.type || getMimeType(safeName),
+          "Content-Length": String(blob.size),
+          "Content-Disposition": `attachment; filename="${safeName}"`,
+        },
+      }),
+    );
+    return url;
+  } catch (e) {
+    console.warn("Offline download staging failed", e);
+    return null;
+  }
+};
+
 /**
  * Download an already stored vault file. Keep this as a direct HTTPS file URL:
  * Android/WebViewGold download managers save real file links, while blob: URLs
@@ -166,10 +198,31 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
   }
 
   if (phoneShell) {
+    // Offline first: never wait on the backend when there is no network.
+    if (isOffline()) {
+      const offlineUrl = await prepareOfflineDownloadUrl(stamped, safeName);
+      if (offlineUrl) {
+        const r = openDownloadUrl(offlineUrl, safeName, stamped.type || getMimeType(safeName));
+        return r === "native" ? "native" : "prepared";
+      }
+      if (await shareFileFallback(stamped, safeName)) return "shared";
+      const localUrl = URL.createObjectURL(stamped);
+      triggerAnchorDownload(localUrl, safeName);
+      setTimeout(() => { try { URL.revokeObjectURL(localUrl); } catch { /* ignore */ } }, 60000);
+      return "browser";
+    }
+
     const preparedUrl = await preparePhoneDownloadUrl(stamped, safeName);
     if (preparedUrl) {
       const result = openDownloadUrl(preparedUrl, safeName, stamped.type || getMimeType(safeName));
       return result === "native" ? "native" : "prepared";
+    }
+
+    // Backend mirror unavailable → serve it locally through the SW cache.
+    const cachedUrl = await prepareOfflineDownloadUrl(stamped, safeName);
+    if (cachedUrl) {
+      const r = openDownloadUrl(cachedUrl, safeName, stamped.type || getMimeType(safeName));
+      return r === "native" ? "native" : "prepared";
     }
 
     // Avoid Android DownloadManager crashes from blob:/data: URLs.

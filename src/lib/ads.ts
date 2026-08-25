@@ -1,7 +1,7 @@
 // Interstitial ad controller. Only call showInterstitial() at approved
 // post-action checkpoints: final verification and successful public save.
 
-import { triggerNativeAd, preloadNativeAds } from "./nativeAd";
+import { triggerNativeAd, preloadNativeAds, hasNativeAdBridge } from "./nativeAd";
 
 // Kept for backwards compatibility with BannerAd. Banner ads are
 // disabled everywhere until a real SDK is wired.
@@ -17,11 +17,17 @@ export function registerInterstitialHost(l: Listener | null) {
   listener = l;
 }
 
-export function prefetchInterstitial() {
-  // Warm the native ad cache so the next trigger renders instantly.
-  preloadNativeAds();
-}
+let preloaded = false;
 
+/** Warm the native ad cache so the next approved trigger renders instantly. */
+export function prefetchInterstitial() {
+  try {
+    preloadNativeAds();
+    preloaded = true;
+  } catch {
+    /* ignore */
+  }
+}
 
 // Per-trigger cooldown map (in-memory + localStorage for cross-reload).
 const COOLDOWN_KEY = "ad_cooldown_";
@@ -46,18 +52,27 @@ export function showInterstitial(trigger: string, cooldownMs = 0): Promise<void>
     if (withinCooldown(trigger, cooldownMs)) { resolve(); return; }
     if (typeof navigator !== "undefined" && !navigator.onLine) { resolve(); return; }
     inFlight.add(trigger);
+
     const emitted = triggerNativeAd(trigger);
+
     if (emitted) {
       markShown(trigger);
       // Warm the cache again for the next trigger point.
       setTimeout(() => { try { preloadNativeAds(); } catch { /* ignore */ } }, 1500);
+    } else if (listener) {
+      // No native shell (browser / PWA): fall back to the in-app overlay so
+      // the checkpoint still shows an ad surface.
+      markShown(trigger);
+      inFlight.delete(trigger);
+      listener(trigger, resolve);
+      return;
     }
+
     setTimeout(() => inFlight.delete(trigger), 1200);
     resolve();
   });
 }
 
-
 export function hasPrefetched() {
-  return false;
+  return preloaded && hasNativeAdBridge();
 }
