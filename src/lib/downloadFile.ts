@@ -198,6 +198,20 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
   }
 
   if (phoneShell) {
+    // Offline first: never wait on the backend when there is no network.
+    if (isOffline()) {
+      const offlineUrl = await prepareOfflineDownloadUrl(stamped, safeName);
+      if (offlineUrl) {
+        const r = openDownloadUrl(offlineUrl, safeName, stamped.type || getMimeType(safeName));
+        return r === "native" ? "native" : "prepared";
+      }
+      if (await shareFileFallback(stamped, safeName)) return "shared";
+      const localUrl = URL.createObjectURL(stamped);
+      triggerAnchorDownload(localUrl, safeName);
+      setTimeout(() => { try { URL.revokeObjectURL(localUrl); } catch { /* ignore */ } }, 60000);
+      return "browser";
+    }
+
     const preparedUrl = await preparePhoneDownloadUrl(stamped, safeName);
     if (preparedUrl) {
       const result = openDownloadUrl(preparedUrl, safeName, stamped.type || getMimeType(safeName));
