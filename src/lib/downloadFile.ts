@@ -218,6 +218,13 @@ export const downloadBlob = async (blob: Blob, fileName: string): Promise<Downlo
       return result === "native" ? "native" : "prepared";
     }
 
+    // Backend mirror unavailable → serve it locally through the SW cache.
+    const cachedUrl = await prepareOfflineDownloadUrl(stamped, safeName);
+    if (cachedUrl) {
+      const r = openDownloadUrl(cachedUrl, safeName, stamped.type || getMimeType(safeName));
+      return r === "native" ? "native" : "prepared";
+    }
+
     // Avoid Android DownloadManager crashes from blob:/data: URLs.
     if (await shareFileFallback(stamped, safeName)) return "shared";
     throw new Error("Phone storage link could not be prepared");
