@@ -138,6 +138,38 @@ const preparePhoneDownloadUrl = async (blob: Blob, fileName: string): Promise<st
   }
 };
 
+const isOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
+
+/**
+ * Offline path: stash the file in the service-worker cache behind a real
+ * same-origin HTTPS URL (`/local-downloads/...`). The SW serves it CacheFirst,
+ * so the Android download manager / WebViewGold shell can fetch and write it
+ * to phone storage with no network at all.
+ */
+const prepareOfflineDownloadUrl = async (blob: Blob, fileName: string): Promise<string | null> => {
+  try {
+    if (typeof caches === "undefined") return null;
+    const safeName = safeFileName(fileName);
+    const url = `${location.origin}/local-downloads/${Date.now()}-${encodeURIComponent(safeName)}`;
+    const cache = await caches.open("local-downloads");
+    await cache.put(
+      url,
+      new Response(blob, {
+        status: 200,
+        headers: {
+          "Content-Type": blob.type || getMimeType(safeName),
+          "Content-Length": String(blob.size),
+          "Content-Disposition": `attachment; filename="${safeName}"`,
+        },
+      }),
+    );
+    return url;
+  } catch (e) {
+    console.warn("Offline download staging failed", e);
+    return null;
+  }
+};
+
 /**
  * Download an already stored vault file. Keep this as a direct HTTPS file URL:
  * Android/WebViewGold download managers save real file links, while blob: URLs
