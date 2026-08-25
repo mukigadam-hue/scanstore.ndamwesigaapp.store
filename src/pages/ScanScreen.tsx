@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { ScanLine, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CameraCapture from "@/components/CameraCapture";
+import { useTranslation } from "react-i18next";
 
 export default function ScanScreen() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(true);
 
@@ -32,9 +34,9 @@ export default function ScanScreen() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       <div className="flex flex-col items-center gap-4 text-center">
         <ScanLine className="h-12 w-12 text-primary" />
-        <h1 className="text-2xl font-bold brass-text font-display">Scan Document</h1>
+        <h1 className="text-2xl font-bold brass-text font-display">{t("scan.scanDocumentHeading")}</h1>
         <p className="text-muted-foreground max-w-sm text-sm">
-          Snap a photo — we'll auto-crop, enhance contrast, and let you save or share.
+          {t("scan.scanDocumentDesc")}
         </p>
         <div className="flex gap-2">
           <Button
@@ -43,10 +45,10 @@ export default function ScanScreen() {
             }}
             className="brass-gradient text-primary-foreground font-display"
           >
-            <ScanLine className="h-4 w-4 mr-2" /> Open Camera
+            <ScanLine className="h-4 w-4 mr-2" /> {t("scan.openCamera")}
           </Button>
           <Button variant="ghost" onClick={() => navigate("/")}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Back
+            <ArrowLeft className="h-4 w-4 mr-1" /> {t("scan.back")}
           </Button>
         </div>
       </div>

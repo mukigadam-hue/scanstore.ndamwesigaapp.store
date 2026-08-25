@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Camera, RotateCcw, X, FileText, Image as ImageIcon, Smartphone, Monitor, Flashlight, FlashlightOff, CreditCard, ScanLine, ArrowRight, Download, Save } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { jsPDF } from "jspdf";
 import { enhanceScanCanvas } from "@/lib/enhanceScan";
 import { downloadBlob } from "@/lib/downloadFile";
@@ -235,14 +236,15 @@ const getCaptureProfile = () => {
   };
 };
 
-const qualityLabel = (score: number) => {
-  if (score >= 90) return { label: "Best scan", tone: "text-emerald-300 bg-emerald-500/20 border-emerald-400/40" };
-  if (score >= 60) return { label: "Good scan", tone: "text-lime-300 bg-lime-500/20 border-lime-400/40" };
-  if (score >= 50) return { label: "Not yet accurate", tone: "text-amber-300 bg-amber-500/20 border-amber-400/40" };
-  return { label: "Poor scan", tone: "text-red-300 bg-red-500/20 border-red-400/40" };
+const qualityLabel = (score: number, t: (key: string) => string) => {
+  if (score >= 90) return { label: t("scan.bestScan"), tone: "text-emerald-300 bg-emerald-500/20 border-emerald-400/40" };
+  if (score >= 60) return { label: t("scan.goodScan"), tone: "text-lime-300 bg-lime-500/20 border-lime-400/40" };
+  if (score >= 50) return { label: t("scan.notYetAccurate"), tone: "text-amber-300 bg-amber-500/20 border-amber-400/40" };
+  return { label: t("scan.poorScan"), tone: "text-red-300 bg-red-500/20 border-red-400/40" };
 };
 
 const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureProps) => {
+  const { t } = useTranslation();
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -254,7 +256,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const [scanOrientation, setScanOrientation] = useState<"portrait" | "landscape">("portrait");
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
-  const [scanStatusText, setScanStatusText] = useState("Scanning document");
+  const [scanStatusText, setScanStatusText] = useState(() => t("scan.scanning", { target: t("scan.targetDocument") }));
   const [photoCapturing, setPhotoCapturing] = useState(false);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [saveChoicesOpen, setSaveChoicesOpen] = useState<null | "capture" | "id">(null);
@@ -304,7 +306,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // Live scan quality feedback (0-100)
   const [quality, setQuality] = useState(0);
-  const [qualityHint, setQualityHint] = useState<string>("Hold steady, fill the frame");
+  const [qualityHint, setQualityHint] = useState<string>(() => t("scan.holdSteady"));
   const qualityCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
 
@@ -489,7 +491,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setTorchSupported(!!capabilities?.torch);
     } catch (err) {
       console.error("Camera error:", err);
-      toast.error("Camera access denied. Please allow camera permissions.");
+      toast.error(t("scan.cameraAccessDenied"));
     }
   }, [clearCapturedPreview]);
 
@@ -502,7 +504,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       await (track as any).applyConstraints({ advanced: [{ torch: newState }] });
       setTorchOn(newState);
     } catch {
-      toast.error("Flashlight not available on this device");
+      toast.error(t("scan.flashlightUnavailable"));
     }
   };
 
@@ -609,13 +611,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         setQuality(clamped);
 
         // Hint
-        let hint = "Looks great — hold still";
-        if (mean < 60) hint = "Too dark — turn on the flashlight or move to better light";
-        else if (mean > 215) hint = "Too bright — reduce glare or shadow";
-        else if (sharpScore < 35) hint = "Blurry — hold the phone steady and tap to focus";
-        else if (contrastScore < 30) hint = "Move closer so the document fills the frame";
-        else if (alignScore < 55) hint = "Straighten the phone — keep it parallel to the page";
-        else if (clamped < 60) hint = "Almost there — adjust angle slightly";
+        let hint = t("scan.hintGreat");
+        if (mean < 60) hint = t("scan.hintTooDark");
+        else if (mean > 215) hint = t("scan.hintTooBright");
+        else if (sharpScore < 35) hint = t("scan.hintBlurry");
+        else if (contrastScore < 30) hint = t("scan.hintMoveCloser");
+        else if (alignScore < 55) hint = t("scan.hintStraighten");
+        else if (clamped < 60) hint = t("scan.hintAlmostThere");
         setQualityHint(hint);
       } catch {
         // ignore frame errors
@@ -744,7 +746,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setScanMode("photo-crop");
       clearFrozenFrame();
     } catch {
-      toast.error("Could not capture photo on this device");
+      toast.error(t("scan.couldNotCapturePhoto"));
       clearFrozenFrame();
     } finally {
       setPhotoCapturing(false);
@@ -755,7 +757,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   const performScan = async (): Promise<File | null> => {
     if (!videoRef.current || !canvasRef.current || !scanCanvasRef.current) return null;
     onScanStart?.();
-    setScanStatusText(`Scanning ${scanMode === "id-front" ? "ID front" : scanMode === "id-back" ? "ID back" : "document"}`);
+    setScanStatusText(t("scan.scanning", { target: scanMode === "id-front" ? t("scan.targetIdFront") : scanMode === "id-back" ? t("scan.targetIdBack") : t("scan.targetDocument") }));
     setScanning(true);
     setScanProgress(0);
     // Instant capture flash for high-speed feedback.
@@ -938,7 +940,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         setCapturedPreview(result);
       }
     } catch {
-      toast.error("Could not scan on this device");
+      toast.error(t("scan.couldNotScanDevice"));
     } finally {
       setScanning(false);
       setScanProgress(0);
@@ -987,7 +989,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       setScanMode("photo-crop");
       clearFrozenFrame();
     } catch {
-      toast.error("Could not capture on this device");
+      toast.error(t("scan.couldNotCaptureDevice"));
       clearFrozenFrame();
     } finally {
       setPhotoCapturing(false);
@@ -1003,7 +1005,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     try {
       result = await performScan();
     } catch {
-      toast.error("Could not scan this ID side");
+      toast.error(t("scan.couldNotScanIdSide"));
     }
     if (!result) {
       setScanning(false);
@@ -1021,7 +1023,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       // so the BACK-side live camera view is not blocked.
       clearFrozenFrame();
       setScanMode("id-back");
-      toast.success("Front captured — now scan the BACK side");
+      toast.success(t("scan.frontCapturedScanBack"));
       // Restart camera reliably for the back side (await, retry once if it
       // races with the track release).
       await new Promise((r) => setTimeout(r, 350));
@@ -1198,11 +1200,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       const pdfBlob = pdf.output("blob");
       const pdfFile = new File([pdfBlob], `id_scan_${Date.now()}.pdf`, { type: "application/pdf" });
       onCapture(pdfFile);
-      toast.success("ID scanned and saved as PDF!");
+      toast.success(t("scan.idScannedSavedPdf"));
       handleClose();
     } catch (err) {
       console.error("PDF creation error:", err);
-      toast.error("Failed to create PDF.");
+      toast.error(t("scan.failedCreatePdf"));
     }
   };
 
@@ -1211,7 +1213,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     if (!combined) return;
     const file = dataUrlToFile(combined, `id_scan_${Date.now()}.jpg`, "image/jpeg");
     onCapture(file);
-    toast.success("ID scan saved!");
+    toast.success(t("scan.idScanSaved"));
     handleClose();
   };
 
@@ -1247,17 +1249,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
   // / file picker / native bridge), bypassing the in-app vault flow.
   const savePhotoToPhone = async () => {
     if (!capturedFile) return;
-    const tid = toast.loading("Saving to your phone…");
+    const tid = toast.loading(t("scan.savingToPhone"));
     try {
       const file = (await bakeAdjustments()) ?? capturedFile;
       await downloadBlob(file, file.name);
-      toast.success("File saved successfully", { id: tid });
+      toast.success(t("scan.fileSavedSuccess"), { id: tid });
       // Ad fires ONLY after the save has completed — clean post-task transition.
       await showInterstitial("save-to-phone", INTERSTITIAL_COOLDOWN_MS);
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
-      else toast.error("Could not save to phone", { id: tid });
+      else toast.error(t("scan.couldNotSaveToPhone"), { id: tid });
     }
   };
 
@@ -1301,17 +1303,17 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   const savePdfToPhone = async () => {
     if (!captured || !capturedFile) return;
-    const tid = toast.loading("Preparing PDF…");
+    const tid = toast.loading(t("scan.preparingPdf"));
     try {
       const built = await buildMultiPagePdf();
       if (!built) throw new Error("no pdf");
       await downloadBlob(built.blob, `scan_${Date.now()}.pdf`);
-      toast.success(built.count > 1 ? `PDF saved (${built.count} pages)` : "PDF saved successfully", { id: tid });
+      toast.success(built.count > 1 ? t("scan.pdfSavedPages", { count: built.count }) : t("scan.pdfSavedSuccess"), { id: tid });
       await showInterstitial("save-to-phone", INTERSTITIAL_COOLDOWN_MS);
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
-      else toast.error("Could not save PDF to phone", { id: tid });
+      else toast.error(t("scan.couldNotSavePdfToPhone"), { id: tid });
     }
   };
 
@@ -1323,11 +1325,11 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       if (!built) throw new Error("no pdf");
       const pdfFile = new File([built.blob], `scan_${Date.now()}.pdf`, { type: "application/pdf" });
       onCapture(pdfFile);
-      toast.success(built.count > 1 ? `Saved as ${built.count}-page PDF!` : "Document scanned and saved as PDF!");
+      toast.success(built.count > 1 ? t("scan.savedAsPagePdf", { count: built.count }) : t("scan.documentScannedSavedPdf"));
       handleClose();
     } catch (err) {
       console.error("PDF creation error:", err);
-      toast.error("Failed to create PDF. Saving as image instead.");
+      toast.error(t("scan.failedCreatePdfFallback"));
       await saveAsImage();
     }
   };
@@ -1345,9 +1347,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       clearCapturedPreview();
       setSaveChoicesOpen(null);
       startCamera(facingMode);
-      toast.success("Page added — scan the next one");
+      toast.success(t("scan.pageAdded"));
     } catch {
-      toast.error("Could not add page");
+      toast.error(t("scan.couldNotAddPage"));
     }
   };
 
@@ -1355,7 +1357,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // Save the assembled two-sided ID directly to the user's phone.
   const saveIdToPhone = async (asPdf: boolean) => {
-    const tid = toast.loading("Saving ID to your phone…");
+    const tid = toast.loading(t("scan.savingIdToPhone"));
     try {
       const combined = await combineIdSides();
       if (!combined) { toast.dismiss(tid); return; }
@@ -1370,13 +1372,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         const file = dataUrlToFile(combined, `id_scan_${Date.now()}.jpg`, "image/jpeg");
         await downloadBlob(file, file.name);
       }
-      toast.success("ID saved successfully", { id: tid });
+      toast.success(t("scan.idSavedSuccess"), { id: tid });
       // Ad fires ONLY after the ID has been saved successfully.
       await showInterstitial("save-to-phone", INTERSTITIAL_COOLDOWN_MS);
       handleClose();
     } catch (e: any) {
       if (e?.name === "AbortError") toast.dismiss(tid);
-      else toast.error("Could not save to phone", { id: tid });
+      else toast.error(t("scan.couldNotSaveToPhone"), { id: tid });
     }
   };
 
@@ -1420,7 +1422,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
     // colors. We never apply adaptive B&W thresholding here so colored
     // stamps, signatures and highlights survive.
     const isScan = pendingBW;
-    const tid = toast.loading(isScan ? "Cleaning scan…" : "Straightening…");
+    const tid = toast.loading(isScan ? t("scan.cleaningScan") : t("scan.straightening"));
     try {
       const res = await fetch(photoRawUrl);
       const blob = await res.blob();
@@ -1461,10 +1463,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       clearPhotoRaw();
       setPendingBW(false);
       setScanMode(isScan ? "document" : "photo");
-      toast.success(isScan ? "Scan ready — adjust contrast & brightness if needed" : "Photo ready", { id: tid });
+      toast.success(isScan ? t("scan.scanReady") : t("scan.photoReady"), { id: tid });
     } catch (e) {
       console.error("crop confirm failed", e);
-      toast.error("Could not straighten — using original", { id: tid });
+      toast.error(t("scan.couldNotStraighten"), { id: tid });
       // Fallback: use the raw color photo as-is.
       try {
         const res = await fetch(photoRawUrl);
@@ -1548,7 +1550,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3">
-          <h4 className="text-sm font-semibold text-white">Save file</h4>
+          <h4 className="text-sm font-semibold text-white">{t("scan.saveFile")}</h4>
           <Button size="icon" variant="ghost" onClick={() => setSaveChoicesOpen(null)} className="h-8 w-8 text-white/70 hover:bg-white/10 hover:text-white">
             <X className="h-4 w-4" />
           </Button>
@@ -1556,19 +1558,19 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={kind === "id" ? saveIdAsImage : saveAsImage} className="brass-gradient text-primary-foreground hover:opacity-90">
             <ImageIcon className="h-4 w-4 mr-2" />
-            Vault Photo
+            {t("scan.vaultPhoto")}
           </Button>
           <Button onClick={kind === "id" ? saveIdAsPdf : saveAsDocument} className="brass-gradient text-primary-foreground hover:opacity-90">
             <FileText className="h-4 w-4 mr-2" />
-            Vault PDF
+            {t("scan.vaultPdf")}
           </Button>
           <Button onClick={kind === "id" ? () => saveIdToPhone(false) : savePhotoToPhone} variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
             <Download className="h-4 w-4 mr-2" />
-            Phone Photo
+            {t("scan.phonePhoto")}
           </Button>
           <Button onClick={kind === "id" ? () => saveIdToPhone(true) : savePdfToPhone} variant="outline" className="border-white/30 text-white hover:bg-white/10 bg-transparent">
             <Download className="h-4 w-4 mr-2" />
-            Phone PDF
+            {t("scan.phonePdf")}
           </Button>
         </div>
       </div>
@@ -1581,7 +1583,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
 
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
-          <h3 className="text-white text-sm font-medium">Choose Scan Mode</h3>
+          <h3 className="text-white text-sm font-medium">{t("scan.chooseScanMode")}</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
@@ -1599,9 +1601,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                   <FileText className="h-7 w-7 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-lg font-bold text-white">Full Document</h4>
+                  <h4 className="text-lg font-bold text-white">{t("scan.fullDocument")}</h4>
                   <p className="text-sm text-white/60 mt-1">
-                    Scan a single page — letters, receipts, certificates, full-page documents
+                    {t("scan.fullDocumentDesc")}
                   </p>
                 </div>
               </div>
@@ -1620,9 +1622,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                   <Camera className="h-7 w-7 text-sky-400" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-lg font-bold text-white">Take Photo</h4>
+                  <h4 className="text-lg font-bold text-white">{t("scan.takePhotoHeading")}</h4>
                   <p className="text-sm text-white/60 mt-1">
-                    Capture in full color — then drag 4 corners to straighten. Keeps stamps &amp; signatures.
+                    {t("scan.takePhotoDesc")}
                   </p>
                 </div>
               </div>
@@ -1642,9 +1644,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                   <CreditCard className="h-7 w-7 text-amber-400" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-lg font-bold text-white">ID Card (2-Sided)</h4>
+                  <h4 className="text-lg font-bold text-white">{t("scan.idCard2Sided")}</h4>
                   <p className="text-sm text-white/60 mt-1">
-                    Scan front & back of ID cards, driver's licenses — both sides on one A4 page
+                    {t("scan.idCardDesc")}
                   </p>
                 </div>
               </div>
@@ -1738,7 +1740,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       <div className="fixed inset-0 z-[9999] bg-black flex flex-col" style={{ paddingBottom: BANNER_SAFE_BOTTOM }}>
 
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between safe-area-top z-10">
-          <h3 className="text-white text-sm font-medium">Arrange on A4 — drag & resize</h3>
+          <h3 className="text-white text-sm font-medium">{t("scan.arrangeA4")}</h3>
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
             <X className="h-5 w-5" />
           </Button>
@@ -1746,7 +1748,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
         <div className="flex-1 overflow-auto flex flex-col items-center justify-start px-3 py-3 gap-2">
           <p className="text-white/70 text-xs text-center max-w-xs">
-            Drag each side to move it. Drag the amber corner to resize. Both copies stay inside the A4 page.
+            {t("scan.arrangeA4Desc")}
           </p>
           <div
             ref={a4ContainerRef}
@@ -1772,7 +1774,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 back:  { xMm: (A4_W_MM - DEFAULT_ID_WIDTH_MM) / 2, yMm: 15 + DEFAULT_ID_WIDTH_MM / ID_ASPECT + 10, widthMm: DEFAULT_ID_WIDTH_MM },
               })}
             >
-              Reset layout
+              {t("scan.resetLayout")}
             </Button>
             <Button
               size="sm"
@@ -1783,7 +1785,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 back:  clampPlacement({ ...p.back,  widthMm: Math.min(A4_W_MM - 10, p.back.widthMm + 10) }),
               }))}
             >
-              Bigger
+              {t("scan.bigger")}
             </Button>
             <Button
               size="sm"
@@ -1794,7 +1796,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 back:  clampPlacement({ ...p.back,  widthMm: Math.max(40, p.back.widthMm - 10) }),
               }))}
             >
-              Smaller
+              {t("scan.smaller")}
             </Button>
           </div>
         </div>
@@ -1803,7 +1805,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           <div className="flex items-center gap-2 max-w-sm mx-auto">
             <Button onClick={() => setSaveChoicesOpen("id")} className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90">
               <Save className="h-4 w-4 mr-2" />
-              Save
+              {t("scan.save")}
             </Button>
               <Button
                 variant="ghost"
@@ -1815,10 +1817,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 }}
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Rescan
+                {t("scan.rescan")}
               </Button>
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={handleClose}>
-                Cancel
+                {t("scan.cancel")}
               </Button>
           </div>
         </div>
@@ -1831,7 +1833,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
   // Determine labels for ID scanning
   const isIdMode = scanMode === "id-front" || scanMode === "id-back";
-  const idSideLabel = scanMode === "id-front" ? "FRONT side" : "BACK side";
+  const idSideLabel = scanMode === "id-front" ? t("scan.frontSide") : t("scan.backSide");
   const documentFrameAspect = scanOrientation === "landscape" ? A4_LANDSCAPE_ASPECT : A4_PORTRAIT_ASPECT;
   const documentFrameWidthCss = "94%";
   const documentFrameMaxWidth = scanOrientation === "landscape" ? "760px" : "640px";
@@ -1844,13 +1846,13 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       {/* Top bar */}
       <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-2 safe-area-top z-10">
         <h3 className="text-white text-sm font-medium truncate flex-1">
-          {scanning ? "Scanning…" : photoCapturing ? "Capturing…" : captured ? "Preview" : isIdMode ? `Scan ID — ${idSideLabel}` : "Document Scanner"}
+          {scanning ? t("scan.scanningEllipsis") : photoCapturing ? t("scan.capturingEllipsis") : captured ? t("scan.preview") : isIdMode ? t("scan.scanIdTitle", { side: idSideLabel }) : t("scan.documentScanner")}
         </h3>
         <div className="flex items-center gap-1 shrink-0">
           {!captured && !scanning && !isIdMode && (
             <Button variant="ghost" size="sm" onClick={toggleOrientation} className="text-white/70 hover:text-white hover:bg-white/10 text-xs gap-1">
               {scanOrientation === "portrait" ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
-              {scanOrientation === "portrait" ? "Portrait" : "Landscape"}
+              {scanOrientation === "portrait" ? t("scan.portrait") : t("scan.landscape")}
             </Button>
           )}
           <Button size="icon" variant="ghost" onClick={handleClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
@@ -1913,14 +1915,14 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               <div className="absolute top-12 left-0 right-0 flex justify-center pointer-events-none">
                 <span className="bg-amber-500/90 text-black text-xs font-bold px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
                   <CreditCard className="h-3.5 w-3.5" />
-                  Place {idSideLabel} of ID in the card frame
+                  {t("scan.placeIdInFrame", { side: idSideLabel })}
                 </span>
               </div>
             )}
 
             {/* Live scan quality meter */}
             {streaming && !scanning && (() => {
-              const q = qualityLabel(quality);
+              const q = qualityLabel(quality, t);
               return (
                 <div className="absolute top-2 left-2 right-2 flex flex-col items-center gap-1 pointer-events-none">
                   <div className={`px-3 py-1 rounded-full border text-xs font-bold backdrop-blur-sm flex items-center gap-2 ${q.tone}`}>
@@ -1979,10 +1981,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
               <div className="absolute bottom-24 left-0 right-0 flex justify-center pointer-events-none px-4">
                 <span className="text-[11px] text-white/85 bg-black/55 px-3 py-1 rounded-full text-center">
                   {scanMode === "photo"
-                    ? "Center the document, then tap the shutter"
+                    ? t("scan.centerDocument")
                     : liveConfidence >= 0.55
-                    ? "Hold still — auto-scanning…"
-                    : "Keep document within frame — auto-scan when 4 corners are found"}
+                    ? t("scan.holdStillAutoScanning")
+                    : t("scan.keepDocumentInFrame")}
                 </span>
               </div>
             )}
@@ -2012,14 +2014,14 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
 
               <div className="absolute inset-0 flex items-center justify-center bg-black/35 pointer-events-none">
                 <span className="text-white text-sm font-medium bg-black/60 px-3 py-1 rounded-full">
-                  Capturing…
+                  {t("scan.capturingEllipsis")}
                 </span>
               </div>
             )}
 
             {!streaming && !scanning && !photoCapturing && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-                <p className="text-white/60 text-sm">Starting camera...</p>
+                <p className="text-white/60 text-sm">{t("scan.startingCamera")}</p>
               </div>
             )}
           </>
@@ -2027,7 +2029,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
           <div className="relative w-full h-full flex items-center justify-center">
             <img
               src={captured}
-              alt="Captured"
+              alt={t("scan.capturedAlt")}
               className="max-w-full max-h-full object-contain"
               style={{ filter: `contrast(${reviewContrast}%) brightness(${reviewBrightness}%) saturate(${reviewSaturate}%)` }}
             />
@@ -2045,9 +2047,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                   const v = Number(e.target.value);
                   setReviewContrast(v);
                   setReviewPreset("original");
-                  showAdjustHint("Contrast", v);
+                  showAdjustHint(t("scan.contrastLabel"), v);
                 }}
-                aria-label="Contrast"
+                aria-label={t("scan.contrastLabel")}
                 style={{
                   WebkitAppearance: "slider-vertical" as any,
                   writingMode: "bt-lr" as any,
@@ -2072,9 +2074,9 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                   const v = Number(e.target.value);
                   setReviewBrightness(v);
                   setReviewPreset("original");
-                  showAdjustHint("Brightness", v);
+                  showAdjustHint(t("scan.brightnessLabel"), v);
                 }}
-                aria-label="Brightness"
+                aria-label={t("scan.brightnessLabel")}
                 style={{
                   WebkitAppearance: "slider-vertical" as any,
                   writingMode: "bt-lr" as any,
@@ -2109,7 +2111,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                         : "bg-black/55 text-white/85 border-white/20 hover:bg-black/70"
                     }`}
                   >
-                    {p === "original" ? "Original" : p === "auto" ? "Auto" : p === "perfect" ? "Perfect" : "Lighten"}
+                    {p === "original" ? t("scan.presetOriginal") : p === "auto" ? t("scan.presetAuto") : p === "perfect" ? t("scan.presetPerfect") : t("scan.presetLighten")}
                   </button>
                 ))}
               </div>
@@ -2124,18 +2126,18 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
       <div className="bg-black/80 backdrop-blur-sm px-4 py-3 safe-area-bottom">
         {!captured ? (
           <div className="flex items-center justify-center gap-4">
-            <Button variant="ghost" size="icon" onClick={switchCamera} className="text-white/70 hover:text-white hover:bg-white/10 h-12 w-12" title="Switch camera">
+            <Button variant="ghost" size="icon" onClick={switchCamera} className="text-white/70 hover:text-white hover:bg-white/10 h-12 w-12" title={t("scan.switchCamera")}>
               <RotateCcw className="h-5 w-5" />
             </Button>
 
             {torchSupported && (
-              <Button variant="ghost" size="icon" onClick={toggleTorch} className={`h-12 w-12 ${torchOn ? "text-yellow-400 bg-yellow-400/20" : "text-white/70 hover:text-white hover:bg-white/10"}`} title={torchOn ? "Turn off flashlight" : "Turn on flashlight"}>
+              <Button variant="ghost" size="icon" onClick={toggleTorch} className={`h-12 w-12 ${torchOn ? "text-yellow-400 bg-yellow-400/20" : "text-white/70 hover:text-white hover:bg-white/10"}`} title={torchOn ? t("scan.turnOffFlashlight") : t("scan.turnOnFlashlight")}>
                 {torchOn ? <Flashlight className="h-5 w-5" /> : <FlashlightOff className="h-5 w-5" />}
               </Button>
             )}
 
             {!isIdMode && (
-                <Button onClick={takePhoto} disabled={!streaming || scanning || photoCapturing} className="brass-gradient text-primary-foreground h-16 w-16 rounded-full hover:opacity-90" title="Take photo">
+                <Button onClick={takePhoto} disabled={!streaming || scanning || photoCapturing} className="brass-gradient text-primary-foreground h-16 w-16 rounded-full hover:opacity-90" title={t("scan.takePhotoTitle")}>
                 <Camera className="h-6 w-6" />
               </Button>
             )}
@@ -2147,7 +2149,7 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 className="h-14 rounded-full brass-gradient text-primary-foreground hover:opacity-90 px-6 text-sm font-bold gap-2"
               >
                 <ScanLine className="h-5 w-5" />
-                Scan {idSideLabel}
+                {t("scan.scanSide", { side: idSideLabel })}
               </Button>
             ) : (
               <Button
@@ -2155,10 +2157,10 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
                 disabled={!streaming || scanning || photoCapturing}
                 variant="outline"
                 className="h-12 rounded-full border-primary/50 text-primary hover:bg-primary/10 px-5 text-sm font-semibold"
-                title="Scan document"
+                title={t("scan.scanDocumentTitle")}
               >
                 <FileText className="h-4 w-4 mr-1.5" />
-                Scan
+                {t("scan.scan")}
               </Button>
             )}
           </div>
@@ -2167,22 +2169,22 @@ const CameraCapture = ({ open, onClose, onCapture, onScanStart }: CameraCaptureP
             {extraPages.length > 0 && (
               <div className="flex items-center justify-center">
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/40">
-                  {extraPages.length + 1} pages queued
+                  {t("scan.pagesQueued", { count: extraPages.length + 1 })}
                 </span>
               </div>
             )}
             <div className="flex items-center gap-2">
               <Button onClick={() => setSaveChoicesOpen("capture")} className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90">
                 <Save className="h-4 w-4 mr-2" />
-                Save
+                {t("scan.save")}
               </Button>
               <Button onClick={addAnotherPage} variant="outline" className="flex-1 border-amber-300/50 text-amber-200 hover:bg-amber-400/10 bg-transparent">
                 <FileText className="h-4 w-4 mr-1.5" />
-                + Page
+                {t("scan.addPage")}
               </Button>
               <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={() => { clearCapturedPreview(); setSaveChoicesOpen(null); startCamera(facingMode); }}>
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Retake
+                {t("scan.retake")}
               </Button>
             </div>
           </div>

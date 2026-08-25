@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AD_NETWORK_READY } from "@/lib/ads";
+import { useTranslation } from "react-i18next";
 
 interface BannerAdProps {
   /** Unique slot id, used for analytics / ad SDK targeting. */
@@ -24,6 +25,7 @@ interface BannerAdProps {
  * renders nothing — no placeholder, no reserved space, no jump.
  */
 export default function BannerAd({ slot }: BannerAdProps) {
+  const { t } = useTranslation();
   const [online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -52,7 +54,7 @@ export default function BannerAd({ slot }: BannerAdProps) {
                      border-t border-border bg-background/95 backdrop-blur
                      h-[60px] sm:h-[96px] animate-fade-in"
           role="complementary"
-          aria-label="Advertisement"
+          aria-label={t("billing.ads.advertisement")}
         >
           <div
             data-ad-slot={`banner-${slot}`}
@@ -61,7 +63,7 @@ export default function BannerAd({ slot }: BannerAdProps) {
                        flex items-center justify-center text-xs text-muted-foreground"
           >
             {/* === REPLACE WITH YOUR BANNER AD SDK (AdMob / AdSense) === */}
-            Advertisement
+            {t("billing.ads.advertisement")}
           </div>
         </div>,
         document.body,

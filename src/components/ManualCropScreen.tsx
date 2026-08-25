@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Check, RotateCcw, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Quad, Pt } from "@/lib/documentProcessor";
 
 // Height reserved at the bottom for the persistent banner ad so the action
@@ -28,6 +29,7 @@ export default function ManualCropScreen({
   onRetake,
   onCancel,
 }: ManualCropScreenProps) {
+  const { t } = useTranslation();
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState<{ width: number; height: number } | null>(null);
@@ -197,9 +199,9 @@ export default function ManualCropScreen({
     <div className="fixed inset-0 z-[9999] bg-black flex flex-col">
       <div className="bg-black/85 backdrop-blur-sm px-3 py-1.5 flex items-center justify-between safe-area-top">
         <div className="flex-1">
-          <h3 className="text-white text-sm font-medium leading-tight">Adjust corners</h3>
+          <h3 className="text-white text-sm font-medium leading-tight">{t("scan.adjustCorners")}</h3>
           <p className="text-white/60 text-[10px] leading-tight">
-            Drag amber dots to corners · pale dots reshape a curved side
+            {t("scan.adjustCornersHint")}
           </p>
         </div>
         <Button size="icon" variant="ghost" onClick={onCancel} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
@@ -211,7 +213,7 @@ export default function ManualCropScreen({
         <img
           ref={imgRef}
           src={imageUrl}
-          alt="Captured document"
+          alt={t("scan.capturedDocumentAlt")}
           className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
           draggable={false}
         />
@@ -280,14 +282,14 @@ export default function ManualCropScreen({
             className="flex-[1.4] brass-gradient text-primary-foreground hover:opacity-90"
           >
             <Check className="h-4 w-4 mr-2" />
-            Confirm
+            {t("scan.confirm")}
           </Button>
           <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={onRetake}>
             <RotateCcw className="h-4 w-4 mr-2" />
-            Retake
+            {t("scan.retake")}
           </Button>
           <Button variant="ghost" className="flex-1 text-white/70 hover:text-white" onClick={onCancel}>
-            Cancel
+            {t("scan.cancel")}
           </Button>
         </div>
       </div>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { WifiOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function OfflineBanner() {
+  const { t } = useTranslation();
   const [online, setOnline] = useState(
     typeof navigator === "undefined" ? true : navigator.onLine
   );
@@ -28,7 +30,7 @@ export default function OfflineBanner() {
                  px-3 py-1.5 shadow-lg backdrop-blur-sm pointer-events-none"
     >
       <WifiOff className="h-3.5 w-3.5" />
-      <span>Working Offline Mode</span>
+      <span>{t("viewer.workingOfflineMode")}</span>
     </div>
   );
 }

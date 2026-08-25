@@ -4,10 +4,12 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 import { registerInterstitialHost } from "@/lib/ads";
+import { useTranslation } from "react-i18next";
 
 const SKIP_SECONDS = 5;
 
 export default function InterstitialAdOverlay() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [trigger, setTrigger] = useState<string>("");
   const [countdown, setCountdown] = useState(SKIP_SECONDS);
@@ -42,9 +44,9 @@ export default function InterstitialAdOverlay() {
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 text-xs text-white/70">
-        <span>Advertisement</span>
+        <span>{t("billing.ads.advertisement")}</span>
         {countdown > 0 ? (
-          <span>Skip in {countdown}s</span>
+          <span>{t("billing.ads.skipIn", { seconds: countdown })}</span>
         ) : (
           <Button
             size="sm"
@@ -52,7 +54,7 @@ export default function InterstitialAdOverlay() {
             onClick={close}
             className="h-8 text-white hover:bg-white/10"
           >
-            <X className="h-4 w-4 mr-1" /> Close
+            <X className="h-4 w-4 mr-1" /> {t("billing.ads.close")}
           </Button>
         )}
       </div>
@@ -62,7 +64,7 @@ export default function InterstitialAdOverlay() {
           data-ad-slot={`interstitial-${trigger}`}
         >
           {/* === REPLACE WITH YOUR INTERSTITIAL AD SDK === */}
-          Ad
+          {t("billing.ads.ad")}
         </div>
       </div>
     </div>,

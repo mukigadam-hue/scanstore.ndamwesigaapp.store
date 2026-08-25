@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { setPendingVaultFile } from "@/lib/pendingVaultFile";
 import { inferFileType } from "@/lib/fileCompatibility";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   file: File | null;
@@ -25,11 +26,12 @@ function fileToDataUrl(file: File): Promise<string> {
 export default function SaveToVaultButton({ file, className, label }: Props) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
 
   const handle = async () => {
     if (!file) {
-      toast.error("No document to save");
+      toast.error(t("vault.noDocumentToSave"));
       return;
     }
     setBusy(true);
@@ -43,7 +45,7 @@ export default function SaveToVaultButton({ file, className, label }: Props) {
       // /locker (which needs a live session to verify security).
       const online = typeof navigator === "undefined" ? true : navigator.onLine;
       if (!online) {
-        toast.success("Saved offline — will move into your vault when you're back online");
+        toast.success(t("vault.savedOffline"));
         setBusy(false);
         return;
       }
@@ -52,7 +54,7 @@ export default function SaveToVaultButton({ file, className, label }: Props) {
       // /locker handles auth gate, MFA setup, SecurityVerify, then picks up pending file.
       navigate(user ? "/locker" : "/auth");
     } catch (e: any) {
-      toast.error(e?.message || "Could not stage file");
+      toast.error(e?.message || t("vault.couldNotStageFile"));
     } finally {
       setBusy(false);
     }
@@ -73,7 +75,7 @@ export default function SaveToVaultButton({ file, className, label }: Props) {
       ) : (
         <Shield className="h-4 w-4 mr-2" />
       )}
-      {label || "Save to Secure Vault"}
+      {label || t("vault.saveToSecureVault")}
     </Button>
   );
 }

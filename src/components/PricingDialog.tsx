@@ -11,6 +11,7 @@ import { PLANS, useSubscription } from "@/hooks/useSubscription";
 import PaymentDialog from "./PaymentDialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 const PAYMENTS_ENABLED = false;
 
@@ -20,6 +21,7 @@ interface PricingDialogProps {
 }
 
 const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
+  const { t } = useTranslation();
   const { currentPlan, isFrozen } = useSubscription();
   const [payingPlan, setPayingPlan] = useState<(typeof PLANS)[0] | null>(null);
 
@@ -29,10 +31,10 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
         <DialogContent className="wood-panel border-border max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-display brass-text text-2xl">
-              Choose Your Plan
+              {t("billing.pricing.title")}
             </DialogTitle>
             <p className="text-muted-foreground text-sm">
-              Secure storage for all your important documents
+              {t("billing.pricing.subtitle")}
             </p>
           </DialogHeader>
 
@@ -55,7 +57,7 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
                   {isCurrent && (
                     <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
                       <span className="brass-gradient text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
-                        Current
+                        {t("billing.pricing.current")}
                       </span>
                     </div>
                   )}
@@ -70,7 +72,7 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
                       </h3>
                     </div>
                     <p className="text-2xl font-bold brass-text font-display">
-                      {plan.price === 0 ? "Free" : `$${plan.price}`}
+                      {plan.price === 0 ? t("billing.pricing.free") : `$${plan.price}`}
                     </p>
                     {plan.duration && (
                       <p className="text-xs text-muted-foreground">
@@ -83,24 +85,24 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
                     <div className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="text-foreground">
-                        {plan.storage} storage
+                        {t("billing.pricing.storage", { storage: plan.storage })}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                      <span className="text-foreground">Unlimited drawers</span>
+                      <span className="text-foreground">{t("billing.pricing.unlimitedDrawers")}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="text-foreground">
-                        Secure encryption
+                        {t("billing.pricing.secureEncryption")}
                       </span>
                     </div>
                     {plan.id !== "free" && (
                       <div className="flex items-center gap-2 text-sm">
                         <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span className="text-foreground">
-                          Retrieval: ${plan.retrievalFee}/week
+                          {t("billing.pricing.retrieval", { fee: plan.retrievalFee })}
                         </span>
                       </div>
                     )}
@@ -112,7 +114,7 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
 
                   {isCurrent ? (
                     <div className="text-center text-xs text-muted-foreground py-1.5 border border-border/50 rounded">
-                      Active
+                      {t("billing.pricing.active")}
                     </div>
                   ) : isUpgrade ? (
                     <Button
@@ -121,15 +123,14 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
                         if (PAYMENTS_ENABLED) {
                           setPayingPlan(plan);
                         } else {
-                          toast.info("Upcoming feature", {
-                            description:
-                              "Paid upgrades are coming soon. Keep enjoying the Free tier in the meantime.",
+                          toast.info(t("billing.upcomingFeature"), {
+                            description: t("billing.upcomingFeatureDescription"),
                           });
                         }
                       }}
                       className="w-full brass-gradient text-primary-foreground hover:opacity-90"
                     >
-                      Upgrade to {plan.name}
+                      {t("billing.pricing.upgradeTo", { plan: plan.name })}
                     </Button>
                   ) : null}
                 </div>
@@ -138,8 +139,7 @@ const PricingDialog = ({ open, onClose }: PricingDialogProps) => {
           </div>
 
           <p className="text-xs text-muted-foreground text-center pt-2">
-            All plans include end-to-end encryption. Free plan documents are
-            always accessible.
+            {t("billing.pricing.footer")}
           </p>
         </DialogContent>
       </Dialog>

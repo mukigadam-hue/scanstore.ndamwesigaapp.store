@@ -7,6 +7,7 @@ import { CreditCard, Building2, CheckCircle2, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 // ── Configure your payment details here ──────────────────────────────────────
 const BANK_NAME = "Your Bank";
@@ -37,6 +38,7 @@ const PaymentDialog = ({
   amount,
   durationYears,
 }: PaymentDialogProps) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [step, setStep] = useState<Step>("method");
   const [method, setMethod] = useState<Method | null>(null);
@@ -67,7 +69,7 @@ const PaymentDialog = ({
       if (error) throw error;
       setStep("done");
     } catch (err: any) {
-      toast.error(err.message || "Failed to submit payment");
+      toast.error(err.message || t("billing.payment.submitFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +77,7 @@ const PaymentDialog = ({
 
   const copyRef = () => {
     navigator.clipboard.writeText(userRef);
-    toast.success("Reference copied!");
+    toast.success(t("billing.payment.referenceCopied"));
   };
 
   const handleClose = () => {
@@ -87,17 +89,17 @@ const PaymentDialog = ({
 
   const typeLabel =
     type === "subscription"
-      ? "Subscription"
+      ? t("billing.payment.typeSubscription")
       : type === "retrieval"
-        ? "Document Retrieval"
-        : "Re-subscription";
+        ? t("billing.payment.typeRetrieval")
+        : t("billing.payment.typeResubscription");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="wood-panel border-border max-w-md">
         <DialogHeader>
           <DialogTitle className="font-display brass-text text-xl">
-            {typeLabel} Payment
+            {t("billing.payment.title", { type: typeLabel })}
           </DialogTitle>
         </DialogHeader>
 
@@ -105,17 +107,17 @@ const PaymentDialog = ({
         {step === "method" && (
           <div className="space-y-4 pt-2">
             <div className="text-center">
-              <p className="text-muted-foreground text-sm mb-1">Amount due</p>
+              <p className="text-muted-foreground text-sm mb-1">{t("billing.payment.amountDue")}</p>
               <p className="text-3xl font-bold font-display brass-text">${amount}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                {tierName} Plan
+                {t("billing.payment.planLabel", { plan: tierName })}
                 {durationYears
-                  ? ` · ${durationYears} Year${durationYears > 1 ? "s" : ""}`
+                  ? ` · ${durationYears} ${durationYears > 1 ? t("billing.payment.years") : t("billing.payment.year")}`
                   : ""}
               </p>
             </div>
             <p className="text-sm text-muted-foreground text-center">
-              Choose your payment method
+              {t("billing.payment.chooseMethod")}
             </p>
             <div className="grid grid-cols-2 gap-3">
               <button
@@ -124,10 +126,10 @@ const PaymentDialog = ({
               >
                 <CreditCard className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
                 <span className="text-sm font-medium text-foreground">
-                  Card Payment
+                  {t("billing.payment.cardPayment")}
                 </span>
                 <span className="text-xs text-muted-foreground text-center">
-                  Visa, Mastercard & more
+                  {t("billing.payment.cardSubtitle")}
                 </span>
               </button>
               <button
@@ -136,10 +138,10 @@ const PaymentDialog = ({
               >
                 <Building2 className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
                 <span className="text-sm font-medium text-foreground">
-                  Bank Transfer
+                  {t("billing.payment.bankTransfer")}
                 </span>
                 <span className="text-xs text-muted-foreground text-center">
-                  Direct bank payment
+                  {t("billing.payment.bankSubtitle")}
                 </span>
               </button>
             </div>
@@ -153,15 +155,15 @@ const PaymentDialog = ({
               {method === "card" ? (
                 <>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                    Card Payment
+                    {t("billing.payment.cardPayment")}
                   </p>
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Amount:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.amount")}</span>
                       <span className="text-primary font-bold">${amount}</span>
                     </div>
                     <div className="flex justify-between text-sm items-center">
-                      <span className="text-muted-foreground">Reference:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.reference")}</span>
                       <button
                         onClick={copyRef}
                         className="flex items-center gap-1 text-primary hover:underline"
@@ -172,39 +174,39 @@ const PaymentDialog = ({
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Complete your card payment and enter the transaction reference below.
+                    {t("billing.payment.cardCompleteInstructions")}
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                    Bank Transfer Details
+                    {t("billing.payment.bankDetailsTitle")}
                   </p>
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Bank:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.bank")}</span>
                       <span className="text-foreground font-medium">
                         {BANK_NAME}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Account:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.account")}</span>
                       <span className="text-foreground font-medium">
                         {BANK_ACCOUNT}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Name:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.name")}</span>
                       <span className="text-foreground font-medium">
                         {BANK_ACCOUNT_NAME}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Amount:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.amount")}</span>
                       <span className="text-primary font-bold">${amount}</span>
                     </div>
                     <div className="flex justify-between text-sm items-center">
-                      <span className="text-muted-foreground">Reference:</span>
+                      <span className="text-muted-foreground">{t("billing.payment.reference")}</span>
                       <button
                         onClick={copyRef}
                         className="flex items-center gap-1 text-primary hover:underline"
@@ -215,7 +217,7 @@ const PaymentDialog = ({
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Use the reference as the transfer description.
+                    {t("billing.payment.bankTransferInstructions")}
                   </p>
                 </>
               )}
@@ -224,14 +226,14 @@ const PaymentDialog = ({
             <div className="space-y-2">
               <Label className="text-muted-foreground text-xs uppercase tracking-wide">
                 {method === "card"
-                  ? "Card Transaction Reference"
-                  : "Bank Transaction Reference"}
+                  ? t("billing.payment.cardTxnRef")
+                  : t("billing.payment.bankTxnRef")}
               </Label>
               <Input
                 placeholder={
                   method === "card"
-                    ? "e.g. TXN-ABC123456"
-                    : "e.g. TXN20240101001"
+                    ? t("billing.payment.cardTxnPlaceholder")
+                    : t("billing.payment.bankTxnPlaceholder")
                 }
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
@@ -246,14 +248,14 @@ const PaymentDialog = ({
                 onClick={() => setStep("method")}
                 className="text-muted-foreground"
               >
-                Back
+                {t("billing.payment.back")}
               </Button>
               <Button
                 onClick={handleSubmit}
                 disabled={!reference.trim() || submitting}
                 className="flex-1 brass-gradient text-primary-foreground"
               >
-                {submitting ? "Submitting..." : "Submit Payment"}
+                {submitting ? t("billing.payment.submitting") : t("billing.payment.submitPayment")}
               </Button>
             </div>
           </div>
@@ -267,14 +269,13 @@ const PaymentDialog = ({
             </div>
             <div>
               <p className="font-display font-semibold text-foreground text-lg">
-                Payment Submitted!
+                {t("billing.payment.submitted")}
               </p>
               <p className="text-muted-foreground text-sm mt-2">
-                Your payment is under review. Your account will be activated
-                within 24 hours once confirmed.
+                {t("billing.payment.underReview")}
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                Questions? Email us at{" "}
+                {t("billing.payment.questions")}{" "}
                 <span className="text-primary">{SUPPORT_EMAIL}</span>
               </p>
             </div>
@@ -282,7 +283,7 @@ const PaymentDialog = ({
               onClick={handleClose}
               className="brass-gradient text-primary-foreground w-full"
             >
-              Done
+              {t("billing.payment.done")}
             </Button>
           </div>
         )}

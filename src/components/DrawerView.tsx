@@ -23,6 +23,7 @@ import { enhanceImageBlob } from "@/lib/enhanceImage";
 import DocumentUpgradeDialog, { needsUpgrade } from "@/components/DocumentUpgradeDialog";
 import { downloadBlob, downloadFileFromUrl } from "@/lib/downloadFile";
 import { inferFileType, withInferredType } from "@/lib/fileCompatibility";
+import { useTranslation } from "react-i18next";
 
 interface Document {
   id: string;
@@ -58,6 +59,7 @@ const formatSize = (bytes: number) => {
 };
 
 const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: DrawerViewProps) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
@@ -104,7 +106,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       const compressed = await compressImage(file);
       if (compressed.size < file.size) {
         const savings = ((1 - compressed.size / file.size) * 100).toFixed(0);
-        toast.success(`${file.name} compressed by ${savings}%`);
+        toast.success(t("vault.compressedBy", { name: file.name, percent: savings }));
         return { file: compressed, size: compressed.size };
       }
     } catch (e) {
@@ -148,7 +150,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
 
     if (runningTotal + finalSize > storageLimit) {
-      toast.error(`Not enough storage for ${file.name}. Upgrade your plan.`);
+      toast.error(t("vault.notEnoughStorage", { name: file.name }));
       return 0;
     }
 
@@ -161,7 +163,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       });
 
     if (uploadError) {
-      toast.error(`Failed to upload ${file.name}: ${uploadError.message}`);
+      toast.error(t("vault.failedUpload", { name: file.name, error: uploadError.message }));
       return 0;
     }
 
@@ -175,11 +177,11 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     });
 
     if (dbError) {
-      toast.error(`Failed to save ${file.name}: ${dbError.message}`);
+      toast.error(t("vault.failedSaveFile", { name: file.name, error: dbError.message }));
       return 0;
     }
 
-    toast.success(`${file.name} stored safely!`);
+    toast.success(t("vault.storedSafely", { name: file.name }));
     return finalSize;
   };
 
@@ -194,8 +196,8 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     if (!canUpload) {
       toast.error(
         isFrozen
-          ? "Your vault is frozen. Please unlock access first."
-          : "Storage limit reached. Please upgrade your plan."
+          ? t("vault.frozenUnlockFirst")
+          : t("vault.storageLimitReached")
       );
       onScanEnd?.();
       return;
@@ -207,7 +209,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     setUploading(true);
     let runningTotal = storageUsed;
     const total = files.length;
-    if (total > 1) toast.info(`Storing ${total} files…`);
+    if (total > 1) toast.info(t("vault.storingFiles", { count: total }));
 
     let ok = 0;
     try {
@@ -221,7 +223,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         }
       }
       refreshDocs();
-      if (total > 1) toast.success(`Stored ${ok} of ${total} files`);
+      if (total > 1) toast.success(t("vault.storedOfFiles", { ok, total }));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -233,8 +235,8 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     if (!canUpload) {
       toast.error(
         isFrozen
-          ? "Your vault is frozen. Please unlock access first."
-          : "Storage limit reached. Please upgrade your plan."
+          ? t("vault.frozenUnlockFirst")
+          : t("vault.storageLimitReached")
       );
       return;
     }
@@ -281,7 +283,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
   const performDownload = async (doc: Document) => {
     if (!canAccess) {
-      toast.error("Documents are frozen. Please unlock access first.");
+      toast.error(t("vault.documentsFrozen"));
       return;
     }
 
@@ -290,21 +292,21 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       .createSignedUrl(doc.file_path, 120, { download: doc.name } as any);
 
     if (error || !data?.signedUrl) {
-      toast.error("Failed to download: " + (error?.message || "Could not create a download link"));
+      toast.error(t("vault.failedDownload", { error: error?.message || t("vault.couldNotCreateLink") }));
       return;
     }
 
     try {
       await downloadFileFromUrl(data.signedUrl, doc.name);
-      toast.success("Download started: " + doc.name);
+      toast.success(t("vault.downloadStarted", { name: doc.name }));
     } catch (err: any) {
-      if (err?.name !== "AbortError") toast.error("Download failed");
+      if (err?.name !== "AbortError") toast.error(t("vault.downloadFailed"));
     }
   };
 
   const handleDownloadClick = (doc: Document) => {
     if (!canAccess) {
-      toast.error("Documents are frozen. Please unlock access first.");
+      toast.error(t("vault.documentsFrozen"));
       return;
     }
     setDownloadDoc(doc);
@@ -316,7 +318,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     setDownloadDoc(null);
 
     if (!canAccess) {
-      toast.error("Documents are frozen. Please unlock access first.");
+      toast.error(t("vault.documentsFrozen"));
       return;
     }
 
@@ -327,25 +329,25 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         .download(doc.file_path);
 
       if (error) {
-        toast.error("Failed to download: " + error.message);
+        toast.error(t("vault.failedDownload", { error: error.message }));
         return;
       }
 
       let blobToDownload: Blob = data;
-      toast.info("Enhancing image quality…");
+      toast.info(t("vault.enhancingQuality"));
       try {
         blobToDownload = await enhanceImageBlob(data);
-        toast.success("Enhanced quality download ready");
+        toast.success(t("vault.enhancedReady"));
       } catch {
-        toast.info("Could not enhance — downloading original");
+        toast.info(t("vault.couldNotEnhance"));
       }
 
       downloadName = doc.name.replace(/(\.\w+)$/, "_high_quality.png");
       try {
         await downloadBlob(blobToDownload, downloadName);
-        toast.success("Download started: " + downloadName);
+        toast.success(t("vault.downloadStarted", { name: downloadName }));
       } catch (err: any) {
-        if (err?.name !== "AbortError") toast.error("Download failed");
+        if (err?.name !== "AbortError") toast.error(t("vault.downloadFailed"));
       }
       return;
     }
@@ -361,21 +363,21 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       .createSignedUrl(doc.file_path, 120, { download: downloadName } as any);
 
     if (error || !data?.signedUrl) {
-      toast.error("Failed to download: " + (error?.message || "Could not create a download link"));
+      toast.error(t("vault.failedDownload", { error: error?.message || t("vault.couldNotCreateLink") }));
       return;
     }
 
     try {
       await downloadFileFromUrl(data.signedUrl, downloadName);
-      toast.success("Download started: " + downloadName);
+      toast.success(t("vault.downloadStarted", { name: downloadName }));
     } catch (err: any) {
-      if (err?.name !== "AbortError") toast.error("Download failed");
+      if (err?.name !== "AbortError") toast.error(t("vault.downloadFailed"));
     }
   };
 
   const handleDeleteClick = (doc: Document) => {
     if (!canAccess) {
-      toast.error("Documents are frozen. Please unlock access first.");
+      toast.error(t("vault.documentsFrozen"));
       return;
     }
     setDeleteDoc(doc);
@@ -395,7 +397,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       .remove([doc.file_path]);
 
     if (storageError) {
-      toast.error("Failed to delete file: " + storageError.message);
+      toast.error(t("vault.failedDeleteFile", { error: storageError.message }));
       refreshDocs();
       return;
     }
@@ -406,16 +408,16 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       .eq("id", doc.id);
 
     if (dbError) {
-      toast.error("Failed to delete record: " + dbError.message);
+      toast.error(t("vault.failedDeleteRecord", { error: dbError.message }));
       refreshDocs();
     } else {
-      toast.success("Document permanently removed");
+      toast.success(t("vault.documentRemoved"));
     }
   };
 
   const openRename = (doc: Document) => {
     if (!canAccess) {
-      toast.error("Documents are frozen. Please unlock access first.");
+      toast.error(t("vault.documentsFrozen"));
       return;
     }
     setRenameDoc(doc);
@@ -427,7 +429,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     const doc = renameDoc;
     const trimmed = renameValue.trim();
     if (!trimmed) {
-      toast.error("Name cannot be empty");
+      toast.error(t("vault.nameCannotBeEmpty"));
       return;
     }
     if (trimmed === doc.name) {
@@ -454,10 +456,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
 
     setRenaming(false);
     if (error) {
-      toast.error("Failed to rename: " + error.message);
+      toast.error(t("vault.failedRename", { error: error.message }));
       refreshDocs();
     } else {
-      toast.success("Renamed to " + newName);
+      toast.success(t("vault.renamedTo", { name: newName }));
       setRenameDoc(null);
     }
   };
@@ -488,7 +490,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         <div className="flex items-center gap-2 flex-wrap justify-end ml-auto">
           {isNearLimit && canAccess && (
             <span className="text-xs text-yellow-500 hidden sm:inline">
-              Storage {Math.round(storagePercent)}% full
+              {t("vault.storagePercentFull", { percent: Math.round(storagePercent) })}
             </span>
           )}
           <input
@@ -506,10 +508,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             className={`hover:text-primary hover:bg-secondary px-2 ${
               outdatedCount > 0 ? "text-destructive animate-pulse" : "text-muted-foreground"
             }`}
-            title={outdatedCount > 0 ? `${outdatedCount} files need upgrading` : "Check file versions"}
+            title={outdatedCount > 0 ? t("vault.filesNeedUpgrading", { count: outdatedCount }) : t("vault.checkFileVersions")}
           >
             <RefreshCw className="h-4 w-4 mr-1.5" />
-            <span className="text-xs">Update</span>
+            <span className="text-xs">{t("vault.update")}</span>
           </Button>
           <Button
             variant="ghost"
@@ -517,10 +519,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             onClick={() => setShowCamera(true)}
             disabled={!canUpload}
             className="text-muted-foreground hover:text-primary hover:bg-secondary px-2"
-            title="Camera & Scanner"
+            title={t("vault.cameraScanner")}
           >
             <Camera className="h-4 w-4 mr-1.5" />
-            <span className="text-xs">Scan</span>
+            <span className="text-xs">{t("vault.scan")}</span>
           </Button>
           <Button
             onClick={handleStoreClick}
@@ -529,12 +531,12 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           >
             <Upload className="h-4 w-4 mr-2" />
             {uploading
-              ? "Uploading..."
+              ? t("vault.uploading")
               : !canUpload
                 ? isFrozen
-                  ? "Frozen"
-                  : "Full"
-                : "Store"}
+                  ? t("vault.frozen")
+                  : t("vault.full")
+                : t("vault.store")}
           </Button>
         </div>
       </div>
@@ -549,7 +551,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           <div className="flex items-center gap-2 min-w-0">
             <RefreshCw className="h-4 w-4 text-destructive shrink-0" />
             <p className="text-xs text-foreground">
-              <span className="font-semibold">{outdatedCount}</span> file{outdatedCount !== 1 ? "s" : ""} may need a format upgrade for future device compatibility.
+              {t("vault.filesMayNeedUpgrade", { count: outdatedCount })}
             </p>
           </div>
           <Button
@@ -557,7 +559,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             onClick={() => setShowUpgrade(true)}
             className="brass-gradient text-primary-foreground text-xs shrink-0"
           >
-            Upgrade
+            {t("vault.upgradeButton")}
           </Button>
         </motion.div>
       )}
@@ -568,9 +570,9 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search files by name…"
+            placeholder={t("vault.searchFilesPlaceholder")}
             className="bg-input border-border pl-9 pr-3"
-            aria-label="Search files in this drawer"
+            aria-label={t("vault.searchFilesAriaLabel")}
           />
         </div>
       )}
@@ -584,10 +586,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
         >
           <FileText className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
           <p className="text-muted-foreground font-display text-lg">
-            This drawer is empty
+            {t("vault.drawerEmpty")}
           </p>
           <p className="text-muted-foreground/60 text-sm mt-1">
-            Upload documents or use the camera to store them safely
+            {t("vault.drawerEmptyHint")}
           </p>
         </motion.div>
       ) : (
@@ -598,8 +600,8 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             className="text-center py-12"
           >
             <Search className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground font-display text-base">No matching files</p>
-            <p className="text-muted-foreground/60 text-sm mt-1">Try another file name.</p>
+            <p className="text-muted-foreground font-display text-base">{t("vault.noMatchingFiles")}</p>
+            <p className="text-muted-foreground/60 text-sm mt-1">{t("vault.tryAnotherName")}</p>
           </motion.div>
         ) : (
         <div className="space-y-2">
@@ -636,40 +638,40 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                     size="sm"
                     onClick={() => setPreviewDoc(doc)}
                     className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
-                    title="Preview"
+                    title={t("vault.preview")}
                   >
                     <Eye className="h-3.5 w-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">View</span>
+                    <span className="hidden sm:inline">{t("vault.view")}</span>
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => openRename(doc)}
                     className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
-                    title="Rename"
+                    title={t("vault.rename")}
                   >
                     <Pencil className="h-3.5 w-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">Rename</span>
+                    <span className="hidden sm:inline">{t("vault.rename")}</span>
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDownloadClick(doc)}
                     className="h-8 px-2 sm:px-3 text-xs border-border text-foreground hover:text-primary hover:border-primary/40 hover:bg-secondary"
-                    title="Download"
+                    title={t("vault.download")}
                   >
                     <Download className="h-3.5 w-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">Save</span>
+                    <span className="hidden sm:inline">{t("vault.save")}</span>
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDeleteClick(doc)}
                     className="h-8 px-2 sm:px-3 text-xs border-destructive/40 text-destructive hover:text-destructive-foreground hover:bg-destructive/90"
-                    title="Delete"
+                    title={t("vault.delete")}
                   >
                     <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
-                    <span className="hidden sm:inline">Delete</span>
+                    <span className="hidden sm:inline">{t("vault.delete")}</span>
                   </Button>
                 </div>
               ) : (
@@ -745,7 +747,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       <Dialog open={!!renameDoc} onOpenChange={(o) => !o && !renaming && setRenameDoc(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-display brass-text">Rename file</DialogTitle>
+            <DialogTitle className="font-display brass-text">{t("vault.renameFileTitle")}</DialogTitle>
           </DialogHeader>
           <Input
             value={renameValue}
@@ -753,12 +755,12 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             onKeyDown={(e) => {
               if (e.key === "Enter" && !renaming) performRename();
             }}
-            placeholder="New file name"
+            placeholder={t("vault.newFileNamePlaceholder")}
             autoFocus
             disabled={renaming}
           />
           <p className="text-xs text-muted-foreground">
-            Tip: keep the file extension (e.g. .pdf, .jpg) so the file opens correctly.
+            {t("vault.keepExtensionTip")}
           </p>
           <DialogFooter className="gap-2">
             <Button
@@ -766,14 +768,14 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
               onClick={() => setRenameDoc(null)}
               disabled={renaming}
             >
-              Cancel
+              {t("vault.cancel")}
             </Button>
             <Button
               onClick={performRename}
               disabled={renaming}
               className="brass-gradient text-primary-foreground"
             >
-              {renaming ? "Saving..." : "Save"}
+              {renaming ? t("vault.saving") : t("vault.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

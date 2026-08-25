@@ -15,10 +15,12 @@ import { CountryCodePicker, useDetectedCountry, Country } from "./CountryCodePic
 import { PinInput } from "./PinInput";
 import { toast } from "sonner";
 import { Shield, X, Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const DISMISS_KEY = "vault_upgrade_banner_dismissed_v1";
 
 export function UpgradeVaultBanner() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [needsUpgrade, setNeedsUpgrade] = useState(false);
   const [open, setOpen] = useState(false);
@@ -58,15 +60,15 @@ export function UpgradeVaultBanner() {
 
   const handleSubmit = async () => {
     if (!/^\d{5,}$/.test(phone.replace(/\D/g, ""))) {
-      toast.error("Please enter a valid phone number");
+      toast.error(t("billing.vaultBanner.invalidPhone"));
       return;
     }
     if (!/^\d{5}$/.test(pin)) {
-      toast.error("PIN must be exactly 5 digits");
+      toast.error(t("billing.vaultBanner.pinLength"));
       return;
     }
     if (pin !== pin2) {
-      toast.error("PINs do not match");
+      toast.error(t("billing.vaultBanner.pinMismatch"));
       return;
     }
     setSubmitting(true);
@@ -76,10 +78,10 @@ export function UpgradeVaultBanner() {
         body: { phone: fullPhone, pin, countryCode: country.code },
       });
       if (error || (data as any)?.error) {
-        toast.error((data as any)?.error || error?.message || "Could not link phone");
+        toast.error((data as any)?.error || error?.message || t("billing.vaultBanner.linkFailed"));
         return;
       }
-      toast.success("Vault identity upgraded!");
+      toast.success(t("billing.vaultBanner.upgraded"));
       setNeedsUpgrade(false);
       setOpen(false);
     } finally {
@@ -92,22 +94,21 @@ export function UpgradeVaultBanner() {
       <div className="relative rounded-lg border border-primary/30 bg-primary/10 p-4 mb-4 flex items-start gap-3">
         <Shield className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">Upgrade your vault identity</p>
+          <p className="font-semibold text-sm">{t("billing.vaultBanner.title")}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Add a phone number and 5-digit PIN so you never lose access — even if you
-            forget your email.
+            {t("billing.vaultBanner.description")}
           </p>
           <Button
             size="sm"
             className="mt-2 brass-gradient text-primary-foreground"
             onClick={() => setOpen(true)}
           >
-            Add phone + PIN
+            {t("billing.vaultBanner.addPhonePin")}
           </Button>
         </div>
         <button
           type="button"
-          aria-label="Dismiss"
+          aria-label={t("billing.vaultBanner.dismiss")}
           onClick={() => {
             localStorage.setItem(DISMISS_KEY, "1");
             setDismissed(true);
@@ -121,9 +122,9 @@ export function UpgradeVaultBanner() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add phone + PIN</DialogTitle>
+            <DialogTitle>{t("billing.vaultBanner.addPhonePin")}</DialogTitle>
             <DialogDescription>
-              Used for fast unlock and account recovery. Your email login keeps working.
+              {t("billing.vaultBanner.dialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -132,7 +133,7 @@ export function UpgradeVaultBanner() {
               <Input
                 type="tel"
                 inputMode="numeric"
-                placeholder="Phone number"
+                placeholder={t("billing.vaultBanner.phonePlaceholder")}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="flex-1 h-11"
@@ -141,13 +142,13 @@ export function UpgradeVaultBanner() {
             <div>
               <div className="flex items-center justify-center gap-2 mb-2">
                 <p className="text-xs text-muted-foreground">
-                  Create a 5-digit Vault PIN
+                  {t("billing.vaultBanner.createPin")}
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowPin((s) => !s)}
                   className="text-muted-foreground hover:text-foreground"
-                  aria-label={showPin ? "Hide PIN" : "Show PIN"}
+                  aria-label={showPin ? t("billing.vaultBanner.hidePin") : t("billing.vaultBanner.showPin")}
                 >
                   {showPin ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 </button>
@@ -155,7 +156,7 @@ export function UpgradeVaultBanner() {
               <PinInput length={5} value={pin} onChange={setPin} mask={!showPin} />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-2 text-center">Confirm PIN</p>
+              <p className="text-xs text-muted-foreground mb-2 text-center">{t("billing.vaultBanner.confirmPin")}</p>
               <PinInput length={5} value={pin2} onChange={setPin2} mask={!showPin} />
             </div>
           </div>
@@ -165,14 +166,14 @@ export function UpgradeVaultBanner() {
               onClick={() => setOpen(false)}
               disabled={submitting}
             >
-              Not now
+              {t("billing.vaultBanner.notNow")}
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={submitting}
               className="brass-gradient text-primary-foreground"
             >
-              {submitting ? "Saving…" : "Save"}
+              {submitting ? t("billing.vaultBanner.saving") : t("billing.vaultBanner.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

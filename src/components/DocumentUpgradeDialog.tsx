@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { inferFileType } from "@/lib/fileCompatibility";
+import { useTranslation } from "react-i18next";
 
 interface Document {
   id: string;
@@ -66,6 +67,7 @@ const reEncodeImage = (blob: Blob): Promise<Blob> => {
 };
 
 const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDialogProps) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<UpgradeStatus>("idle");
@@ -161,9 +163,9 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
     queryClient.invalidateQueries({ queryKey: ["documents", user.id] });
 
     if (failed === 0) {
-      toast.success(`All ${upgraded} documents upgraded successfully!`);
+      toast.success(t("billing.docUpgrade.allUpgraded", { count: upgraded }));
     } else {
-      toast.warning(`Upgraded ${upgraded} files, ${failed} failed.`);
+      toast.warning(t("billing.docUpgrade.someFailedToast", { upgraded, failed }));
     }
   }, [documents, user, queryClient]);
 
@@ -176,10 +178,10 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <RefreshCw className="h-5 w-5 text-primary" />
-            Document Version Upgrade
+            {t("billing.docUpgrade.title")}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Keep your files compatible with modern devices by upgrading their format.
+            {t("billing.docUpgrade.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -187,22 +189,22 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
           {/* Summary */}
           <div className="rounded-lg bg-secondary/50 p-3 space-y-1">
             <p className="text-sm text-foreground">
-              <span className="font-semibold">{documents.length}</span> total files in this drawer
+              {t("billing.docUpgrade.totalFiles", { count: documents.length })}
             </p>
             {status !== "checking" && (
               <p className="text-sm">
                 {outdatedCount > 0 ? (
                   <span className="text-yellow-500 flex items-center gap-1">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    {outdatedCount} file{outdatedCount !== 1 ? "s" : ""} need{outdatedCount === 1 ? "s" : ""} upgrading
+                    {t("billing.docUpgrade.needsUpgrading", { count: outdatedCount })}
                   </span>
                 ) : status === "done" ? (
                   <span className="text-green-500 flex items-center gap-1">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    All documents are up to date!
+                    {t("billing.docUpgrade.allUpToDate")}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">Click "Check Now" to scan your files</span>
+                  <span className="text-muted-foreground">{t("billing.docUpgrade.clickCheckNow")}</span>
                 )}
               </p>
             )}
@@ -214,11 +216,11 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
               <Progress value={progress} className="h-2" />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {status === "upgrading" ? `Upgrading: ${currentFile}` : "Complete"}
+                  {status === "upgrading" ? t("billing.docUpgrade.upgradingFile", { file: currentFile }) : t("billing.docUpgrade.complete")}
                 </span>
                 <span>
-                  {upgradedCount}/{outdatedCount} done
-                  {failedCount > 0 && ` · ${failedCount} failed`}
+                  {t("billing.docUpgrade.doneCount", { done: upgradedCount, total: outdatedCount })}
+                  {failedCount > 0 && ` · ${t("billing.docUpgrade.failedCount", { count: failedCount })}`}
                 </span>
               </div>
             </div>
@@ -227,7 +229,7 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
           {status === "checking" && (
             <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Scanning files…</span>
+              <span className="text-sm">{t("billing.docUpgrade.scanning")}</span>
             </div>
           )}
 
@@ -235,9 +237,9 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
           {allUpToDate && (
             <div className="text-center py-2">
               <CheckCircle2 className="h-10 w-10 text-green-500 mx-auto mb-2" />
-              <p className="text-sm font-medium text-foreground">Everything is up to date!</p>
+              <p className="text-sm font-medium text-foreground">{t("billing.docUpgrade.everythingUpToDate")}</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Your documents are compatible with modern devices.
+                {t("billing.docUpgrade.compatibleNote")}
               </p>
             </div>
           )}
@@ -247,18 +249,18 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
         <div className="flex gap-2 justify-end">
           {status !== "upgrading" && (
             <Button variant="outline" onClick={onClose} className="border-border text-foreground">
-              Close
+              {t("billing.docUpgrade.close")}
             </Button>
           )}
           {(status === "idle" || status === "done") && !allUpToDate && (
             <>
               <Button variant="outline" onClick={runCheck} className="border-border text-foreground">
-                Check Now
+                {t("billing.docUpgrade.checkNow")}
               </Button>
               {hasOutdated && (
                 <Button onClick={runUpgrade} className="brass-gradient text-primary-foreground">
                   <RefreshCw className="h-4 w-4 mr-1" />
-                  Upgrade All
+                  {t("billing.docUpgrade.upgradeAll")}
                 </Button>
               )}
             </>
@@ -266,7 +268,7 @@ const DocumentUpgradeDialog = ({ open, onClose, documents }: DocumentUpgradeDial
           {status === "upgrading" && (
             <Button disabled className="brass-gradient text-primary-foreground">
               <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              Upgrading…
+              {t("billing.docUpgrade.upgrading")}
             </Button>
           )}
         </div>

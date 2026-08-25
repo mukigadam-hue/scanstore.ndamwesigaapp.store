@@ -1,6 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Minimize2, Maximize2, FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface CompressionChoiceDialogProps {
   open: boolean;
@@ -10,19 +11,20 @@ interface CompressionChoiceDialogProps {
 }
 
 const CompressionChoiceDialog = ({ open, fileName, onChoice, onClose }: CompressionChoiceDialogProps) => {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-sm bg-card border-border">
         <DialogHeader>
           <DialogTitle className="font-display brass-text flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Upload Options
+            {t("scan.uploadOptions")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            How would you like to store <span className="text-foreground font-medium">{fileName}</span>?
+            {t("scan.howStoreFile")} <span className="text-foreground font-medium">{fileName}</span>?
           </p>
 
           <div className="space-y-2">
@@ -35,9 +37,9 @@ const CompressionChoiceDialog = ({ open, fileName, onChoice, onClose }: Compress
                   <Minimize2 className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Compress & Save</p>
+                  <p className="text-sm font-semibold text-foreground">{t("scan.compressAndSave")}</p>
                   <p className="text-xs text-muted-foreground">
-                    Reduce file size to save storage space
+                    {t("scan.reduceFileSize")}
                   </p>
                 </div>
               </div>
@@ -52,9 +54,9 @@ const CompressionChoiceDialog = ({ open, fileName, onChoice, onClose }: Compress
                   <Maximize2 className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Original Quality</p>
+                  <p className="text-sm font-semibold text-foreground">{t("scan.originalQuality")}</p>
                   <p className="text-xs text-muted-foreground">
-                    Keep full quality (uses more storage)
+                    {t("scan.keepFullQuality")}
                   </p>
                 </div>
               </div>
@@ -62,7 +64,7 @@ const CompressionChoiceDialog = ({ open, fileName, onChoice, onClose }: Compress
           </div>
 
           <Button variant="ghost" className="w-full text-muted-foreground" onClick={onClose}>
-            Cancel
+            {t("scan.cancel")}
           </Button>
         </div>
       </DialogContent>
