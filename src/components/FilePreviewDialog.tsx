@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { inferFileType, isAudioFile, isImageFile, isPdfFile, isVideoFile } from "@/lib/fileCompatibility";
+import { useTranslation } from "react-i18next";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
@@ -66,6 +67,7 @@ const canEdit = (name: string, fileType: string) => {
 };
 
 const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
@@ -130,7 +132,7 @@ const PdfCanvasViewer = ({ url, zoom }: { url: string; zoom: number }) => {
         ))}
         {numPages > 1 && (
           <div className="sticky bottom-2 self-center bg-black/70 rounded-full px-3 py-1 text-white text-xs z-10">
-            {numPages} pages
+            {t("viewer.pagesCount", { n: numPages })}
           </div>
         )}
       </div>
@@ -151,6 +153,7 @@ function PdfPageInline({
   scrollParent: HTMLElement | null;
   baseWidth: number;
 }) {
+  const { t } = useTranslation();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<any>(null);
@@ -237,7 +240,7 @@ function PdfPageInline({
       <canvas ref={canvasRef} style={{ display: "block" }} />
       {!visible && (
         <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-          Loading page {pageNumber}…
+          {t("viewer.loadingPageN", { n: pageNumber })}
         </div>
       )}
     </div>
@@ -260,6 +263,7 @@ const AsyncImage = ({
   zoom,
   pinching,
 }: { src: string; alt: string; zoom: number; pinching: boolean }) => {
+  const { t } = useTranslation();
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [decoding, setDecoding] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -327,7 +331,7 @@ const AsyncImage = ({
     return (
       <div className="flex flex-col items-center gap-3 p-8 text-white/60">
         <FileText className="h-12 w-12 text-white/30" />
-        <p className="text-sm">Unable to load image</p>
+        <p className="text-sm">{t("viewer.unableToLoadImage")}</p>
       </div>
     );
   }
@@ -369,6 +373,7 @@ const AsyncImage = ({
 
 
 const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumentSaved, localPreviewUrl, localOfficeHtml, localTextContent }: FilePreviewDialogProps) => {
+  const { t } = useTranslation();
   useAdPrefetch(["landing-top", "verify-top", "verify-bottom"]);
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -437,7 +442,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
           .createSignedUrl(storedFilePath, 3600);
 
         if (error || !data?.signedUrl) {
-          toast.error("Failed to load preview");
+          toast.error(t("viewer.failedToLoadPreview"));
           return;
         }
         // Append cache-buster so freshly saved files don't return stale CDN/browser cache
@@ -498,11 +503,11 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
               setEditedText(text);
             }
           } catch {
-            if (!revoked) setTextContent("Failed to load file content.");
+            if (!revoked) setTextContent(t("viewer.failedToLoadContent"));
           }
         }
       } catch {
-        toast.error("Could not preview this file");
+        toast.error(t("viewer.couldNotPreviewFile"));
       } finally {
         setLoading(false);
       }
@@ -633,9 +638,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
       setTextContent(editedText);
       setHasChanges(false);
       setEditing(false);
-      toast.success("File saved successfully!");
+      toast.success(t("viewer.fileSavedSuccessfully"));
     } catch (err: any) {
-      toast.error("Failed to save: " + err.message);
+      toast.error(t("viewer.failedToSave", { message: err.message }));
     } finally {
       setSaving(false);
     }
@@ -759,9 +764,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
 
       setHasChanges(false);
       setEditing(false);
-      toast.success("Document saved successfully!");
+      toast.success(t("viewer.documentSavedSuccessfully"));
     } catch (err: any) {
-      toast.error("Failed to save: " + err.message);
+      toast.error(t("viewer.failedToSave", { message: err.message }));
     } finally {
       setSaving(false);
     }
@@ -770,7 +775,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
   const handleToggleEdit = () => {
     if (editing && hasChanges) {
       // Switching back to view mode with unsaved changes
-      const confirm = window.confirm("You have unsaved changes. Discard them?");
+      const confirm = window.confirm(t("viewer.unsavedChangesConfirm"));
       if (!confirm) return;
     }
     setEditing(!editing);
@@ -814,7 +819,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
         <div className="bg-black/80 backdrop-blur-sm px-3 py-2 flex items-center justify-between gap-2 safe-area-top">
           <h3 className="text-white text-sm font-medium truncate flex-1 mr-2">
             {doc.name}
-            {editing && <span className="text-primary text-xs ml-2">Editing</span>}
+            {editing && <span className="text-primary text-xs ml-2">{t("viewer.editing")}</span>}
           </h3>
           <div className="flex items-center gap-1 shrink-0">
             {(isImage || isPdf) && (
@@ -832,13 +837,13 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
             {/* Edit / Save buttons */}
             {isEditable && !editing && (
               <Button size="sm" onClick={handleToggleEdit} variant="ghost" className="h-8 px-2 text-white/80 hover:text-white hover:bg-white/10">
-                <Pencil className="h-4 w-4 mr-1" /> Edit
+                <Pencil className="h-4 w-4 mr-1" /> {t("viewer.edit")}
               </Button>
             )}
             {isEditable && editing && (
               <>
                 <Button size="sm" onClick={handleToggleEdit} variant="ghost" className="h-8 px-2 text-white/80 hover:text-white hover:bg-white/10">
-                  <Eye className="h-4 w-4 mr-1" /> View
+                  <Eye className="h-4 w-4 mr-1" /> {t("viewer.view")}
                 </Button>
                 <Button
                   size="sm"
@@ -849,7 +854,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
                   {saving ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                   ) : (
-                    <><Save className="h-4 w-4 mr-1" /> Save</>
+                    <><Save className="h-4 w-4 mr-1" /> {t("viewer.save")}</>
                   )}
                 </Button>
               </>
@@ -858,7 +863,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
 
 
             <Button size="sm" onClick={onDownload} className="brass-gradient text-primary-foreground hover:opacity-90 h-8 px-3">
-              <Download className="h-4 w-4 mr-1" /> {isLocalFile ? "Save" : "Download"}
+              <Download className="h-4 w-4 mr-1" /> {isLocalFile ? t("viewer.save") : t("viewer.download")}
             </Button>
             <Button size="icon" variant="ghost" onClick={onClose} className="h-8 w-8 text-white/80 hover:text-white hover:bg-white/10">
               <X className="h-5 w-5" />
@@ -936,7 +941,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
                   <div className="max-w-4xl mx-auto mb-3 flex items-center gap-2 px-1">
                     <div className="flex-1 h-px bg-amber-300/30" />
                     <span className="text-xs text-amber-700 font-medium px-2 py-1 bg-amber-50 rounded-full border border-amber-200">
-                      ✏️ Editing Mode — tap on text to edit, then Save
+                      {t("viewer.editingModeTapToEdit")}
                     </span>
                     <div className="flex-1 h-px bg-amber-300/30" />
                   </div>
@@ -966,10 +971,10 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
                 <FileText className="h-16 w-16 text-white/30" />
                 <p className="text-white text-lg">{doc.name}</p>
                 <p className="text-sm text-white/60 text-center max-w-sm">
-                  This document format couldn't be rendered in-app. Download it to open with your device's native app.
+                  {t("viewer.couldNotRenderFormat")}
                 </p>
                 <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                  <Download className="h-4 w-4 mr-2" /> Download
+                  <Download className="h-4 w-4 mr-2" /> {t("viewer.download")}
                 </Button>
               </div>
             )}
@@ -977,7 +982,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
             {isText && !editing && (
               <div className="w-full h-full overflow-auto bg-white p-4 sm:p-8">
                 <pre className="text-sm whitespace-pre-wrap font-mono max-w-4xl mx-auto" style={{ color: "#1a1a1a" }}>
-                  {textContent || "Loading..."}
+                  {textContent || t("viewer.loading")}
                 </pre>
               </div>
             )}
@@ -987,7 +992,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
                 <div className="max-w-4xl mx-auto w-full mb-3 flex items-center gap-2">
                   <div className="flex-1 h-px bg-amber-300/30" />
                   <span className="text-xs text-amber-700 font-medium px-2 py-1 bg-amber-50 rounded-full border border-amber-200">
-                    ✏️ Editing Mode
+                    {t("viewer.editingMode")}
                   </span>
                   <div className="flex-1 h-px bg-amber-300/30" />
                 </div>
@@ -1008,9 +1013,9 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
               <div className="flex flex-col items-center gap-4 p-8">
                 <File className="h-16 w-16 text-white/30" />
                 <p className="text-white">{doc.name}</p>
-                <p className="text-sm text-white/60">Tap download to open with your device's viewer</p>
+                <p className="text-sm text-white/60">{t("viewer.tapDownloadToOpen")}</p>
                 <Button onClick={onDownload} className="brass-gradient text-primary-foreground">
-                  <Download className="h-4 w-4 mr-2" /> Download to view
+                  <Download className="h-4 w-4 mr-2" /> {t("viewer.downloadToView")}
                 </Button>
               </div>
             )}
@@ -1018,7 +1023,7 @@ const FilePreviewDialog = ({ open, onClose, document: doc, onDownload, onDocumen
         ) : (
           <div className="flex flex-col items-center gap-4">
             <FileText className="h-16 w-16 text-white/20" />
-            <p className="text-white/50">Unable to load preview</p>
+            <p className="text-white/50">{t("viewer.unableToLoadPreview")}</p>
           </div>
         )}
       </div>
