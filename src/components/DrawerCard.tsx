@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Lock, Unlock, FileText } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface DrawerCardProps {
   name: string;
@@ -12,6 +13,7 @@ interface DrawerCardProps {
 
 const DrawerCard = ({ name, icon, documentCount, onClick, index }: DrawerCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <motion.div
@@ -68,7 +70,7 @@ const DrawerCard = ({ name, icon, documentCount, onClick, index }: DrawerCardPro
           {/* Document count */}
           <div className="flex items-center justify-center gap-1 mt-3 text-muted-foreground">
             <FileText className="h-3 w-3" />
-            <span className="text-xs">{documentCount} {documentCount === 1 ? 'document' : 'documents'}</span>
+            <span className="text-xs">{t("vault.documents", { count: documentCount })}</span>
           </div>
         </div>
 

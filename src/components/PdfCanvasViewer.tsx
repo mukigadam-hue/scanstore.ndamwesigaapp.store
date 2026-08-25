@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import "@/lib/polyfills";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -22,6 +24,7 @@ interface Props {
  * on old / low-end phones.
  */
 export default function PdfCanvasViewer({ url, className }: Props) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState(0);
@@ -73,7 +76,7 @@ export default function PdfCanvasViewer({ url, className }: Props) {
         setNumPages(doc.numPages);
       } catch (e: any) {
         console.error("PDF load error", e);
-        if (!cancelled) setError("Could not load this PDF.");
+        if (!cancelled) setError(t("viewer.couldNotLoadPdf"));
       }
     })();
     return () => { cancelled = true; };
@@ -105,7 +108,7 @@ export default function PdfCanvasViewer({ url, className }: Props) {
             <ZoomIn className="h-4 w-4" />
           </Button>
           {numPages > 1 && (
-            <span className="text-white/70 text-xs pl-2 border-l border-white/20 ml-1">{numPages} pages</span>
+            <span className="text-white/70 text-xs pl-2 border-l border-white/20 ml-1">{t("viewer.pagesCount", { n: numPages })}</span>
           )}
         </div>
       </div>
@@ -221,7 +224,7 @@ function PdfPage({
       <canvas ref={canvasRef} style={{ display: "block" }} />
       {!visible && (
         <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-          Loading page {pageNumber}…
+          {i18n.t('viewer.loadingPageN', { n: pageNumber })}
         </div>
       )}
     </div>

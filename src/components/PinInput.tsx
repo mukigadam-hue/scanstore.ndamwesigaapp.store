@@ -1,4 +1,5 @@
 import { useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   length: number;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function PinInput({ length, value, onChange, autoFocus, id, mask = true }: Props) {
+  const { t } = useTranslation();
   const refs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
@@ -36,6 +38,7 @@ export function PinInput({ length, value, onChange, autoFocus, id, mask = true }
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={1}
+          aria-label={t("security.pinInput.digitLabel", { index: i + 1 })}
           value={d.trim()}
           onChange={(e) => {
             const v = e.target.value.replace(/\D/g, "").slice(-1);

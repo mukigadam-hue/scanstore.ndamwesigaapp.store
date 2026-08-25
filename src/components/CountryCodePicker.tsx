@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { ChevronDown, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useTranslation } from "react-i18next";
 
 export interface Country {
   name: string;
@@ -98,6 +99,7 @@ interface Props {
 }
 
 export function CountryCodePicker({ value, onChange }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
@@ -129,7 +131,7 @@ export function CountryCodePicker({ value, onChange }: Props) {
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               autoFocus
-              placeholder="Search country…"
+              placeholder={t("auth.searchCountry")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="pl-8 h-9"
@@ -155,7 +157,7 @@ export function CountryCodePicker({ value, onChange }: Props) {
           ))}
           {filtered.length === 0 && (
             <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-              No matches
+              {t("auth.noMatches")}
             </div>
           )}
         </div>

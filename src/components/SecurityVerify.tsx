@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ interface SecurityVerifyProps {
 type MethodId = "pin" | "fingerprint" | "face" | "school" | "family" | "id";
 
 const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
+  const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [selectedMethod, setSelectedMethod] = useState<MethodId | null>(null);
@@ -53,12 +55,12 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const REQUIRED_VERIFICATIONS = 2;
 
   const availableMethods = [
-    settings.pin_hash && { id: "pin" as MethodId, label: "Enter PIN", icon: Hash },
-    settings.fingerprint_enabled && { id: "fingerprint" as MethodId, label: "Fingerprint", icon: Fingerprint },
-    settings.face_image_path && { id: "face" as MethodId, label: "Face Photo", icon: Camera },
-    settings.last_school && { id: "school" as MethodId, label: "School Name", icon: GraduationCap },
-    settings.family_face_path && { id: "family" as MethodId, label: "Family Member Name", icon: Users },
-    settings.id_document_path && { id: "id" as MethodId, label: "Show ID", icon: IdCard },
+    settings.pin_hash && { id: "pin" as MethodId, label: t("security.verify.method.pin"), icon: Hash },
+    settings.fingerprint_enabled && { id: "fingerprint" as MethodId, label: t("security.verify.method.fingerprint"), icon: Fingerprint },
+    settings.face_image_path && { id: "face" as MethodId, label: t("security.verify.method.face"), icon: Camera },
+    settings.last_school && { id: "school" as MethodId, label: t("security.verify.method.school"), icon: GraduationCap },
+    settings.family_face_path && { id: "family" as MethodId, label: t("security.verify.method.family"), icon: Users },
+    settings.id_document_path && { id: "id" as MethodId, label: t("security.verify.method.id"), icon: IdCard },
   ].filter(Boolean) as { id: MethodId; label: string; icon: any }[];
 
   const requiredCount = Math.min(REQUIRED_VERIFICATIONS, availableMethods.length);
@@ -82,13 +84,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       setPhase("verification_success");
     } else {
       const remaining = requiredCount - updated.size;
-      toast.success(`Method verified ✓ — ${remaining} more needed`);
+      toast.success(t("security.verify.toast.methodVerified", { count: remaining }));
     }
   };
 
   const handleVerifyPin = async () => {
     if (!user?.id || !settings.pin_hash) {
-      toast.error("PIN not configured");
+      toast.error(t("security.verify.toast.pinNotConfigured"));
       return;
     }
     const { hashPin } = await import("@/lib/hashPin");
@@ -96,7 +98,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     if (candidate === settings.pin_hash) {
       markVerified("pin");
     } else {
-      toast.error("Incorrect PIN — try again");
+      toast.error(t("security.verify.toast.incorrectPin"));
     }
   };
 
@@ -125,7 +127,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     if (school.trim().toLowerCase() === settings.last_school?.toLowerCase()) {
       markVerified("school");
     } else {
-      toast.error("School name does not match — try again");
+      toast.error(t("security.verify.toast.schoolMismatch"));
     }
   };
 
@@ -133,7 +135,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     if (familyName.trim().toLowerCase() === settings.family_face_path?.trim().toLowerCase()) {
       markVerified("family");
     } else {
-      toast.error("Family member's name does not match — try again");
+      toast.error(t("security.verify.toast.familyMismatch"));
     }
   };
 
@@ -144,7 +146,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   // --- Email OTP Recovery Flow ---
   const handleSendOtp = async () => {
     if (!user?.email) {
-      toast.error("No email associated with your account");
+      toast.error(t("security.verify.toast.noEmail"));
       return;
     }
     setForgotSending(true);
@@ -165,10 +167,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       const otpData = { code: otp, expires: Date.now() + 10 * 60 * 1000 };
       localStorage.setItem(`security_otp_${user.id}`, JSON.stringify(otpData));
 
-      toast.success(`A verification code has been sent to ${user.email}. Use code: ${otp}`, { duration: 15000 });
+      toast.success(t("security.verify.toast.otpSent", { email: user.email, otp }), { duration: 15000 });
       setForgotStep("verify");
     } catch (err: any) {
-      toast.error("Failed to send recovery email: " + err.message);
+      toast.error(t("security.verify.toast.otpSendFailed", { message: err.message }));
     } finally {
       setForgotSending(false);
     }
@@ -180,20 +182,20 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
     // Check stored OTP
     const stored = localStorage.getItem(`security_otp_${user.id}`);
     if (!stored) {
-      toast.error("No verification code found. Please request a new one.");
+      toast.error(t("security.verify.toast.otpNotFound"));
       return;
     }
 
     const otpData = JSON.parse(stored);
     if (Date.now() > otpData.expires) {
-      toast.error("Verification code has expired. Please request a new one.");
+      toast.error(t("security.verify.toast.otpExpired"));
       localStorage.removeItem(`security_otp_${user.id}`);
       setForgotStep("send");
       return;
     }
 
     if (otpCode !== otpData.code) {
-      toast.error("Incorrect code — try again");
+      toast.error(t("security.verify.toast.otpIncorrect"));
       return;
     }
 
@@ -215,10 +217,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       localStorage.removeItem(`webauthn_cred_${user.id}`);
       localStorage.removeItem(`security_otp_${user.id}`);
 
-      toast.success("Security has been reset. You'll now set up new security methods.");
+      toast.success(t("security.verify.toast.securityReset"));
       window.location.reload();
     } catch (err: any) {
-      toast.error("Failed to reset security: " + err.message);
+      toast.error(t("security.verify.toast.resetFailed", { message: err.message }));
     } finally {
       setForgotSending(false);
     }
@@ -252,17 +254,17 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             </div>
           </div>
           <h2 className="font-display text-3xl font-bold brass-text mb-2">
-            Identity Verified
+            {t("security.verify.success.title")}
           </h2>
           <p className="text-sm text-foreground/80 mb-8">
-            Welcome back. Your vault is ready.
+            {t("security.verify.success.subtitle")}
           </p>
           <motion.button
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={onVerified}
             className="relative brass-gradient brass-glow rounded-full p-10 inline-flex flex-col items-center justify-center mx-auto hover:opacity-95 transition-opacity"
-            aria-label="Click here to open your drawers"
+            aria-label={t("security.verify.success.ariaOpenDrawers")}
           >
             <KeyRound className="h-16 w-16 text-primary-foreground relative z-10" />
             {/* Curved "Click Here" text wrapping the key button */}
@@ -292,13 +294,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   startOffset="25%"
                   textAnchor="middle"
                 >
-                  • CLICK HERE •
+                  {t("security.verify.success.clickHere")}
                 </textPath>
               </text>
             </svg>
           </motion.button>
           <p className="mt-5 font-display text-lg font-semibold brass-text">
-            Open Your Drawers
+            {t("security.verify.success.openDrawers")}
           </p>
         </motion.div>
       </div>
@@ -310,7 +312,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 text-primary animate-spin" />
-          <p className="text-sm text-muted-foreground">Verifying identity…</p>
+          <p className="text-sm text-muted-foreground">{t("security.verify.verifyingIdentity")}</p>
         </div>
       </div>
     );
@@ -332,9 +334,9 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             navigate("/", { replace: true });
           }}
           className="text-muted-foreground hover:text-foreground"
-          title="Leave verification (you stay signed in)"
+          title={t("security.verify.title.leaveVerification")}
         >
-          <Home className="h-4 w-4 mr-1.5" /> Back to Home
+          <Home className="h-4 w-4 mr-1.5" /> {t("security.verify.button.backToHome")}
         </Button>
         <Button
           variant="ghost"
@@ -342,7 +344,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
           onClick={handleSignOut}
           className="text-muted-foreground hover:text-foreground"
         >
-          <LogOut className="h-4 w-4 mr-1.5" /> Sign Out
+          <LogOut className="h-4 w-4 mr-1.5" /> {t("security.verify.button.signOut")}
         </Button>
       </div>
       
@@ -363,10 +365,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
             </div>
 
             <h2 className="font-display text-2xl font-bold brass-text text-center mb-1">
-              Unlock Your Locker
+              {t("security.verify.title.unlockLocker")}
             </h2>
             <p className="text-xs text-muted-foreground text-center mb-2">
-              Verify with {requiredCount} methods to unlock your locker
+              {t("security.verify.subtitle.verifyWith", { count: requiredCount })}
             </p>
 
             {/* Progress indicator */}
@@ -389,7 +391,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                 <p className="text-xs text-destructive">
-                  <strong>Security Tip:</strong> Always delete sensitive documents from your device after saving them in the locker. This protects your files if your phone is lost or falls into the wrong hands.
+                  <strong>{t("security.verify.tip.label")}</strong> {t("security.verify.tip.text")}
                 </p>
               </div>
             </div>
@@ -405,10 +407,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                     <>
                       <Mail className="h-10 w-10 text-primary mx-auto mb-3" />
                       <p className="text-sm text-foreground font-medium mb-1">
-                        Forgot your security methods?
+                        {t("security.verify.forgot.title")}
                       </p>
                       <p className="text-xs text-muted-foreground mb-4">
-                        We'll send a verification code to <strong className="text-foreground">{user?.email}</strong> to confirm your identity before resetting your security.
+                        {t("security.verify.forgot.sendDescPrefix")} <strong className="text-foreground">{user?.email}</strong> {t("security.verify.forgot.sendDescSuffix")}
                       </p>
                       <Button
                         className="w-full brass-gradient text-primary-foreground font-semibold mb-2"
@@ -418,12 +420,12 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                         {forgotSending ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Sending…
+                            {t("security.verify.forgot.sending")}
                           </>
                         ) : (
                           <>
                             <Mail className="h-4 w-4 mr-2" />
-                            Send Verification Code
+                            {t("security.verify.forgot.sendCode")}
                           </>
                         )}
                       </Button>
@@ -432,10 +434,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                     <>
                       <KeyRound className="h-10 w-10 text-primary mx-auto mb-3" />
                       <p className="text-sm text-foreground font-medium mb-1">
-                        Enter verification code
+                        {t("security.verify.forgot.enterCode")}
                       </p>
                       <p className="text-xs text-muted-foreground mb-4">
-                        Enter the 6-digit code sent to your email
+                        {t("security.verify.forgot.enterCodeDesc")}
                       </p>
                       <Input
                         type="text"
@@ -456,10 +458,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                         {forgotSending ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Resetting…
+                            {t("security.verify.forgot.resetting")}
                           </>
                         ) : (
-                          "Verify & Reset Security"
+                          t("security.verify.forgot.verifyAndReset")
                         )}
                       </Button>
                       <button
@@ -467,7 +469,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                         disabled={forgotSending}
                         className="text-xs text-primary/70 hover:text-primary transition-colors"
                       >
-                        Resend code
+                        {t("security.verify.forgot.resendCode")}
                       </button>
                     </>
                   )}
@@ -480,7 +482,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       }}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      Back to verification
+                      {t("security.verify.forgot.backToVerification")}
                     </button>
                   </div>
                 </div>
@@ -524,7 +526,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                             <CheckCircle2 className="h-4 w-4 text-primary absolute -top-1 -right-1" />
                           </div>
                           <p className="text-xs font-medium text-muted-foreground">
-                            Verified ✓
+                            {t("security.verify.status.verified")}
                           </p>
                         </div>
                       );
@@ -536,7 +538,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                     onClick={() => setShowForgot(true)}
                     className="text-xs text-primary/70 hover:text-primary transition-colors"
                   >
-                    Can't remember your security methods?
+                    {t("security.verify.forgot.cantRemember")}
                   </button>
                 </div>
               </>
@@ -556,13 +558,13 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ArrowLeft className="h-3 w-3" />
-                  Back to methods
+                  {t("security.verify.button.backToMethods")}
                 </button>
 
                 {selectedMethod === "pin" && (
                   <>
                     <p className="text-sm text-muted-foreground text-center">
-                      Enter your 5-digit PIN
+                      {t("security.verify.pin.enter")}
                     </p>
                     <Input
                       type="password"
@@ -582,7 +584,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       onClick={handleVerifyPin}
                       disabled={pin.length !== 5}
                     >
-                      Verify PIN
+                      {t("security.verify.button.verifyPin")}
                     </Button>
                   </>
                 )}
@@ -590,7 +592,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 {selectedMethod === "fingerprint" && (
                   <div className="text-center space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Use your device's biometric sensor
+                      {t("security.verify.fingerprint.useSensor")}
                     </p>
                     <motion.button
                       onClick={handleVerifyFingerprint}
@@ -610,7 +612,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       )}
                     </motion.button>
                     <p className="text-xs text-muted-foreground">
-                      {fingerprintScanning ? "Verifying with your device…" : "Tap to authenticate with your fingerprint or face"}
+                      {fingerprintScanning ? t("security.verify.fingerprint.verifying") : t("security.verify.fingerprint.tapToAuthenticate")}
                     </p>
                   </div>
                 )}
@@ -618,10 +620,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 {selectedMethod === "school" && (
                   <>
                     <p className="text-sm text-muted-foreground text-center">
-                      Enter the name of your last school
+                      {t("security.verify.school.enter")}
                     </p>
                     <Input
-                      placeholder="School name…"
+                      placeholder={t("security.verify.school.placeholder")}
                       value={school}
                       onChange={(e) => setSchool(e.target.value)}
                       className="bg-input border-border"
@@ -635,7 +637,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       onClick={handleVerifySchool}
                       disabled={!school.trim()}
                     >
-                      Verify School
+                      {t("security.verify.button.verifySchool")}
                     </Button>
                   </>
                 )}
@@ -643,10 +645,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                 {selectedMethod === "family" && (
                   <>
                     <p className="text-sm text-muted-foreground text-center">
-                      Enter any family member's name you registered
+                      {t("security.verify.family.enter")}
                     </p>
                     <Input
-                      placeholder="Family member's name…"
+                      placeholder={t("security.verify.family.placeholder")}
                       value={familyName}
                       onChange={(e) => setFamilyName(e.target.value)}
                       className="bg-input border-border"
@@ -660,7 +662,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       onClick={handleVerifyFamily}
                       disabled={!familyName.trim()}
                     >
-                      Verify Family Name
+                      {t("security.verify.button.verifyFamily")}
                     </Button>
                   </>
                 )}
@@ -672,18 +674,18 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       {selectedMethod === "face" && (
                         <>
                           <Camera className="h-10 w-10 text-primary mx-auto mb-2" />
-                          <p className="text-sm text-foreground font-medium">Face verification</p>
+                          <p className="text-sm text-foreground font-medium">{t("security.verify.face.title")}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Your registered face photo is on file. Confirm to verify.
+                            {t("security.verify.face.desc")}
                           </p>
                         </>
                       )}
                       {selectedMethod === "id" && (
                         <>
                           <IdCard className="h-10 w-10 text-primary mx-auto mb-2" />
-                          <p className="text-sm text-foreground font-medium">ID document verification</p>
+                          <p className="text-sm text-foreground font-medium">{t("security.verify.id.title")}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Your registered ID document is on file. Confirm to verify.
+                            {t("security.verify.id.desc")}
                           </p>
                         </>
                       )}
@@ -692,7 +694,7 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
                       className="w-full brass-gradient text-primary-foreground font-semibold"
                       onClick={() => handleImageConfirm(selectedMethod)}
                     >
-                      Confirm & Verify
+                      {t("security.verify.button.confirmVerify")}
                     </Button>
                   </div>
                 )}

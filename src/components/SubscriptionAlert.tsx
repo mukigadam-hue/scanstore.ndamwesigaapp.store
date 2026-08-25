@@ -6,14 +6,12 @@ import { useState } from "react";
 import PricingDialog from "./PricingDialog";
 import PaymentDialog from "./PaymentDialog";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const PAYMENTS_ENABLED = false;
-const upcoming = () =>
-  toast.info("Upcoming feature", {
-    description: "Paid upgrades are coming soon. Keep enjoying the Free tier in the meantime.",
-  });
 
 const SubscriptionAlert = () => {
+  const { t } = useTranslation();
   const {
     isFrozen,
     isRetrievalActive,
@@ -24,6 +22,11 @@ const SubscriptionAlert = () => {
   } = useSubscription();
   const [showPricing, setShowPricing] = useState(false);
   const [showRetrieval, setShowRetrieval] = useState(false);
+
+  const upcoming = () =>
+    toast.info(t("billing.upcomingFeature"), {
+      description: t("billing.upcomingFeatureDescription"),
+    });
 
   if (!isFrozen && !showExpiryWarning && !isRetrievalActive) return null;
 
@@ -40,15 +43,14 @@ const SubscriptionAlert = () => {
               <Snowflake className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-destructive text-sm">
-                  Vault Frozen
+                  {t("billing.alert.vaultFrozenTitle")}
                 </p>
                 <p className="text-muted-foreground text-xs mt-0.5">
-                  Your subscription expired. Documents are safely preserved but
-                  inaccessible. Pay a retrieval fee of{" "}
+                  {t("billing.alert.vaultFrozenBody1")}{" "}
                   <span className="text-foreground font-medium">
                     ${currentPlan.retrievalFee}
                   </span>{" "}
-                  for 1-week access, or resubscribe.
+                  {t("billing.alert.vaultFrozenBody2")}
                 </p>
               </div>
               <div className="flex gap-2 shrink-0">
@@ -58,14 +60,14 @@ const SubscriptionAlert = () => {
                   onClick={() => PAYMENTS_ENABLED ? setShowRetrieval(true) : upcoming()}
                   className="text-xs border-destructive/40 text-destructive hover:bg-destructive/10 whitespace-nowrap"
                 >
-                  Unlock (${currentPlan.retrievalFee})
+                  {t("billing.alert.unlock", { fee: currentPlan.retrievalFee })}
                 </Button>
                 <Button
                   size="sm"
                   onClick={() => PAYMENTS_ENABLED ? setShowPricing(true) : upcoming()}
                   className="text-xs brass-gradient text-primary-foreground whitespace-nowrap"
                 >
-                  Resubscribe
+                  {t("billing.alert.resubscribe")}
                 </Button>
               </div>
             </div>
@@ -78,13 +80,13 @@ const SubscriptionAlert = () => {
               <Clock className="h-5 w-5 text-primary shrink-0" />
               <div className="flex-1">
                 <p className="font-semibold text-foreground text-sm">
-                  Temporary Access Active
+                  {t("billing.alert.temporaryAccessTitle")}
                 </p>
                 <p className="text-muted-foreground text-xs mt-0.5">
                   {retrievalDaysLeft <= 1
-                    ? "Access expires tomorrow!"
-                    : `${retrievalDaysLeft} days of access remaining.`}{" "}
-                  Resubscribe to keep your documents accessible.
+                    ? t("billing.alert.expiresTomorrow")
+                    : t("billing.alert.daysRemaining", { days: retrievalDaysLeft })}{" "}
+                  {t("billing.alert.resubscribeToKeep")}
                 </p>
               </div>
               <Button
@@ -93,7 +95,7 @@ const SubscriptionAlert = () => {
                 className="text-xs brass-gradient text-primary-foreground shrink-0"
               >
                 <RefreshCw className="h-3 w-3 mr-1" />
-                Renew
+                {t("billing.alert.renew")}
               </Button>
             </div>
           </div>
@@ -105,14 +107,14 @@ const SubscriptionAlert = () => {
               <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0" />
               <div className="flex-1">
                 <p className="font-semibold text-foreground text-sm">
-                  Subscription Expiring Soon
+                  {t("billing.alert.expiringSoonTitle")}
                 </p>
                 <p className="text-muted-foreground text-xs mt-0.5">
-                  Your {currentPlan.name} plan expires in{" "}
+                  {t("billing.alert.planExpiresIn", { plan: currentPlan.name })}{" "}
                   <span className="text-yellow-500 font-medium">
-                    {daysUntilExpiry} days
+                    {t("billing.alert.daysCount", { days: daysUntilExpiry })}
                   </span>
-                  . Renew to avoid document freezing.
+                  . {t("billing.alert.renewToAvoidFreeze")}
                 </p>
               </div>
               <Button
@@ -120,7 +122,7 @@ const SubscriptionAlert = () => {
                 onClick={() => PAYMENTS_ENABLED ? setShowPricing(true) : upcoming()}
                 className="text-xs brass-gradient text-primary-foreground shrink-0"
               >
-                Renew Now
+                {t("billing.alert.renewNow")}
               </Button>
             </div>
           </div>

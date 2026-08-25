@@ -4,11 +4,13 @@ import FilePreviewDialog from "@/components/FilePreviewDialog";
 import { toast } from "sonner";
 import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import { downloadBlob } from "@/lib/downloadFile";
 import { showInterstitial } from "@/lib/ads";
 import { inferFileType, isAudioFile, isImageFile, isPdfFile, isVideoFile, withInferredType } from "@/lib/fileCompatibility";
 
 const OpenFile = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -117,10 +119,10 @@ const OpenFile = () => {
     if (!file) return;
     try {
       await downloadBlob(file, file.name);
-      toast.success("Download started");
+      toast.success(t("viewer.downloadStarted"));
       await showInterstitial("save-to-phone", 2 * 60 * 1000);
     } catch (err: any) {
-      if (err?.name !== "AbortError") toast.error("Download failed");
+      if (err?.name !== "AbortError") toast.error(t("viewer.downloadFailed"));
     }
   };
 
@@ -160,20 +162,20 @@ const OpenFile = () => {
       {loading ? (
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-10 w-10 border-2 border-primary border-t-transparent" />
-          <p className="text-muted-foreground">Opening file...</p>
+          <p className="text-muted-foreground">{t("viewer.openingFile")}</p>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-6 text-center">
           <FileText className="h-16 w-16 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">DocLocker Viewer</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t("viewer.docLockerViewer")}</h1>
           <p className="text-muted-foreground max-w-sm">
-            Open any document, spreadsheet, image, or media file right here.
+            {t("viewer.openAnyDocumentDescription")}
           </p>
           <Button onClick={handlePickFile} className="brass-gradient text-primary-foreground">
-            Choose a File to Open
+            {t("viewer.chooseFileToOpen")}
           </Button>
           <Button variant="ghost" onClick={() => navigate("/")} className="text-muted-foreground">
-            Back to DocLocker
+            {t("viewer.backToDocLocker")}
           </Button>
         </div>
       )}

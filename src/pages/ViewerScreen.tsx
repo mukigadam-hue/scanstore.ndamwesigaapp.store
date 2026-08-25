@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FileText, X, Save, Download, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import SaveToVaultButton from "@/components/SaveToVaultButton";
 import PdfCanvasViewer from "@/components/PdfCanvasViewer";
@@ -19,6 +20,7 @@ function dataUrlToFile(dataUrl: string, name: string, type: string): File {
 }
 
 export default function ViewerScreen() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -131,13 +133,13 @@ export default function ViewerScreen() {
       );
       newName = file.name.replace(/\.(docx?|odt)$/i, "") + ".html";
     } else {
-      toast.error("Nothing editable to save");
+      toast.error(t("viewer.nothingEditableToSave"));
       return;
     }
     const newFile = new File([blob], newName, { type: blob.type });
     setFile(newFile);
     setPreviewUrl(URL.createObjectURL(newFile));
-    toast.success("Changes saved to the working copy");
+    toast.success(t("viewer.changesSavedWorkingCopy"));
     // No ad on save-changes — ads only fire at explicit save-to-phone / last-verify.
   };
 
@@ -145,10 +147,10 @@ export default function ViewerScreen() {
     if (!file) return;
     try {
       await downloadBlob(file, file.name);
-      toast.success("Download started");
+      toast.success(t("viewer.downloadStarted"));
       await showInterstitial("save-to-phone", 2 * 60 * 1000);
     } catch (err: any) {
-      if (err?.name !== "AbortError") toast.error("Download failed");
+      if (err?.name !== "AbortError") toast.error(t("viewer.downloadFailed"));
     }
   };
 
@@ -157,15 +159,15 @@ export default function ViewerScreen() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
         <div className="flex flex-col items-center gap-4 text-center">
           <FileText className="h-12 w-12 text-primary" />
-          <h1 className="text-2xl font-bold brass-text font-display">Document Viewer</h1>
+          <h1 className="text-2xl font-bold brass-text font-display">{t("viewer.documentViewer")}</h1>
           <p className="text-muted-foreground max-w-sm text-sm">
-            Pick a file from your device, or open one through your phone's "Open With" menu.
+            {t("viewer.pickFileDescription")}
           </p>
           <div className="flex gap-2">
             <Button onClick={pickFile} className="brass-gradient text-primary-foreground">
-              <FolderOpen className="h-4 w-4 mr-2" /> Choose File
+              <FolderOpen className="h-4 w-4 mr-2" /> {t("viewer.chooseFile")}
             </Button>
-            <Button variant="ghost" onClick={() => navigate("/")}>Back</Button>
+            <Button variant="ghost" onClick={() => navigate("/")}>{t("viewer.back")}</Button>
           </div>
         </div>
       </div>
@@ -189,24 +191,24 @@ export default function ViewerScreen() {
           {isEditable && (
             <>
               <Button size="sm" variant="outline" onClick={() => setEditMode((v) => !v)}>
-                {editMode ? "View" : "Edit"}
+                {editMode ? t("viewer.view") : t("viewer.edit")}
               </Button>
               {editMode && (
                 <Button size="sm" onClick={handleSaveChanges} className="brass-gradient text-primary-foreground">
-                  <Save className="h-4 w-4 mr-1" /> Save Changes
+                  <Save className="h-4 w-4 mr-1" /> {t("viewer.saveChanges")}
                 </Button>
               )}
             </>
           )}
           <Button size="sm" variant="outline" onClick={handleDownload}>
-            <Download className="h-4 w-4 mr-1" /> Download
+            <Download className="h-4 w-4 mr-1" /> {t("viewer.download")}
           </Button>
           <Button size="sm" variant="outline" onClick={pickFile}>
-            <FolderOpen className="h-4 w-4 mr-1" /> Open Another
+            <FolderOpen className="h-4 w-4 mr-1" /> {t("viewer.openAnother")}
           </Button>
           <SaveToVaultButton file={file} className="brass-gradient text-primary-foreground" />
-          <Button size="sm" variant="ghost" onClick={handleClose} title="Close Document">
-            <X className="h-4 w-4 mr-1" /> Close Document
+          <Button size="sm" variant="ghost" onClick={handleClose} title={t("viewer.closeDocument")}>
+            <X className="h-4 w-4 mr-1" /> {t("viewer.closeDocument")}
           </Button>
         </div>
       </header>
@@ -240,7 +242,7 @@ export default function ViewerScreen() {
         )}
         {textContent === null && officeHtml === null && !isImage && !isPdf && (
           <div className="text-center text-muted-foreground py-12">
-            Preview not available — use Download or Save to Vault.
+            {t("viewer.previewNotAvailable")}
           </div>
         )}
       </main>

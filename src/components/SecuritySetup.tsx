@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
@@ -32,16 +33,8 @@ interface SecuritySetupProps {
   onCancel?: () => void;
 }
 
-const METHODS = [
-  { id: "pin", label: "5-Digit PIN Code", desc: "A 5-number personal code to unlock your locker", icon: Hash },
-  { id: "fingerprint", label: "Fingerprint Scan", desc: "Register your device fingerprint sensor", icon: Fingerprint },
-  { id: "face", label: "Your Face Photo", desc: "Upload a clear photo of your face", icon: Camera },
-  { id: "school", label: "Any School You Attended or Like", desc: "Name any school you attended or simply like", icon: GraduationCap },
-  { id: "family", label: "Any Family Member's Name You Like", desc: "Enter any family member's name you like and can remember", icon: Users },
-  { id: "id", label: "National ID / Driving Permit", desc: "Upload your government-issued identity document", icon: IdCard },
-];
-
 const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [completed, setCompleted] = useState<CompletedMethods>({});
@@ -58,6 +51,15 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
   const faceRef = useRef<HTMLInputElement>(null);
   const idRef = useRef<HTMLInputElement>(null);
 
+  const METHODS = [
+    { id: "pin", label: t("security.setup.method.pin.label"), desc: t("security.setup.method.pin.desc"), icon: Hash },
+    { id: "fingerprint", label: t("security.setup.method.fingerprint.label"), desc: t("security.setup.method.fingerprint.desc"), icon: Fingerprint },
+    { id: "face", label: t("security.setup.method.face.label"), desc: t("security.setup.method.face.desc"), icon: Camera },
+    { id: "school", label: t("security.setup.method.school.label"), desc: t("security.setup.method.school.desc"), icon: GraduationCap },
+    { id: "family", label: t("security.setup.method.family.label"), desc: t("security.setup.method.family.desc"), icon: Users },
+    { id: "id", label: t("security.setup.method.id.label"), desc: t("security.setup.method.id.desc"), icon: IdCard },
+  ];
+
   const completedCount = Object.keys(completed).length;
   const canFinish = completedCount >= 3;
 
@@ -68,15 +70,15 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
 
   const handlePinSet = () => {
     if (!/^\d{5}$/.test(pin)) {
-      toast.error("PIN must be exactly 5 digits (numbers only)");
+      toast.error(t("security.setup.toast.pinInvalid"));
       return;
     }
     if (pin !== confirmPin) {
-      toast.error("PINs do not match — please re-enter");
+      toast.error(t("security.setup.toast.pinMismatch"));
       return;
     }
     markDone("pin", pin);
-    toast.success("PIN registered ✓");
+    toast.success(t("security.setup.toast.pinRegistered"));
   };
 
   const handleFingerprintScan = async () => {
@@ -99,8 +101,8 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
       markDone("fingerprint", true);
       toast.success(
         reusedExisting
-          ? "Fingerprint already linked on this device ✓"
-          : "Fingerprint registered ✓ — Your device will remember this!",
+          ? t("security.setup.toast.fingerprintLinked")
+          : t("security.setup.toast.fingerprintRegistered"),
       );
     } catch (err) {
       setFingerprintScanning(false);
@@ -115,28 +117,28 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
     reader.readAsDataURL(file);
     markDone(type, file);
     const labels: Record<string, string> = {
-      face: "Face photo",
-      id: "ID document",
+      face: t("security.setup.label.facePhoto"),
+      id: t("security.setup.label.idDocument"),
     };
-    toast.success(`${labels[type]} registered ✓`);
+    toast.success(t("security.setup.toast.itemRegistered", { item: labels[type] }));
   };
 
   const handleFamilySet = () => {
     if (!familyName.trim()) {
-      toast.error("Please enter any family member's name you like");
+      toast.error(t("security.setup.toast.familyRequired"));
       return;
     }
     markDone("family", familyName.trim());
-    toast.success("Family member's name registered ✓");
+    toast.success(t("security.setup.toast.familyRegistered"));
   };
 
   const handleSchoolSet = () => {
     if (!school.trim()) {
-      toast.error("Please enter your school name");
+      toast.error(t("security.setup.toast.schoolRequired"));
       return;
     }
     markDone("school", school.trim());
-    toast.success("School registered ✓");
+    toast.success(t("security.setup.toast.schoolRegistered"));
   };
 
   const uploadImage = async (file: File, path: string) => {
@@ -177,10 +179,10 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
       );
       if (error) throw error;
 
-      toast.success("Your locker is now secured! 🔐");
+      toast.success(t("security.setup.toast.lockerSecured"));
       onComplete();
     } catch (err: any) {
-      toast.error("Failed to save security settings: " + err.message);
+      toast.error(t("security.setup.toast.saveFailed", { message: err.message }));
     } finally {
       setSaving(false);
     }
@@ -205,10 +207,10 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                 </div>
                 <div>
                   <h2 className="font-display text-xl font-bold brass-text">
-                    {onCancel ? "Security Settings" : "Secure Your Locker"}
+                    {onCancel ? t("security.setup.title.settings") : t("security.setup.title.secureLocker")}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    Register at least 3 of the 6 security methods below
+                    {t("security.setup.subtitle")}
                   </p>
                 </div>
               </div>
@@ -220,7 +222,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4 mr-1" />
-                  Close
+                  {t("security.setup.button.close")}
                 </Button>
               ) : (
                 <Button
@@ -234,7 +236,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4 mr-1" />
-                  Back
+                  {t("security.setup.button.back")}
                 </Button>
               )}
             </div>
@@ -242,14 +244,14 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
             {/* Progress bar */}
             <div className="mb-5">
               <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>{completedCount} of 6 methods registered</span>
+                <span>{t("security.setup.progress.registered", { count: completedCount })}</span>
                 {!canFinish && (
                   <span className="text-primary">
-                    {3 - completedCount} more needed
+                    {t("security.setup.progress.moreNeeded", { count: 3 - completedCount })}
                   </span>
                 )}
                 {canFinish && (
-                  <span className="text-accent">Ready to secure!</span>
+                  <span className="text-accent">{t("security.setup.progress.readyToSecure")}</span>
                 )}
               </div>
               <div className="h-2 bg-secondary rounded-full overflow-hidden">
@@ -283,7 +285,7 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                             {method.label}
                           </p>
                           {!isDone && <p className="text-xs text-muted-foreground">{method.desc}</p>}
-                          {isDone && <p className="text-xs text-accent">Registered ✓</p>}
+                          {isDone && <p className="text-xs text-accent">{t("security.setup.status.registered")}</p>}
                         </div>
                       </div>
                       {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
@@ -295,20 +297,20 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                           <div className="p-4 border-t border-border bg-secondary/20 space-y-3">
                             {method.id === "pin" && (
                               <>
-                                <Input type="password" inputMode="numeric" placeholder="Enter 5-digit PIN" value={pin}
+                                <Input type="password" inputMode="numeric" placeholder={t("security.setup.placeholder.enterPin")} value={pin}
                                   onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5}
                                   className="bg-input border-border text-center text-xl tracking-[0.5em]" autoFocus />
-                                <Input type="password" inputMode="numeric" placeholder="Confirm PIN" value={confirmPin}
+                                <Input type="password" inputMode="numeric" placeholder={t("security.setup.placeholder.confirmPin")} value={confirmPin}
                                   onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 5))} maxLength={5}
                                   className="bg-input border-border text-center text-xl tracking-[0.5em]"
                                   onKeyDown={(e) => e.key === "Enter" && handlePinSet()} />
-                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handlePinSet}>Register PIN</Button>
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handlePinSet}>{t("security.setup.button.registerPin")}</Button>
                               </>
                             )}
 
                             {method.id === "fingerprint" && (
                               <div className="text-center py-2">
-                                <p className="text-xs text-muted-foreground mb-4">Place your finger on the device sensor</p>
+                                <p className="text-xs text-muted-foreground mb-4">{t("security.setup.fingerprint.hint")}</p>
                                 <motion.button onClick={handleFingerprintScan} disabled={fingerprintScanning} whileTap={{ scale: 0.95 }}
                                   className="brass-gradient rounded-full p-5 mx-auto block brass-glow disabled:opacity-70">
                                   {fingerprintScanning ? (
@@ -320,47 +322,47 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                                   )}
                                 </motion.button>
                                 <p className="text-xs text-muted-foreground mt-3">
-                                  {fingerprintScanning ? "Authenticating… hold still" : "Tap to register fingerprint"}
+                                  {fingerprintScanning ? t("security.setup.fingerprint.authenticating") : t("security.setup.fingerprint.tapToRegister")}
                                 </p>
                               </div>
                             )}
 
                             {method.id === "face" && (
                               <>
-                                {previews.face && <img src={previews.face} alt="Face preview" className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30" />}
+                                {previews.face && <img src={previews.face} alt={t("security.setup.alt.facePreview")} className="w-24 h-24 object-cover rounded-full mx-auto border-2 border-primary/30" />}
                                 <input type="file" ref={faceRef} accept="image/*" capture="user" className="hidden"
                                   onChange={(e) => e.target.files?.[0] && handleImageFile("face", e.target.files[0])} />
                                 <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={() => faceRef.current?.click()}>
-                                  <Camera className="h-4 w-4 mr-2" />Upload / Take Face Photo
+                                  <Camera className="h-4 w-4 mr-2" />{t("security.setup.button.uploadFace")}
                                 </Button>
                               </>
                             )}
 
                             {method.id === "school" && (
                               <>
-                                <Input placeholder="e.g. Makerere University" value={school} onChange={(e) => setSchool(e.target.value)}
+                                <Input placeholder={t("security.setup.placeholder.school")} value={school} onChange={(e) => setSchool(e.target.value)}
                                   className="bg-input border-border" autoFocus onKeyDown={(e) => e.key === "Enter" && handleSchoolSet()} />
-                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handleSchoolSet}>Register School</Button>
+                                <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handleSchoolSet}>{t("security.setup.button.registerSchool")}</Button>
                               </>
                             )}
 
                             {method.id === "family" && (
                               <>
-                                <Input placeholder="e.g. Grandma Sarah" value={familyName} onChange={(e) => setFamilyName(e.target.value)}
+                                <Input placeholder={t("security.setup.placeholder.family")} value={familyName} onChange={(e) => setFamilyName(e.target.value)}
                                   className="bg-input border-border" autoFocus onKeyDown={(e) => e.key === "Enter" && handleFamilySet()} />
                                 <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={handleFamilySet}>
-                                  <Users className="h-4 w-4 mr-2" />Register Any Family Member's Name You Like
+                                  <Users className="h-4 w-4 mr-2" />{t("security.setup.button.registerFamily")}
                                 </Button>
                               </>
                             )}
 
                             {method.id === "id" && (
                               <>
-                                {previews.id && <img src={previews.id} alt="ID preview" className="w-40 h-24 object-cover rounded-lg mx-auto border border-primary/30" />}
+                                {previews.id && <img src={previews.id} alt={t("security.setup.alt.idPreview")} className="w-40 h-24 object-cover rounded-lg mx-auto border border-primary/30" />}
                                 <input type="file" ref={idRef} accept="image/*,.pdf" className="hidden"
                                   onChange={(e) => e.target.files?.[0] && handleImageFile("id", e.target.files[0])} />
                                 <Button size="sm" className="w-full brass-gradient text-primary-foreground" onClick={() => idRef.current?.click()}>
-                                  <IdCard className="h-4 w-4 mr-2" />Upload ID / Passport / Driving Permit
+                                  <IdCard className="h-4 w-4 mr-2" />{t("security.setup.button.uploadId")}
                                 </Button>
                               </>
                             )}
@@ -388,8 +390,8 @@ const SecuritySetup = ({ onComplete, onCancel }: SecuritySetupProps) => {
                   <Shield className="h-4 w-4 mr-2" />
                 )}
                 {canFinish
-                  ? `Secure My Locker (${completedCount}/6 complete)`
-                  : `Complete ${3 - completedCount} more method${3 - completedCount !== 1 ? "s" : ""} to continue`}
+                  ? t("security.setup.button.secureLocker", { count: completedCount })
+                  : t("security.setup.button.completeMore", { count: 3 - completedCount })}
               </Button>
             </div>
           </div>

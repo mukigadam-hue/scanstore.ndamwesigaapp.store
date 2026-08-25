@@ -85,7 +85,7 @@ const Locker = () => {
   const handleAutoLockSave = (seconds: number) => {
     setAutoLockSeconds(seconds);
     localStorage.setItem("doclocker_autolock", seconds.toString());
-    toast.success(seconds === 0 ? "Auto-lock disabled" : `Auto-lock set to ${seconds}s`);
+    toast.success(seconds === 0 ? t("vault.autoLockDisabled") : t("vault.autoLockSetTo", { seconds }));
   };
 
   const { pause: pauseAutoLock, resume: resumeAutoLock } = useAutoLock({
@@ -96,7 +96,7 @@ const Locker = () => {
         localStorage.removeItem(`locker_verified_${user.id}`);
       }
       setSessionVerified(false);
-      toast.info("Locker auto-locked due to inactivity 🔒");
+      toast.info(t("vault.autoLockedInactivity"));
     },
   });
 
@@ -180,12 +180,12 @@ const Locker = () => {
         drawer_name: drawerName,
       });
       if (dbErr) throw dbErr;
-      toast.success(`Saved to ${drawerName}`);
+      toast.success(t("vault.savedToDrawer", { drawer: drawerName }));
       clearPendingVaultFile();
       setPendingFile(null);
       queryClient.invalidateQueries({ queryKey: ["documents", user.id] });
     } catch (e: any) {
-      toast.error(e?.message || "Failed to save to vault");
+      toast.error(e?.message || t("vault.failedSaveToVault"));
     } finally {
       setPendingUploading(false);
       resumeVaultActivity();
@@ -267,12 +267,12 @@ const Locker = () => {
   const addDrawer = async () => {
     if (!newDrawerName.trim() || !user) return;
     if (!isPremium) {
-      toast.error("Upgrade to Premium to add custom drawers!");
+      toast.error(t("vault.upgradeForCustomDrawers"));
       setShowPricing(true);
       return;
     }
     if (!essentialDrawersFilled) {
-      toast.error("Please fill all 6 Essential Drawers first before creating custom drawers.");
+      toast.error(t("vault.fillEssentialFirst"));
       return;
     }
     const colorIndex = extraDrawers.length % DRAWER_COLORS.length;
@@ -283,9 +283,9 @@ const Locker = () => {
       color: DRAWER_COLORS[colorIndex],
     });
     if (error) {
-      toast.error("Failed to create drawer");
+      toast.error(t("vault.failedCreateDrawer"));
     } else {
-      toast.success("New drawer added!");
+      toast.success(t("vault.newDrawerAdded"));
       setNewDrawerName("");
       setShowNewDrawer(false);
       queryClient.invalidateQueries({ queryKey: ["drawers", user.id] });
@@ -300,7 +300,7 @@ const Locker = () => {
 
   const handleDrawerClick = (drawerName: string) => {
     if (!canAccessDrawers) {
-      toast.error("Your vault is frozen. Pay the retrieval fee to access documents.");
+      toast.error(t("vault.frozenPayRetrieval"));
       return;
     }
     setSelectedDrawer(drawerName);
@@ -432,7 +432,7 @@ const Locker = () => {
                   }
                   setSessionVerified(false);
                   setSelectedDrawer(null);
-                  toast.info("Vault locked 🔒");
+                  toast.info(t("vault.vaultLocked"));
                 }}
                 className="text-muted-foreground hover:text-foreground hover:bg-secondary shrink-0 px-2"
                 title={t("locker.signOut")}
@@ -477,9 +477,7 @@ const Locker = () => {
                     <div className="flex items-start gap-2">
                       <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                       <p className="text-xs text-muted-foreground">
-                        <span className="text-foreground font-medium">Tip:</span> Your subscription expires in {daysUntilExpiry} days.
-                        Store your most essential documents in the first 6 drawers —
-                        these remain accessible on the free tier (50 MB) even after your premium expires.
+                        <span className="text-foreground font-medium">{t("vault.tipLabel")}</span> {t("vault.tipExpiryText", { days: daysUntilExpiry })}
                       </p>
                     </div>
                   </motion.div>
@@ -515,7 +513,7 @@ const Locker = () => {
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0 mt-0.5" />
                         <p className="text-xs text-muted-foreground">
-                          <span className="text-foreground font-medium">Important:</span> Fill all 6 essential drawers with your most critical documents first. These remain accessible even if your premium subscription expires.
+                          <span className="text-foreground font-medium">{t("vault.importantLabel")}</span> {t("vault.fillEssentialWarning")}
                         </p>
                       </div>
                     </motion.div>
@@ -553,10 +551,10 @@ const Locker = () => {
                       <div className="flex items-start gap-2">
                         <Plus className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                         <p className="text-xs text-muted-foreground">
-                          <span className="text-foreground font-medium">Create your own drawers!</span>{" "}
-                          Name them however you like to organize your documents.
+                          <span className="text-foreground font-medium">{t("vault.createOwnDrawers")}</span>{" "}
+                          {t("vault.nameThemHowYouLike")}
                           {!essentialDrawersFilled && (
-                            <span className="text-yellow-500 font-medium"> Fill all essential drawers first to unlock this.</span>
+                            <span className="text-yellow-500 font-medium"> {t("vault.fillEssentialUnlock")}</span>
                           )}
                         </p>
                       </div>
@@ -677,9 +675,9 @@ const Locker = () => {
       <Dialog open={!!pendingFile} onOpenChange={(o) => { if (!o) { clearPendingVaultFile(); setPendingFile(null); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Save to Secure Vault</DialogTitle>
+            <DialogTitle>{t("vault.saveToSecureVault")}</DialogTitle>
             <DialogDescription>
-              Pick a drawer for <span className="font-medium">{pendingFile?.name}</span>
+              {t("vault.pickDrawerFor")} <span className="font-medium">{pendingFile?.name}</span>
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-2 mt-2 max-h-[50vh] overflow-y-auto">

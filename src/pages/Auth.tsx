@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import {
   Lock,
   Mail,
@@ -35,6 +36,7 @@ type Mode =
   | "recover-newpin";
 
 const Auth = () => {
+  const { t } = useTranslation();
   const { user, loading, signIn } = useAuth();
   const detected = useDetectedCountry();
 
@@ -104,7 +106,7 @@ const Auth = () => {
     if (isWebView()) {
       const url = window.location.href;
       toast.error(
-        "Google blocks sign-in inside in-app browsers. Open this site in Chrome or Safari, then tap 'Continue with Google'.",
+        t("auth.webviewBlocked"),
         { duration: 10000 },
       );
       // Best-effort: try to launch the system browser.
@@ -121,9 +123,9 @@ const Auth = () => {
         redirect_uri: window.location.origin,
       });
       if (error)
-        toast.error("Google sign-in failed: " + (error as Error).message);
+        toast.error(t("auth.googleSignInFailedWithMsg", { msg: (error as Error).message }));
     } catch {
-      toast.error("Google sign-in failed");
+      toast.error(t("auth.googleSignInFailed"));
     } finally {
       setGoogleLoading(false);
     }
@@ -135,25 +137,25 @@ const Auth = () => {
       refresh_token: session.refresh_token,
     });
     if (error) {
-      toast.error("Could not start session: " + error.message);
+      toast.error(t("auth.couldNotStartSession", { msg: error.message }));
       return;
     }
-    toast.success("Vault unlocked!");
+    toast.success(t("auth.vaultUnlocked"));
     // Navigation happens automatically via the user state in AuthProvider
   };
 
   const handlePhoneSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.replace(/\D/g, "").length < 6) {
-      toast.error("Please enter a valid phone number");
+      toast.error(t("auth.invalidPhone"));
       return;
     }
     if (!/^\d{5}$/.test(pin)) {
-      toast.error("PIN must be exactly 5 digits");
+      toast.error(t("auth.pinMustBe5Digits"));
       return;
     }
     if (pin !== pin2) {
-      toast.error("PINs do not match");
+      toast.error(t("auth.pinsDoNotMatch"));
       return;
     }
     setSubmitting(true);
@@ -171,7 +173,7 @@ const Auth = () => {
       );
       const payload = data as any;
       if (error || payload?.error) {
-        toast.error(payload?.error || error?.message || "Sign-up failed");
+        toast.error(payload?.error || error?.message || t("auth.signUpFailed"));
         return;
       }
       await setSessionAndGo(payload.session);
@@ -183,7 +185,7 @@ const Auth = () => {
   const handlePhoneLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.replace(/\D/g, "").length < 6 || !/^\d{5}$/.test(pin)) {
-      toast.error("Enter your phone and 5-digit PIN");
+      toast.error(t("auth.enterPhoneAndPin"));
       return;
     }
     setSubmitting(true);
@@ -194,7 +196,7 @@ const Auth = () => {
       );
       const payload = data as any;
       if (error || payload?.error) {
-        toast.error(payload?.error || error?.message || "Sign-in failed");
+        toast.error(payload?.error || error?.message || t("auth.signInFailed"));
         return;
       }
       await setSessionAndGo(payload.session);
@@ -209,7 +211,7 @@ const Auth = () => {
     try {
       const { error } = await signIn(loginEmail, password);
       if (error) toast.error(error.message);
-      else toast.success("Welcome back!");
+      else toast.success(t("auth.welcomeBackToast"));
     } finally {
       setSubmitting(false);
     }
@@ -219,7 +221,7 @@ const Auth = () => {
   const handleRecoverStart = async (e: React.FormEvent) => {
     e.preventDefault();
     if (phone.replace(/\D/g, "").length < 6) {
-      toast.error("Please enter a valid phone number");
+      toast.error(t("auth.invalidPhone"));
       return;
     }
     setSubmitting(true);
@@ -230,7 +232,7 @@ const Auth = () => {
       );
       const payload = data as any;
       if (error || payload?.error) {
-        toast.error(payload?.error || "Could not start recovery");
+        toast.error(payload?.error || t("auth.couldNotStartRecovery"));
         return;
       }
       // Move to detection screen; simulate auto-SMS detect for 3s, then auto-fill
@@ -252,11 +254,11 @@ const Auth = () => {
   const handleNewPin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^\d{5}$/.test(newPin)) {
-      toast.error("New PIN must be 5 digits");
+      toast.error(t("auth.newPinMustBe5Digits"));
       return;
     }
     if (newPin !== newPin2) {
-      toast.error("PINs do not match");
+      toast.error(t("auth.pinsDoNotMatch"));
       return;
     }
     setSubmitting(true);
@@ -273,7 +275,7 @@ const Auth = () => {
       );
       const payload = data as any;
       if (error || payload?.error) {
-        toast.error(payload?.error || "Reset failed");
+        toast.error(payload?.error || t("auth.resetFailed"));
         return;
       }
       await setSessionAndGo(payload.session);
@@ -285,42 +287,42 @@ const Auth = () => {
   const title = (() => {
     switch (mode) {
       case "phone-login":
-        return "Welcome Back";
+        return t("auth.welcomeBack");
       case "email-login":
-        return "Sign In with Email";
+        return t("auth.signInWithEmail");
       case "recover-phone":
-        return "Recover My Vault";
+        return t("auth.recoverMyVault");
       case "recover-detect":
-        return "Verifying…";
+        return t("auth.verifying");
       case "recover-newpin":
-        return "Set a New PIN";
+        return t("auth.setNewPin");
       default:
-        return "Open Your Vault";
+        return t("auth.openYourVault");
     }
   })();
 
   const subtitle = (() => {
     switch (mode) {
       case "phone-login":
-        return "Enter your phone and 5-digit PIN";
+        return t("auth.enterPhoneAndPinSub");
       case "email-login":
-        return "For accounts created before phone sign-up";
+        return t("auth.forAccountsBeforePhone");
       case "recover-phone":
-        return "Enter your phone number to recover access";
+        return t("auth.enterPhoneToRecover");
       case "recover-detect":
-        return "Detecting secure vault SMS code…";
+        return t("auth.detectingSms");
       case "recover-newpin":
-        return "Choose a new 5-digit Vault PIN";
+        return t("auth.chooseNewPin");
       default:
-        return "Fast, private, no email required";
+        return t("auth.fastPrivateNoEmail");
     }
   })();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <PageHead
-        title="Sign In — DocLocker"
-        description="Sign in to DocLocker to access your secure document vault."
+        title={t("auth.pageTitle")}
+        description={t("auth.pageDescription")}
         path="/auth"
       />
       <motion.div
@@ -340,7 +342,7 @@ const Auth = () => {
             >
               <img
                 src={brassLock}
-                alt="Lock"
+                alt={t("auth.lockAlt")}
                 className="w-16 h-16 sm:w-20 sm:h-20 object-contain"
               />
             </motion.div>
@@ -372,12 +374,12 @@ const Auth = () => {
                       }}
                       className="block w-full font-bold text-base text-primary hover:underline"
                     >
-                      Already have a vault? Sign in
+                      {t("auth.alreadyHaveVaultSignIn")}
                     </button>
                   </div>
 
                   <p className="text-center font-bold text-sm text-foreground">
-                    New here? Open the account
+                    {t("auth.newHereOpenAccount")}
                   </p>
 
                   <div className="flex gap-2">
@@ -385,7 +387,7 @@ const Auth = () => {
                     <Input
                       type="tel"
                       inputMode="numeric"
-                      placeholder="Phone number"
+                      placeholder={t("auth.phoneNumberPlaceholder")}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className="flex-1 h-11 bg-input border-border"
@@ -395,14 +397,14 @@ const Auth = () => {
 
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 text-center">
-                      Create a 5-digit Vault PIN
+                      {t("auth.createPin")}
                     </p>
                     <PinInput length={5} value={pin} onChange={setPin} />
                   </div>
 
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 text-center">
-                      Confirm PIN
+                      {t("auth.confirmPin")}
                     </p>
                     <PinInput length={5} value={pin2} onChange={setPin2} />
                   </div>
@@ -412,7 +414,7 @@ const Auth = () => {
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         type="email"
-                        placeholder="Email (optional)"
+                        placeholder={t("auth.emailOptionalPlaceholder")}
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="pl-10 pr-16 h-11 bg-input border-border"
@@ -425,7 +427,7 @@ const Auth = () => {
                         }}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground underline"
                       >
-                        Skip
+                        {t("auth.skip")}
                       </button>
                     </div>
                   ) : (
@@ -434,7 +436,7 @@ const Auth = () => {
                       onClick={() => setShowEmailField(true)}
                       className="w-full text-xs text-muted-foreground hover:text-primary transition-colors text-center"
                     >
-                      + Add email (optional, for backup)
+                      {t("auth.addEmailOptional")}
                     </button>
                   )}
 
@@ -443,7 +445,7 @@ const Auth = () => {
                     disabled={submitting}
                     className="w-full h-11 brass-gradient text-primary-foreground font-semibold hover:opacity-90"
                   >
-                    {submitting ? "Opening…" : "Open My Vault"}
+                    {submitting ? t("auth.opening") : t("auth.openMyVault")}
                   </Button>
 
                   <div className="flex flex-col gap-2 pt-1">
@@ -452,14 +454,14 @@ const Auth = () => {
                       onClick={() => setMode("recover-phone")}
                       className="text-xs text-muted-foreground hover:text-primary transition-colors text-center"
                     >
-                      Forgot PIN / Recover My Vault →
+                      {t("auth.forgotPinRecover")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setMode("email-login")}
                       className="text-xs text-muted-foreground/80 hover:text-primary transition-colors text-center mt-2"
                     >
-                      Logged in before with Email? Tap here
+                      {t("auth.loggedInWithEmail")}
                     </button>
                   </div>
 
@@ -481,7 +483,7 @@ const Auth = () => {
                     <Input
                       type="tel"
                       inputMode="numeric"
-                      placeholder="Phone number"
+                      placeholder={t("auth.phoneNumberPlaceholder")}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className="flex-1 h-11 bg-input border-border"
@@ -491,7 +493,7 @@ const Auth = () => {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 text-center">
-                      Enter your 5-digit Vault PIN
+                      {t("auth.enterYourPin")}
                     </p>
                     <PinInput length={5} value={pin} onChange={setPin} />
                   </div>
@@ -500,7 +502,7 @@ const Auth = () => {
                     disabled={submitting}
                     className="w-full h-11 brass-gradient text-primary-foreground font-semibold hover:opacity-90"
                   >
-                    {submitting ? "Unlocking…" : "Unlock My Vault"}
+                    {submitting ? t("auth.unlocking") : t("auth.unlockMyVault")}
                   </Button>
                   <div className="flex flex-col gap-2 pt-1">
                     <button
@@ -508,21 +510,21 @@ const Auth = () => {
                       onClick={() => setMode("recover-phone")}
                       className="text-xs text-muted-foreground hover:text-primary transition-colors text-center"
                     >
-                      Forgot PIN / Recover My Vault →
+                      {t("auth.forgotPinRecover")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setMode("phone-signup")}
                       className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 justify-center"
                     >
-                      <ArrowLeft className="h-3 w-3" /> New here? Create a vault
+                      <ArrowLeft className="h-3 w-3" /> {t("auth.newHereCreateVault")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setMode("email-login")}
                       className="text-xs text-muted-foreground/80 hover:text-primary transition-colors text-center mt-2"
                     >
-                      Logged in before with Email? Tap here
+                      {t("auth.loggedInWithEmail")}
                     </button>
                   </div>
                 </motion.form>
@@ -550,7 +552,7 @@ const Auth = () => {
                       <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                     </svg>
-                    {googleLoading ? "Connecting…" : "Continue with Google"}
+                    {googleLoading ? t("auth.connecting") : t("auth.continueWithGoogle")}
                   </Button>
 
                   <div className="relative my-2">
@@ -558,7 +560,7 @@ const Auth = () => {
                       <span className="w-full border-t border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">or</span>
+                      <span className="bg-card px-2 text-muted-foreground">{t("auth.or")}</span>
                     </div>
                   </div>
 
@@ -567,7 +569,7 @@ const Auth = () => {
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         type="email"
-                        placeholder="Email address"
+                        placeholder={t("auth.emailAddressPlaceholder")}
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
                         className="pl-10 h-11 bg-input border-border"
@@ -578,7 +580,7 @@ const Auth = () => {
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         type={showPassword ? "text" : "password"}
-                        placeholder="Password"
+                        placeholder={t("auth.passwordPlaceholder")}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="pl-10 pr-10 h-11 bg-input border-border"
@@ -598,7 +600,7 @@ const Auth = () => {
                       disabled={submitting}
                       className="w-full h-11 brass-gradient text-primary-foreground font-semibold hover:opacity-90"
                     >
-                      {submitting ? "Signing in…" : "Sign In"}
+                      {submitting ? t("auth.signingIn") : t("auth.signIn")}
                     </Button>
                   </form>
 
@@ -607,7 +609,7 @@ const Auth = () => {
                     onClick={() => setMode("phone-signup")}
                     className="w-full text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
                   >
-                    <ArrowLeft className="h-3 w-3" /> Back to phone sign-up
+                    <ArrowLeft className="h-3 w-3" /> {t("auth.backToPhoneSignup")}
                   </button>
                 </motion.div>
               )}
@@ -627,7 +629,7 @@ const Auth = () => {
                     <Input
                       type="tel"
                       inputMode="numeric"
-                      placeholder="Phone number"
+                      placeholder={t("auth.phoneNumberPlaceholder")}
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className="flex-1 h-11 bg-input border-border"
@@ -640,14 +642,14 @@ const Auth = () => {
                     disabled={submitting}
                     className="w-full h-11 brass-gradient text-primary-foreground font-semibold hover:opacity-90"
                   >
-                    {submitting ? "Starting recovery…" : "Recover My Vault"}
+                    {submitting ? t("auth.startingRecovery") : t("auth.recoverMyVault")}
                   </Button>
                   <button
                     type="button"
                     onClick={() => setMode("phone-signup")}
                     className="w-full text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
                   >
-                    <ArrowLeft className="h-3 w-3" /> Back
+                    <ArrowLeft className="h-3 w-3" /> {t("auth.back")}
                   </button>
                 </motion.form>
               )}
@@ -675,9 +677,9 @@ const Auth = () => {
                     ) : null}
                     <p className="text-sm text-center text-muted-foreground">
                       {detecting
-                        ? "Detecting secure vault SMS code…"
+                        ? t("auth.detectingSms")
                         : codeDetected
-                          ? "Code verified successfully"
+                          ? t("auth.codeVerified")
                           : ""}
                     </p>
                   </div>
@@ -710,7 +712,7 @@ const Auth = () => {
                 >
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 text-center">
-                      New 5-digit Vault PIN
+                      {t("auth.newPin")}
                     </p>
                     <PinInput
                       length={5}
@@ -721,7 +723,7 @@ const Auth = () => {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-2 text-center">
-                      Confirm new PIN
+                      {t("auth.confirmNewPin")}
                     </p>
                     <PinInput length={5} value={newPin2} onChange={setNewPin2} />
                   </div>
@@ -730,14 +732,14 @@ const Auth = () => {
                     disabled={submitting}
                     className="w-full h-11 brass-gradient text-primary-foreground font-semibold hover:opacity-90"
                   >
-                    {submitting ? "Saving…" : "Save & Unlock Vault"}
+                    {submitting ? t("auth.saving") : t("auth.saveAndUnlock")}
                   </Button>
                   <div className="relative my-1">
                     <div className="absolute inset-0 flex items-center">
                       <span className="w-full border-t border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">optional</span>
+                      <span className="bg-card px-2 text-muted-foreground">{t("auth.optional")}</span>
                     </div>
                   </div>
                   <Button
@@ -753,7 +755,7 @@ const Auth = () => {
                       <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                       <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                     </svg>
-                    Link a Google email
+                    {t("auth.linkGoogleEmail")}
                   </Button>
                 </motion.form>
               )}

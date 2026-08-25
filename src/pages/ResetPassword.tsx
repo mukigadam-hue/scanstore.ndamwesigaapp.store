@@ -6,8 +6,10 @@ import { KeyRound, Lock, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 const ResetPassword = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -34,11 +36,11 @@ const ResetPassword = () => {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) {
-      toast.error("Passwords do not match");
+      toast.error(t("auth.passwordsDoNotMatch"));
       return;
     }
     if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+      toast.error(t("auth.passwordMinLength"));
       return;
     }
 
@@ -48,7 +50,7 @@ const ResetPassword = () => {
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success("Password updated! You can now sign in.");
+        toast.success(t("auth.passwordUpdated"));
         navigate("/auth");
       }
     } finally {
@@ -61,7 +63,7 @@ const ResetPassword = () => {
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
         <div className="text-center">
           <KeyRound className="h-12 w-12 text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Verifying reset link…</p>
+          <p className="text-muted-foreground">{t("auth.verifyingResetLink")}</p>
         </div>
       </div>
     );
@@ -84,10 +86,10 @@ const ResetPassword = () => {
             </div>
 
             <h1 className="text-2xl font-display font-bold text-center mb-1 brass-text">
-              Set New Password
+              {t("auth.setNewPassword")}
             </h1>
             <p className="text-center text-muted-foreground text-sm mb-8">
-              Enter your new password below
+              {t("auth.enterNewPasswordBelow")}
             </p>
 
             <form onSubmit={handleReset} className="space-y-4">
@@ -95,7 +97,7 @@ const ResetPassword = () => {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type={showPassword ? "text" : "password"}
-                  placeholder="New password"
+                  placeholder={t("auth.newPasswordPlaceholder")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10 pr-10 bg-input border-border text-foreground"
@@ -116,7 +118,7 @@ const ResetPassword = () => {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type={showPassword ? "text" : "password"}
-                  placeholder="Confirm new password"
+                  placeholder={t("auth.confirmNewPasswordPlaceholder")}
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   className="pl-10 bg-input border-border text-foreground"
@@ -130,7 +132,7 @@ const ResetPassword = () => {
                 disabled={submitting}
                 className="w-full brass-gradient text-primary-foreground font-semibold hover:opacity-90"
               >
-                {submitting ? "Updating…" : "Update Password"}
+                {submitting ? t("auth.updating") : t("auth.updatePassword")}
               </Button>
             </form>
           </div>

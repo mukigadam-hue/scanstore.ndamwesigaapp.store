@@ -1,4 +1,5 @@
 import { Component, ReactNode } from "react";
+import i18n from "@/i18n";
 
 interface Props { children: ReactNode }
 interface State { error: Error | null }
@@ -39,9 +40,9 @@ export default class ErrorBoundary extends Component<Props, State> {
         }}>
           <div style={{ maxWidth: 360 }}>
             <div style={{ fontSize: 42, marginBottom: 12 }}>🔑</div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>DocLocker hit a snag</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{i18n.t('viewer.appCrashedTitle')}</h1>
             <p style={{ fontSize: 14, opacity: 0.85, marginBottom: 20 }}>
-              Something interrupted loading. Please reload to try again.
+              {i18n.t('viewer.appCrashedDescription')}
             </p>
             <button
               onClick={this.handleReload}
@@ -55,7 +56,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                 fontSize: 15,
               }}
             >
-              Reload app
+              {i18n.t('viewer.reloadApp')}
             </button>
           </div>
         </div>

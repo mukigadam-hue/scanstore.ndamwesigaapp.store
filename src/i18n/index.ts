@@ -1,7 +1,24 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
-import { resources } from "./resources";
+import { resources as baseResources } from "./resources";
+import { featureDicts } from "./dicts";
+
+// Merge per-feature dictionaries into the base resources. English is the
+// fallback for any key a locale hasn't translated yet.
+const enFeature = featureDicts.en ?? {};
+const resources = Object.fromEntries(
+  Object.entries(baseResources).map(([lng, bundle]) => [
+    lng,
+    {
+      translation: {
+        ...(bundle as { translation: Record<string, string> }).translation,
+        ...enFeature,
+        ...(featureDicts[lng] ?? {}),
+      },
+    },
+  ]),
+);
 
 export const SUPPORTED_LANGUAGES = [
   { code: "en", name: "English", flag: "🇬🇧" },
