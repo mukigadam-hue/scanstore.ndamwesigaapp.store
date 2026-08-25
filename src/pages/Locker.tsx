@@ -696,6 +696,8 @@ const Locker = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CompleteProfileReminder />
     </div>
   );
 };
