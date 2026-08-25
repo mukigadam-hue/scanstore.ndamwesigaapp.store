@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ interface SecureDeleteDialogProps {
 }
 
 const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: SecureDeleteDialogProps) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [reason, setReason] = useState("");
   const [pin, setPin] = useState("");
@@ -39,7 +41,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
   const handleProceed = () => {
     const trimmed = reason.trim();
     if (trimmed.length < 6) {
-      toast.error("Reason must be at least 6 characters (e.g., 'Useless')");
+      toast.error(t("security.delete.toast.reasonTooShort"));
       return;
     }
     setStep("verify");
@@ -51,12 +53,12 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
       const { hashPin } = await import("@/lib/hashPin");
       const candidate = await hashPin(user.id, pin);
       if (candidate !== securitySettings.pin_hash) {
-        toast.error("Incorrect PIN. Deletion cancelled.");
+        toast.error(t("security.delete.toast.incorrectPin"));
         return;
       }
     } else if (securitySettings?.last_school) {
       if (pin.trim().toLowerCase() !== securitySettings.last_school.toLowerCase()) {
-        toast.error("Incorrect answer. Deletion cancelled.");
+        toast.error(t("security.delete.toast.incorrectAnswer"));
         return;
       }
     }
@@ -73,9 +75,9 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
   };
 
   const verificationLabel = securitySettings?.pin_hash
-    ? "Enter your 5-digit PIN"
+    ? t("security.delete.label.enterPin")
     : securitySettings?.last_school
-      ? "Enter your last school name"
+      ? t("security.delete.label.enterSchool")
       : null;
 
   return (
@@ -84,20 +86,20 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive font-display">
             <AlertTriangle className="h-5 w-5" />
-            Permanent Deletion
+            {t("security.delete.title")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
             <p className="text-sm text-foreground">
-              You are about to permanently delete:
+              {t("security.delete.aboutToDelete")}
             </p>
             <p className="text-sm font-semibold text-destructive mt-1 truncate">
               {documentName}
             </p>
             <p className="text-xs text-muted-foreground mt-2">
-              This action cannot be undone. The file will be permanently removed from your locker.
+              {t("security.delete.cannotUndo")}
             </p>
           </div>
 
@@ -105,10 +107,10 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
             <>
               <div>
                 <label className="text-sm text-muted-foreground mb-1.5 block">
-                  Why are you deleting this document? *
+                  {t("security.delete.label.reason")}
                 </label>
                 <Textarea
-                  placeholder="e.g., Duplicate file, outdated version, no longer needed..."
+                  placeholder={t("security.delete.placeholder.reason")}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   className="bg-input border-border text-foreground placeholder:text-muted-foreground resize-none"
@@ -116,7 +118,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   autoFocus
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Minimum 6 characters ({reason.trim().length}/6)
+                  {t("security.delete.minChars", { count: reason.trim().length })}
                 </p>
               </div>
               <Button
@@ -125,7 +127,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                 disabled={reason.trim().length < 6}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Continue to verification
+                {t("security.delete.button.continueToVerification")}
               </Button>
             </>
           )}
@@ -135,7 +137,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
               <div>
                 <label className="text-sm text-muted-foreground mb-1.5 flex items-center gap-1.5">
                   <Lock className="h-3.5 w-3.5" />
-                  {verificationLabel || "Confirm deletion by typing DELETE"}
+                  {verificationLabel || t("security.delete.label.typeDelete")}
                 </label>
                 <Input
                   type={securitySettings?.pin_hash ? "password" : "text"}
@@ -144,8 +146,8 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                     securitySettings?.pin_hash
                       ? "• • • • •"
                       : securitySettings?.last_school
-                        ? "School name..."
-                        : 'Type "DELETE"'
+                        ? t("security.delete.placeholder.schoolName")
+                        : t("security.delete.placeholder.typeDelete")
                   }
                   value={pin}
                   onChange={(e) => {
@@ -166,7 +168,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   className="flex-1 text-muted-foreground"
                   onClick={() => setStep("reason")}
                 >
-                  Back
+                  {t("security.delete.button.back")}
                 </Button>
                 <Button
                   className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -174,7 +176,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
                   disabled={!pin.trim()}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Delete permanently
+                  {t("security.delete.button.deletePermanently")}
                 </Button>
               </div>
             </>
@@ -185,7 +187,7 @@ const SecureDeleteDialog = ({ open, onClose, documentName, onConfirmDelete }: Se
             className="w-full text-muted-foreground"
             onClick={handleClose}
           >
-            Cancel
+            {t("security.delete.button.cancel")}
           </Button>
         </div>
       </DialogContent>

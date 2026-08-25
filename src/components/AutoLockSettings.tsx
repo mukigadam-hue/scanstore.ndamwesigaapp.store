@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -12,6 +13,7 @@ interface AutoLockSettingsProps {
 }
 
 const AutoLockSettings = ({ open, onClose, currentTimeout, onSave }: AutoLockSettingsProps) => {
+  const { t } = useTranslation();
   const [value, setValue] = useState(currentTimeout);
 
   const handleSave = () => {
@@ -20,9 +22,9 @@ const AutoLockSettings = ({ open, onClose, currentTimeout, onSave }: AutoLockSet
   };
 
   const formatTime = (seconds: number) => {
-    if (seconds === 0) return "Disabled";
-    if (seconds < 60) return `${seconds} seconds`;
-    return `${Math.floor(seconds / 60)}m ${seconds % 60 > 0 ? `${seconds % 60}s` : ""}`;
+    if (seconds === 0) return t("security.autoLock.disabled");
+    if (seconds < 60) return t("security.autoLock.seconds", { count: seconds });
+    return t("security.autoLock.minSec", { min: Math.floor(seconds / 60), sec: seconds % 60 > 0 ? `${seconds % 60}s` : "" });
   };
 
   return (
@@ -31,7 +33,7 @@ const AutoLockSettings = ({ open, onClose, currentTimeout, onSave }: AutoLockSet
         <DialogHeader>
           <DialogTitle className="font-display brass-text flex items-center gap-2">
             <Timer className="h-5 w-5" />
-            Auto-Lock Timer
+            {t("security.autoLock.title")}
           </DialogTitle>
         </DialogHeader>
 
@@ -40,7 +42,7 @@ const AutoLockSettings = ({ open, onClose, currentTimeout, onSave }: AutoLockSet
             <div className="flex items-center gap-3 mb-4">
               <Shield className="h-5 w-5 text-primary" />
               <p className="text-sm text-muted-foreground">
-                Automatically lock your locker after inactivity
+                {t("security.autoLock.description")}
               </p>
             </div>
 
@@ -61,23 +63,23 @@ const AutoLockSettings = ({ open, onClose, currentTimeout, onSave }: AutoLockSet
               />
 
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Off</span>
-                <span>30s</span>
-                <span>1m</span>
-                <span>2m</span>
+                <span>{t("security.autoLock.off")}</span>
+                <span>{t("security.autoLock.mark30s")}</span>
+                <span>{t("security.autoLock.mark1m")}</span>
+                <span>{t("security.autoLock.mark2m")}</span>
               </div>
             </div>
           </div>
 
           <div className="flex gap-2">
             <Button variant="ghost" className="flex-1 text-muted-foreground" onClick={onClose}>
-              Cancel
+              {t("security.autoLock.cancel")}
             </Button>
             <Button
               className="flex-1 brass-gradient text-primary-foreground hover:opacity-90"
               onClick={handleSave}
             >
-              Save
+              {t("security.autoLock.save")}
             </Button>
           </div>
         </div>
