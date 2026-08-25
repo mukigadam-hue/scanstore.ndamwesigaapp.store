@@ -10,6 +10,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      position="bottom-center"
+      // Lift toasts above the fixed bottom banner ad so confirmations are
+      // always readable (banner is 60px on phones, 96px on tablets+).
+      offset="calc(env(safe-area-inset-bottom, 0px) + 108px)"
       toastOptions={{
         classNames: {
           toast:
