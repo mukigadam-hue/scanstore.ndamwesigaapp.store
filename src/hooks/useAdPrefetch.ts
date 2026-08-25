@@ -1,7 +1,11 @@
 // Module-level store for pre-fetched ad keys.
 // Persists across navigations without causing re-renders.
 
+import { prefetchInterstitial } from "@/lib/ads";
+
 const prefetchedAds: Record<string, number> = {};
+
+let nativeWarmed = 0;
 
 /**
  * Call this hook inside ad-free pages (viewer, scanner, editor)
