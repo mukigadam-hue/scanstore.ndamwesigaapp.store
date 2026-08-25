@@ -25,6 +25,7 @@ import LanguageSelector from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import { getPendingVaultFile, clearPendingVaultFile } from "@/lib/pendingVaultFile";
 import BannerAd from "@/components/BannerAd";
+import CompleteProfileReminder from "@/components/CompleteProfileReminder";
 import { inferFileType } from "@/lib/fileCompatibility";
 
 interface Drawer {
