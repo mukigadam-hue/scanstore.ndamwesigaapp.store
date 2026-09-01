@@ -26,6 +26,7 @@ import {
 } from "@/components/CountryCodePicker";
 import { PinInput } from "@/components/PinInput";
 import PageHead from "@/components/PageHead";
+import GooglePlayButton from "@/components/GooglePlayButton";
 
 type Mode =
   | "phone-signup"
@@ -761,6 +762,10 @@ const Auth = () => {
               )}
             </AnimatePresence>
           </div>
+        </div>
+
+        <div className="mt-6 flex justify-center">
+          <GooglePlayButton label={t("auth.getOnGooglePlay")} />
         </div>
       </motion.div>
     </div>
