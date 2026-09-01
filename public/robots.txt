@@ -1,6 +1,22 @@
 User-agent: Googlebot
 Allow: /
 
+User-agent: AdsBot-Google
+Allow: /
+
+User-agent: AdsBot-Google-Mobile
+Allow: /
+
+User-agent: AdsBot-Google-Mobile-Apps
+Allow: /
+Allow: /app-ads.txt
+
+User-agent: Mediapartners-Google
+Allow: /
+
+User-agent: Google-AdMob
+Allow: /
+
 User-agent: Bingbot
 Allow: /
 
