@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import heroCabinet from "@/assets/hero-cabinet.jpg";
 import LanguageSelector from "@/components/LanguageSelector";
 import PageHead from "@/components/PageHead";
+import GooglePlayButton from "@/components/GooglePlayButton";
 
 
 const Index = () => {
@@ -86,6 +87,10 @@ const Index = () => {
                   <FileText className="h-4 w-4 mr-2" /> {t("landing.openFile")}
                 </Button>
               </Link>
+            </div>
+
+            <div className="mt-6 flex justify-center">
+              <GooglePlayButton label={t("landing.getOnGooglePlay")} />
             </div>
           </div>
         </div>
