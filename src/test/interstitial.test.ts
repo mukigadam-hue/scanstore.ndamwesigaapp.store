@@ -1,9 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prefetchInterstitial, showInterstitial } from "@/lib/ads";
 
 describe("native interstitial checkpoints", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
