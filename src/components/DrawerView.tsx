@@ -553,6 +553,15 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                   : t("vault.full")
                 : t("vault.store")}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openPicker(true)}
+            disabled={uploading || !canUpload}
+            className="text-xs"
+          >
+            {t("vault.storeMany")}
+          </Button>
         </div>
       </div>
 
