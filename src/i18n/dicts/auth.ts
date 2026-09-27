@@ -89,6 +89,7 @@ const auth: LocaleMap = {
     "auth.phoneNumberExamplePlaceholder": "+256700000000",
     "auth.skipForNow": "Skip for now",
     "auth.save": "Save",
+    "auth.getOnGooglePlay": "Get it on Google Play",
   },
   fr: {
     "auth.pageTitle": "Connexion — DocLocker",
