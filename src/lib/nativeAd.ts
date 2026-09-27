@@ -159,18 +159,10 @@ export function triggerNativeAd(trigger: string = "generic"): boolean {
     );
     if (viaBridge) return true;
 
-    // URL-scheme fallback — this is the documented WebViewGold command set.
+    // URL-scheme fallback for WebViewGold shells without a JS bridge. Emit
+    // exactly one command: sending several can show multiple interstitials.
     if (isAndroidWebView() || typeof (window as any).Android !== "undefined") {
-      const schemes = [
-        "showinterstitial://",
-        "admobinterstitial://",
-        "interstitial://show",
-      ];
-      let emitted = false;
-      for (const s of schemes) {
-        emitted = emitScheme(s) || emitted;
-      }
-      if (emitted) return true;
+      return emitScheme("showinterstitial://");
     }
 
     return false;

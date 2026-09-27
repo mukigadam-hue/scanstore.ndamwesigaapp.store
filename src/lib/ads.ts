@@ -7,15 +7,8 @@ import { triggerNativeAd, preloadNativeAds, hasNativeAdBridge } from "./nativeAd
 // disabled everywhere until a real SDK is wired.
 export const AD_NETWORK_READY = false;
 
-type Listener = (trigger: string, resolve: () => void) => void;
-
-let listener: Listener | null = null;
 const inFlight = new Set<string>();
 const ALLOWED_TRIGGERS = new Set(["last-verify", "save-to-phone"]);
-
-export function registerInterstitialHost(l: Listener | null) {
-  listener = l;
-}
 
 let preloaded = false;
 
@@ -59,16 +52,11 @@ export function showInterstitial(trigger: string, cooldownMs = 0): Promise<void>
       markShown(trigger);
       // Warm the cache again for the next trigger point.
       setTimeout(() => { try { preloadNativeAds(); } catch { /* ignore */ } }, 1500);
-    } else if (listener) {
-      // No native shell (browser / PWA): fall back to the in-app overlay so
-      // the checkpoint still shows an ad surface.
-      markShown(trigger);
+      setTimeout(() => inFlight.delete(trigger), 1200);
+    } else {
+      // A browser has no actual ad; never block its next native checkpoint.
       inFlight.delete(trigger);
-      listener(trigger, resolve);
-      return;
     }
-
-    setTimeout(() => inFlight.delete(trigger), 1200);
     resolve();
   });
 }
