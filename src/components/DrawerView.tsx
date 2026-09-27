@@ -64,6 +64,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const multiFileInputRef = useRef<HTMLInputElement>(null);
   const cameraUploadInFlightRef = useRef(false);
   const { canUpload, isFrozen, isRetrievalActive, storageUsed, storageLimit, storagePercent, currentPlan } =
     useSubscription();
@@ -231,7 +232,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
   };
 
-  const handleStoreClick = () => {
+  const openPicker = (multi: boolean) => {
     if (!canUpload) {
       toast.error(
         isFrozen
@@ -242,8 +243,11 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
     filePickerOpenRef.current = true;
     onScanStart?.();
-    window.setTimeout(() => fileInputRef.current?.click(), 0);
+    // Click synchronously inside the tap so phones keep the user-gesture
+    // permission needed to open the file chooser.
+    (multi ? multiFileInputRef : fileInputRef).current?.click();
   };
+  const handleStoreClick = () => openPicker(false);
 
   useEffect(() => {
     const resumeAfterPickerCancel = () => {
@@ -493,11 +497,21 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
               {t("vault.storagePercentFull", { percent: Math.round(storagePercent) })}
             </span>
           )}
+          {/* No `accept` filter: some Android WebViews grey out files when
+              any filter is set. Single-select is the default because
+              multi-select pickers on many phones need a long-press, which
+              makes files look "locked" on a normal tap. */}
           <input
             ref={fileInputRef}
             type="file"
+            onChange={handleUpload}
+            onClick={(event) => { event.currentTarget.value = ""; }}
+            className="hidden"
+          />
+          <input
+            ref={multiFileInputRef}
+            type="file"
             multiple
-            accept="*/*"
             onChange={handleUpload}
             onClick={(event) => { event.currentTarget.value = ""; }}
             className="hidden"
@@ -538,6 +552,15 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
                   ? t("vault.frozen")
                   : t("vault.full")
                 : t("vault.store")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openPicker(true)}
+            disabled={uploading || !canUpload}
+            className="text-xs"
+          >
+            {t("vault.storeMany")}
           </Button>
         </div>
       </div>

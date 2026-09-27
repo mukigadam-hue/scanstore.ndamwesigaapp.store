@@ -35,6 +35,7 @@ const locker: LocaleMap = {
     "vault.frozenUnlockFirst": "Your vault is frozen. Please unlock access first.",
     "vault.storageLimitReached": "Storage limit reached. Please upgrade your plan.",
     "vault.storingFiles": "Storing {{count}} files…",
+    "vault.storeMany": "Several files",
     "vault.storedOfFiles": "Stored {{ok}} of {{total}} files",
     "vault.documentsFrozen": "Documents are frozen. Please unlock access first.",
     "vault.failedDownload": "Failed to download: {{error}}",
