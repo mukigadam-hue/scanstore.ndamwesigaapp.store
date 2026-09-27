@@ -52,9 +52,11 @@ export function showInterstitial(trigger: string, cooldownMs = 0): Promise<void>
       markShown(trigger);
       // Warm the cache again for the next trigger point.
       setTimeout(() => { try { preloadNativeAds(); } catch { /* ignore */ } }, 1500);
+      setTimeout(() => inFlight.delete(trigger), 1200);
+    } else {
+      // A browser has no actual ad; never block its next native checkpoint.
+      inFlight.delete(trigger);
     }
-
-    setTimeout(() => inFlight.delete(trigger), 1200);
     resolve();
   });
 }
