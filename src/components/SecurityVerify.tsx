@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import { showInterstitial } from "@/lib/ads";
+import { prefetchInterstitial, showInterstitial } from "@/lib/ads";
 import BannerAd from "@/components/BannerAd";
 
 interface SecuritySettingsRow {
@@ -53,6 +53,10 @@ const SecurityVerify = ({ settings, onVerified }: SecurityVerifyProps) => {
   const [generatedOtp, setGeneratedOtp] = useState("");
 
   const REQUIRED_VERIFICATIONS = 2;
+
+  // Prepare the native ad while the user chooses verification methods.
+  // Preloading never shows an ad and does nothing on a normal web browser.
+  useEffect(() => { prefetchInterstitial(); }, []);
 
   const availableMethods = [
     settings.pin_hash && { id: "pin" as MethodId, label: t("security.verify.method.pin"), icon: Hash },

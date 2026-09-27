@@ -20,7 +20,6 @@ const ViewerScreen = lazy(() => import("./pages/ViewerScreen"));
 const UtilityHome = lazy(() => import("./pages/UtilityHome"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-const InterstitialAdOverlay = lazy(() => import("./components/InterstitialAdOverlay"));
 const OfflineBanner = lazy(() => import("./components/OfflineBanner"));
 
 const queryClient = new QueryClient();
@@ -55,7 +54,6 @@ const App = () => (
               </Routes>
             </Suspense>
             <Suspense fallback={null}>
-              <InterstitialAdOverlay />
               <OfflineBanner />
             </Suspense>
           </BrowserRouter>
