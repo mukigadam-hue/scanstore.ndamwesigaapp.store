@@ -497,6 +497,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             ref={fileInputRef}
             type="file"
             multiple
+            accept="*/*"
             onChange={handleUpload}
             onClick={(event) => { event.currentTarget.value = ""; }}
             className="hidden"
