@@ -5,3 +5,4 @@
 - [x] Verify referenced labels resolve across all supported languages and check preview errors.
 - [x] Use “Any school attended” throughout security setup and verification.
 - [x] Remove empty web interstitials and call WebViewGold only at approved phone checkpoints.
+- [x] Replace indirect public and vault file pickers with direct mounted all-file controls for Android local-storage access.

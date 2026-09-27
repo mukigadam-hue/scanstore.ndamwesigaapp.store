@@ -232,7 +232,7 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
     }
   };
 
-  const openPicker = (multi: boolean) => {
+  const preparePicker = (input: HTMLInputElement) => {
     if (!canUpload) {
       toast.error(
         isFrozen
@@ -241,13 +241,10 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
       );
       return;
     }
+    input.value = "";
     filePickerOpenRef.current = true;
     onScanStart?.();
-    // Click synchronously inside the tap so phones keep the user-gesture
-    // permission needed to open the file chooser.
-    (multi ? multiFileInputRef : fileInputRef).current?.click();
   };
-  const handleStoreClick = () => openPicker(false);
 
   useEffect(() => {
     const resumeAfterPickerCancel = () => {
@@ -497,25 +494,6 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
               {t("vault.storagePercentFull", { percent: Math.round(storagePercent) })}
             </span>
           )}
-          {/* No `accept` filter: some Android WebViews grey out files when
-              any filter is set. Single-select is the default because
-              multi-select pickers on many phones need a long-press, which
-              makes files look "locked" on a normal tap. */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={handleUpload}
-            onClick={(event) => { event.currentTarget.value = ""; }}
-            className="hidden"
-          />
-          <input
-            ref={multiFileInputRef}
-            type="file"
-            multiple
-            onChange={handleUpload}
-            onClick={(event) => { event.currentTarget.value = ""; }}
-            className="hidden"
-          />
           <Button
             variant="ghost"
             size="sm"
@@ -540,27 +518,50 @@ const DrawerView = ({ drawerName, documents, onBack, onScanStart, onScanEnd }: D
             <span className="text-xs">{t("vault.scan")}</span>
           </Button>
           <Button
-            onClick={handleStoreClick}
-            disabled={uploading || !canUpload}
-            className="brass-gradient text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            asChild
+            className={`brass-gradient text-primary-foreground hover:opacity-90 ${uploading || !canUpload ? "pointer-events-none opacity-50" : ""}`}
           >
-            <Upload className="h-4 w-4 mr-2" />
-            {uploading
-              ? t("vault.uploading")
-              : !canUpload
-                ? isFrozen
-                  ? t("vault.frozen")
-                  : t("vault.full")
-                : t("vault.store")}
+            <label className="relative cursor-pointer" aria-disabled={uploading || !canUpload}>
+              <Upload className="h-4 w-4 mr-2" />
+              {uploading
+                ? t("vault.uploading")
+                : !canUpload
+                  ? isFrozen
+                    ? t("vault.frozen")
+                    : t("vault.full")
+                  : t("vault.store")}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="*/*"
+                disabled={uploading || !canUpload}
+                onChange={handleUpload}
+                onClick={(event) => preparePicker(event.currentTarget)}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label={t("vault.store")}
+              />
+            </label>
           </Button>
           <Button
+            asChild
             variant="outline"
             size="sm"
-            onClick={() => openPicker(true)}
-            disabled={uploading || !canUpload}
-            className="text-xs"
+            className={`text-xs ${uploading || !canUpload ? "pointer-events-none opacity-50" : ""}`}
           >
-            {t("vault.storeMany")}
+            <label className="relative cursor-pointer" aria-disabled={uploading || !canUpload}>
+              {t("vault.storeMany")}
+              <input
+                ref={multiFileInputRef}
+                type="file"
+                accept="*/*"
+                multiple
+                disabled={uploading || !canUpload}
+                onChange={handleUpload}
+                onClick={(event) => preparePicker(event.currentTarget)}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label={t("vault.storeMany")}
+              />
+            </label>
           </Button>
         </div>
       </div>

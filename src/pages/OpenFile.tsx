@@ -102,17 +102,9 @@ const OpenFile = () => {
     setLoading(false);
   };
 
-  const handlePickFile = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "*/*";
-    input.onchange = (e) => {
-      const target = e.target as HTMLInputElement;
-      if (target.files?.[0]) {
-        processFile(target.files[0]);
-      }
-    };
-    input.click();
+  const handlePickFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const pickedFile = event.currentTarget.files?.[0];
+    if (pickedFile) processFile(pickedFile);
   };
 
   const handleDownload = async () => {
@@ -171,8 +163,18 @@ const OpenFile = () => {
           <p className="text-muted-foreground max-w-sm">
             {t("viewer.openAnyDocumentDescription")}
           </p>
-          <Button onClick={handlePickFile} className="brass-gradient text-primary-foreground">
-            {t("viewer.chooseFileToOpen")}
+          <Button asChild className="brass-gradient text-primary-foreground">
+            <label className="relative cursor-pointer">
+              {t("viewer.chooseFileToOpen")}
+              <input
+                type="file"
+                accept="*/*"
+                onClick={(event) => { event.currentTarget.value = ""; }}
+                onChange={handlePickFile}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label={t("viewer.chooseFileToOpen")}
+              />
+            </label>
           </Button>
           <Button variant="ghost" onClick={() => navigate("/")} className="text-muted-foreground">
             {t("viewer.backToDocLocker")}

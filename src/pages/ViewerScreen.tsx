@@ -83,36 +83,28 @@ export default function ViewerScreen() {
     }
   }, []);
 
-  const pickFile = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = async (e) => {
-      const t = e.target as HTMLInputElement;
-      const f = t.files?.[0];
-      if (!f) return;
-      // No ad on switching files — ads only fire at explicit save/verify actions.
-      // Reset state then load new
-      setFile(null);
-      setPreviewUrl(null);
-      setOfficeHtml(null);
-      setTextContent(null);
-      setEditMode(false);
-      const reader = new FileReader();
-      reader.onload = () => {
-        sessionStorage.setItem(
-          "viewerPendingFile",
-          JSON.stringify({ name: f.name, type: f.type, dataUrl: reader.result })
-        );
-        // Re-mount by toggling a key via location.reload trick avoided: just re-fire effect by setting state.
-        // Easier: directly handle here:
-        const newFile = dataUrlToFile(reader.result as string, f.name, f.type);
-        sessionStorage.removeItem("viewerPendingFile");
-        setFile(newFile);
-        setPreviewUrl(URL.createObjectURL(newFile));
-      };
-      reader.readAsDataURL(f);
+  const pickFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const f = event.currentTarget.files?.[0];
+    if (!f) return;
+    // No ad on switching files — ads only fire at explicit save/verify actions.
+    // Reset state then load new
+    setFile(null);
+    setPreviewUrl(null);
+    setOfficeHtml(null);
+    setTextContent(null);
+    setEditMode(false);
+    const reader = new FileReader();
+    reader.onload = () => {
+      sessionStorage.setItem(
+        "viewerPendingFile",
+        JSON.stringify({ name: f.name, type: f.type, dataUrl: reader.result })
+      );
+      const newFile = dataUrlToFile(reader.result as string, f.name, f.type);
+      sessionStorage.removeItem("viewerPendingFile");
+      setFile(newFile);
+      setPreviewUrl(URL.createObjectURL(newFile));
     };
-    input.click();
+    reader.readAsDataURL(f);
   };
 
   const handleClose = async () => {
@@ -164,8 +156,18 @@ export default function ViewerScreen() {
             {t("viewer.pickFileDescription")}
           </p>
           <div className="flex gap-2">
-            <Button onClick={pickFile} className="brass-gradient text-primary-foreground">
-              <FolderOpen className="h-4 w-4 mr-2" /> {t("viewer.chooseFile")}
+            <Button asChild className="brass-gradient text-primary-foreground">
+              <label className="relative cursor-pointer">
+                <FolderOpen className="h-4 w-4 mr-2" /> {t("viewer.chooseFile")}
+                <input
+                  type="file"
+                  accept="*/*"
+                  onClick={(event) => { event.currentTarget.value = ""; }}
+                  onChange={pickFile}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label={t("viewer.chooseFile")}
+                />
+              </label>
             </Button>
             <Button variant="ghost" onClick={() => navigate("/")}>{t("viewer.back")}</Button>
           </div>
