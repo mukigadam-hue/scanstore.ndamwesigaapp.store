@@ -205,8 +205,18 @@ export default function ViewerScreen() {
           <Button size="sm" variant="outline" onClick={handleDownload}>
             <Download className="h-4 w-4 mr-1" /> {t("viewer.download")}
           </Button>
-          <Button size="sm" variant="outline" onClick={pickFile}>
-            <FolderOpen className="h-4 w-4 mr-1" /> {t("viewer.openAnother")}
+          <Button size="sm" variant="outline" asChild>
+            <label className="relative cursor-pointer">
+              <FolderOpen className="h-4 w-4 mr-1" /> {t("viewer.openAnother")}
+              <input
+                type="file"
+                accept="*/*"
+                onClick={(event) => { event.currentTarget.value = ""; }}
+                onChange={pickFile}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label={t("viewer.openAnother")}
+              />
+            </label>
           </Button>
           <SaveToVaultButton file={file} className="brass-gradient text-primary-foreground" />
           <Button size="sm" variant="ghost" onClick={handleClose} title={t("viewer.closeDocument")}>
